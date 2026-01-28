@@ -11,16 +11,15 @@ import sys
 import os
 from matplotlib import pyplot as plt
 
-os.chdir("C:/Users/jamil/Documents/PhD/GitHub projects/Ecological-Dynamics-and-Community-Selection/" + \
-         "Ecological-Dynamics/Consumer-Resource Models/resource_diversity_stability(sl)/" + \
-             "stability_transitions")
+os.chdir("C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/" + \
+         "resource_diversity_stability(sl)/stability_transitions")
     
-sys.path.insert(0, "C:/Users/jamil/Documents/PhD/GitHub projects/Ecological-Dynamics-and-Community-Selection/" + \
-                    "Ecological-Dynamics/Consumer-Resource Models/resource_diversity_stability(sl)")
+sys.path.insert(0, "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/" + \
+                    "resource_diversity_stability(sl)")
 from simulation_functions import CRM_across_parameter_space, generate_simulation_df, \
     le_pivot_r, generic_heatmaps
 
-sys.path.insert(0, 'C:/Users/jamil/Documents/PhD/Github Projects/Ecological-Dynamics-and-Community-Selection/Ecological-Dynamics/Consumer-Resource Models/cavity_method_functions')
+sys.path.insert(0, 'C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/cavity_method_functions')
 import self_consistency_equation_functions as sce
 
 # %%
@@ -75,7 +74,7 @@ M_effect_fixed_C(resource_pool_sizes, np.array([100, 250]), 1.6,
 
 # %%
 
-df_mu_c_M = generate_simulation_df("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/" \
+df_mu_c_M = generate_simulation_df("C:/Users/jamil/Documents/PhD/Data/" \
                                    + 'mu_c_M_consumer_inhibition')
 
 # %%
@@ -98,9 +97,9 @@ cbar.set_label(label = 'Proportion of simulations with stable dynamics',
                size = '14')
 cbar.ax.tick_params(labelsize = 12)
 
-plt.savefig("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Figures/self_limit_mu_c_M_si.png",
+plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/self_limit_mu_c_M_si.png",
             bbox_inches='tight', dpi = 400)
-plt.savefig("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Figures/self_limit_mu_c_M_si.svg",
+plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/self_limit_mu_c_M_si.svg",
             bbox_inches='tight')
 
 plt.show()

@@ -9,15 +9,14 @@ import numpy as np
 import sys
 import os
 
-os.chdir("C:/Users/jamil/Documents/PhD/GitHub projects/Ecological-Dynamics-and-Community-Selection/" + \
-         "Ecological-Dynamics/Consumer-Resource Models/resource_diversity_stability(sl)/" + \
-             "stability_transitions")
+os.chdir("C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/" + \
+         "resource_diversity_stability(sl)/stability_transitions")
     
-sys.path.insert(0, "C:/Users/jamil/Documents/PhD/GitHub projects/Ecological-Dynamics-and-Community-Selection/" + \
-                    "Ecological-Dynamics/Consumer-Resource Models/resource_diversity_stability(sl)")
+sys.path.insert(0, "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/" + \
+                    "resource_diversity_stability(sl)")
 from simulation_functions import CRM_across_parameter_space
 
-sys.path.insert(0, 'C:/Users/jamil/Documents/PhD/Github Projects/Ecological-Dynamics-and-Community-Selection/Ecological-Dynamics/Consumer-Resource Models/cavity_method_functions')
+sys.path.insert(0, 'C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/cavity_method_functions')
 import self_consistency_equation_functions as sce
 
 # %%
@@ -60,7 +59,8 @@ def generate_parameters_M_C(M_range, sigma_C_range, mu_C, n,
     
 # %%
 
-resource_pool_sizes = np.arange(50, 275, 25)
+#resource_pool_sizes = np.arange(50, 275, 25)
+resource_pool_sizes = 225
 
 # %%
 
@@ -69,14 +69,6 @@ resource_pool_sizes = np.arange(50, 275, 25)
 M_effect_sigma_c(resource_pool_sizes, (0.5, 2.5), 160,
                  11, {'mu_y': 1, 'sigma_y' : 1.6/np.sqrt(150), 'b' : 1,
                       'd' : 1, 'gamma' : 1},
-                 'finite_effects_sigma_c_final')
+                 'resource_diversity_stability/simulations/M_vs_sigma_c_repeat')
 
-# %%
-
-# mu_c = 130
-
-M_effect_sigma_c(resource_pool_sizes, np.array([0.5, 2.5]), 130,
-                 11, {'mu_y': 1, 'sigma_y' : 1.6/np.sqrt(150), 'b' : 1,
-                      'd' : 1, 'gamma' : 1},
-                 'finite_effects_sigma_c_130')
 

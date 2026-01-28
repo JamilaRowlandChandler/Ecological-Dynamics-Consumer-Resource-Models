@@ -14,13 +14,13 @@ import sys
 from copy import copy 
 from scipy.interpolate import BarycentricInterpolator
 
-os.chdir('C:/Users/jamil/Documents/PhD/GitHub projects/Ecological-Dynamics-and-Community-Selection/Ecological-Dynamics/Consumer-Resource Models/resource_diversity_stability(sl)/cavity_solutions_vs_simulations')
+os.chdir('C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/resource_diversity_stability(sl)/cavity_solutions_vs_simulations')
 
-sys.path.insert(0, 'C:/Users/jamil/Documents/PhD/Github Projects/Ecological-Dynamics-and-Community-Selection/Ecological-Dynamics/Consumer-Resource Models/cavity_method_functions')
+sys.path.insert(0, 'C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/cavity_method_functions')
 import self_consistency_equation_functions as sce
 
-sys.path.insert(0, "C:/Users/jamil/Documents/PhD/GitHub projects/Ecological-Dynamics-and-Community-Selection/" + \
-                    "Ecological-Dynamics/Consumer-Resource Models/resource_diversity_stability(sl)")
+sys.path.insert(0, "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models" + \
+                    "/resource_diversity_stability(sl)")
 from simulation_functions import pickle_dump
 
 # %%
@@ -178,7 +178,7 @@ def Global_Solve_SCEs(varying_parameter : str,
         
     # create directory to save data 
     
-    directory  = "C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/" + \
+    directory  = "C:/Users/jamil/Documents/PhD/Data/" + \
                     "resource_diversity_stability/self_consistency_equations"
                     
     #directory = "self_consistency_equations"
@@ -255,8 +255,8 @@ def Solve_Stability_Boundary(solved_sces : any,
         
     #    os.makedirs("self_consistency_equations") 
     
-    directory = "C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/" \
-                           + "resource_diversity_stability/self_consistency_equations/stability_bound"
+    directory = "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability" \
+                           + "/self_consistency_equations/stability_bound"
                            
     if not os.path.exists(directory): 
         
@@ -402,9 +402,8 @@ sces_sigma_y = Global_Solve_SCEs('sigma_y', (0.05, 0.25), 9, "M_vs_sigma_y")
 
 # mu_c 
 
-sces_mu_c = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/" \
-                           + "resource_diversity_stability/self_consistency_equations/" + \
-                               "M_vs_mu_c.pkl")
+sces_mu_c = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability" \
+                           + "/self_consistency_equations/" + "M_vs_mu_c.pkl")
 
 # locally solve the stability boundary
 stability_boundary_mu_c = Solve_Stability_Boundary(sces_mu_c,
@@ -417,9 +416,8 @@ stability_boundary_mu_c = Solve_Stability_Boundary(sces_mu_c,
 
 # sigma_c
 
-sces_sigma_c = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/" \
-                              + "resource_diversity_stability/self_consistency_equations/" + \
-                                  "M_vs_sigma_c.pkl")
+sces_sigma_c = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability" \
+                              + "/self_consistency_equations/" + "M_vs_sigma_c.pkl")
 
 # locally solve the stability boundary
 stability_boundary_sigma_c = Solve_Stability_Boundary(sces_sigma_c,
@@ -430,9 +428,8 @@ stability_boundary_sigma_c = Solve_Stability_Boundary(sces_sigma_c,
 
 # sigma_y
 
-sces_sigma_y = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/" \
-                                      + "resource_diversity_stability/self_consistency_equations/" + \
-                                          "M_sigma_y.pkl") 
+sces_sigma_y = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability" \
+                              + "/self_consistency_equations/" + "M_sigma_y.pkl") 
 
 # locally solve the stability boundary
 stability_boundary_sigma_y = Solve_Stability_Boundary(sces_sigma_y,

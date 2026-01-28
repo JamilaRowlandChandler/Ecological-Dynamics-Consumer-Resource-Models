@@ -15,25 +15,25 @@ from scipy.optimize import curve_fit
 
 from matplotlib import pyplot as plt
 from matplotlib.patches import Rectangle
-import matplotlib.patheffects as patheffects
 
-os.chdir('C:/Users/jamil/Documents/PhD/GitHub projects/Ecological-Dynamics-and-Community-Selection/Ecological-Dynamics/Consumer-Resource Models/resource_diversity_stability(sl)/cavity_solutions_vs_simulations')
+os.chdir('C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/resource_diversity_stability(sl)/cavity_solutions_vs_simulations')
 
-sys.path.insert(0, "C:/Users/jamil/Documents/PhD/GitHub projects/Ecological-Dynamics-and-Community-Selection/" + \
-                    "Ecological-Dynamics/Consumer-Resource Models/resource_diversity_stability(sl)")
+sys.path.insert(0, "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models" + \
+                    "/resource_diversity_stability(sl)")
 from simulation_functions import generate_simulation_df, le_pivot_r
 
 # %%
 
 ################################ sigma_c ################################
 
-df_simulation_c = generate_simulation_df("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/" \
-                                         + 'resource_diversity_stability/simulations/M_vs_sigma_c')
+df_simulation_c = generate_simulation_df("C:/Users/jamil/Documents/PhD/Data/" \
+                                         #+ 'resource_diversity_stability/simulations/M_vs_sigma_c')
+                                         + 'resource_diversity_stability/simulations/M_vs_sigma_c_repeat')
 #pd.read_pickle("simulations/M_vs_sigma_c.pkl")
-globally_solved_sces_c = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/" \
+globally_solved_sces_c = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/" \
                                       + "resource_diversity_stability/self_consistency_equations/M_vs_sigma_c.pkl") 
 #pd.read_pickle("self_consistency_equations/M_vs_sigma_c.pkl")
-solved_boundary_c = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/" \
+solved_boundary_c = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/" \
                                  + "resource_diversity_stability/self_consistency_equations/stability_bound/M_vs_sigma_c.pkl")
 #pd.read_pickle("self_consistency_equations/M_vs_sigma_c_stable_bound.pkl")
 
@@ -41,13 +41,14 @@ solved_boundary_c = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data files and 
 
 ################################ sigma_y ################################
 
-df_simulation_y = generate_simulation_df("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/" \
-                                         + 'resource_diversity_stability/simulations/M_vs_sigma_y') 
+df_simulation_y = generate_simulation_df("C:/Users/jamil/Documents/PhD/Data/" \
+                                         #+ 'resource_diversity_stability/simulations/M_vs_sigma_y') 
+                                         + 'resource_diversity_stability/simulations/M_vs_sigma_y_repeat')
 #pd.read_pickle("self_consistency_equations/M_vs_sigma_y.pkl")
-globally_solved_sces_y = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/" \
-                                        + "resource_diversity_stability/self_consistency_equations/M_sigma_y.pkl") 
+globally_solved_sces_y = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/" \
+                                        + "resource_diversity_stability/self_consistency_equations/M_vs_sigma_y.pkl") 
 #pd.read_pickle("self_consistency_equations/M_vs_sigma_y.pkl")
-solved_boundary_y = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/" \
+solved_boundary_y = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/" \
                                  + "resource_diversity_stability/self_consistency_equations/stability_bound/M_vs_sigma_y.pkl")
 #pd.read_pickle("self_consistency_equations/M_vs_sigma_y_stable_bound.pkl")
 
@@ -308,10 +309,10 @@ def Stability_Plot(df_simulation_c, globally_solved_sces_c, solved_boundary_c,
     
     ###############################################
     
-    plt.savefig("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Figures/self_limit_M_vs_sigmas_digram_condition.png",
-                bbox_inches='tight')
-    plt.savefig("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Figures/self_limit_M_vs_sigmas_digram_condition.svg",
-                bbox_inches='tight')
+    #plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/self_limit_M_vs_sigmas_digram_condition.png",
+    #            bbox_inches='tight')
+    #plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/self_limit_M_vs_sigmas_digram_condition.svg",
+    #            bbox_inches='tight')
     
     plt.show()
 

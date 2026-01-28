@@ -7,10 +7,9 @@ Created on Wed May  7 16:47:27 2025
 
 import numpy as np
 from scipy.special import erfc
-from scipy.special import erf
 import os
 
-os.chdir('C:/Users/jamil/Documents/PhD/GitHub projects/Ecological-Dynamics-and-Community-Selection/Ecological-Dynamics/Chemically-mediated models/cavity_method_functions')
+os.chdir('C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/cavity_method_functions')
 
 # %%
 

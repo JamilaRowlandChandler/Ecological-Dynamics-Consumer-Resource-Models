@@ -9,11 +9,10 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import os
-from copy import deepcopy
 
 from matplotlib import pyplot as plt
 
-os.chdir('C:/Users/jamil/Documents/PhD/GitHub projects/Ecological-Dynamics-and-Community-Selection/Ecological-Dynamics/Consumer-Resource Models/resource_diversity_stability(sl)/effective_gLV')
+os.chdir('C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/resource_diversity_stability(sl)/effective_gLV')
 
 # %%
 
@@ -75,10 +74,10 @@ def interaction_statistics(data, variable, fixed_var, fixed_var_val):
 
 # sigma_c and sigma_y
 
-sigma_c_M = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/" \
+sigma_c_M = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/" \
                                       + "resource_diversity_stability/self_consistency_equations/M_vs_sigma_c.pkl") 
 
-sigma_y_M = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/" \
+sigma_y_M = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/" \
                                       + "resource_diversity_stability/self_consistency_equations/M_vs_sigma_y.pkl") 
 
 # %%
@@ -153,7 +152,7 @@ axs.flatten()[3].legend(handles = h_handles1,
 
 sns.despine()
 
-plt.savefig("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Figures/sigma_cy_egLV_stats.png",
+plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resourve_diversity_stability/sigma_cy_egLV_stats.png",
             bbox_inches='tight')
     
 plt.show()

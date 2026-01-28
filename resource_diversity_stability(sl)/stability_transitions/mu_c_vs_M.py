@@ -9,15 +9,14 @@ import numpy as np
 import sys
 import os
 
-os.chdir("C:/Users/jamil/Documents/PhD/GitHub projects/Ecological-Dynamics-and-Community-Selection/" + \
-         "Ecological-Dynamics/Consumer-Resource Models/resource_diversity_stability(sl)/" + \
-             "stability_transitions")
+os.chdir("C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/" + \
+         "resource_diversity_stability(sl)/stability_transitions")
     
-sys.path.insert(0, "C:/Users/jamil/Documents/PhD/GitHub projects/Ecological-Dynamics-and-Community-Selection/" + \
-                    "Ecological-Dynamics/Consumer-Resource Models/resource_diversity_stability(sl)")
+sys.path.insert(0, "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/" + \
+                    "resource_diversity_stability(sl)")
 from simulation_functions import CRM_across_parameter_space
 
-sys.path.insert(0, 'C:/Users/jamil/Documents/PhD/Github Projects/Ecological-Dynamics-and-Community-Selection/Ecological-Dynamics/Consumer-Resource Models/cavity_method_functions')
+sys.path.insert(0, 'C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/cavity_method_functions')
 import self_consistency_equation_functions as sce
 
 # %%

@@ -14,16 +14,15 @@ import numpy.typing as npt
 from typing import Union, Literal
 import pandas as pd
 import os
-import pickle
 from tqdm import tqdm
-from inspect import getfullargspec
+from inspect import signature
 
 from scipy.optimize import least_squares
 from scipy.optimize import basinhopping
 
-os.chdir('C:/Users/jamil/Documents/PhD/GitHub projects/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/Chemically-mediated models/cavity_method_functions')
+os.chdir('C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/cavity_method_functions')
 
-"C:\Users\jamil\Documents\PhD\Code Repositories\Ecological-Dynamics-Consumer-Resource-Models\Consumer-Resource Models\cavity_method_functions"
+#"C:\Users\jamil\Documents\PhD\Code Repositories\Ecological-Dynamics-Consumer-Resource-Models\Consumer-Resource Models\cavity_method_functions"
 
 import self_limiting_rho_equations as slr
 import externally_supplied_equations as es
@@ -103,7 +102,7 @@ def variable_fixed_parameters(variable_parameters : list,
         #   parameters
         def variable_dict(v_p, v_p_names, fixed_parameters):
             
-            return dict(zip(v_p_names, v_p)) | fixed_parameters 
+            return fixed_parameters | dict(zip(v_p_names, v_p))
         
         # perform operation on all sets of variable parameters
         variable_list = np.apply_along_axis(variable_dict, 0, variable_parameters,
@@ -114,7 +113,7 @@ def variable_fixed_parameters(variable_parameters : list,
     #   with fixed parameters in a list comprehension
     elif isinstance(variable_parameters[0], dict):
         
-        variable_list = [v_p | fixed_parameters for v_p in variable_parameters]
+        variable_list = [fixed_parameters | v_p for v_p in variable_parameters]
                          
     return variable_list
 
@@ -443,9 +442,9 @@ def solve_for_multistability(y, multistability_equation_func):
         case 'externally supplied':
             
             fun = es.multistability_equations
-            ls_kwarg_names = ['rho', 'gamma', 'mu_c', 'sigma_c', 'sigma_g', 'mu_K',
-                              'mu_D', 'sigma_D', 'phi_N', 'N_mean', 'q_N', 'v_N',
-                              'chi_R']
+            ls_kwarg_names = ['gamma', 'rho', 'mu_c', 'sigma_c', 'sigma_g',
+                              'mu_b', 'mu_o', 'sigma_o',
+                              'phi_N', 'N_mean', 'q_N', 'v_N', 'chi_R']
     
     # create kwargs (parameters) for the equation being solved for 
     ls_kwargs = {key : y[key] for key in ls_kwarg_names}
@@ -556,7 +555,8 @@ def solve_equations_basinhopping(equation_func, solved_quantities, bounds, x_ini
         
             return sol
 
-    # Construct the function to be minimised
+    # Construct the function to be minimised - STEVEN YOU DON'T NEED THIS, JUST
+    #   SET FUN TO THE FUNCTION OF THE EQUATIONS YOU'RE MINIMISING 
     if ms_function:
         
         fun = lambda x : equation_func(**{key: val for key, val in 
@@ -639,14 +639,22 @@ class Accept_within_Bounds:
         
     def __call__(self, **kwargs):
         
-        #breakpoint()
-        
-        x = kwargs["x_new"]
+        x = kwargs.get("x_new", None)
+        #f_new = kwargs.get("f_new", None)
+        #f_old = kwargs.get("f_old", None)
         
         tmax = bool(np.all(x <= self.xmax))
         tmin = bool(np.all(x >= self.xmin))
         
-        return tmax and tmin
+        result = tmax and tmin
+    
+        #print(f"Acceptance test called:")
+        #print(f"  x_new: {x}")
+        #print(f"  f_new: {f_new}, f_old: {f_old}")
+        #print(f"  Within bounds: {result}")
+        #print(f"  kwargs keys: {kwargs.keys()}")
+    
+        return result
     
 def decent_solve(x, f, accept):
     
@@ -671,12 +679,14 @@ def decent_solve(x, f, accept):
 
     '''
     
+    #print("decent_solve called")
+    
     # Stop solver if the loss function is less than 10^(-25)
     if np.log10(np.abs(f)) < -25:
         
         return True
     
-def filter_ls_kwargs(kwargs):
+def filter_ls_kwargs(kwargs): # STEVEN IGNORE THIS
     
     '''
     
@@ -693,15 +703,21 @@ def filter_ls_kwargs(kwargs):
         Correct kwargs.
 
     '''
-   
-    valid_args = getfullargspec(least_squares)[0]
-    collection_types = (list, dict, tuple, np.ndarray)
     
-    return {arg_name : kwargs[arg_name]
-            for arg_name in valid_args
-            if arg_name in kwargs
-            and isinstance(kwargs[arg_name], collection_types)
-            and any(kwargs[arg_name])}
+    valid_args = [key for key in signature(least_squares).parameters.keys()]
+    check_empty_types = (list, dict, tuple, np.ndarray)
+    
+    new_kwargs = {arg_name : kwargs[arg_name]
+                  for arg_name in valid_args 
+                  if arg_name in kwargs.keys()
+                  and kwargs[arg_name] is not None}
+    
+    new_kwargs = {key : value for key, value in new_kwargs.items()
+                  if isinstance(value, check_empty_types) is False
+                  or (isinstance(value, check_empty_types) is True
+                  and any(value))}
+    
+    return new_kwargs
     
 # %%
 

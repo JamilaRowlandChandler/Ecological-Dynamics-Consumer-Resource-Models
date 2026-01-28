@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import numpy as np
 from scipy.integrate import solve_ivp
-from copy import deepcopy
+from scipy.stats import pearsonr
 from typing import TYPE_CHECKING, Union
 
 ########## type checking ########
@@ -31,6 +31,11 @@ class eLV_SL():
         
         self.no_resources = CRM_community.no_resources
         self.no_species = CRM_community.no_species
+        
+        self.mu_c = CRM_community.mu_c
+        self.sigma_c = CRM_community.sigma_c
+        self.mu_y = CRM_community.mu_g
+        self.sigma_y = CRM_community.sigma_g
                  
         self.consumption = CRM_community.consumption
         self.consumer_growth = CRM_community.growth
@@ -81,6 +86,19 @@ class eLV_SL():
         self.sigma_Aii = np.std(self_inhibition)
         self.mu_Aij = np.mean(inter_species_interactions)
         self.sigma_Aij = np.std(inter_species_interactions) 
+        
+        def diagonal_correlation(matrix):
+            
+            i_upper, j_upper = np.triu_indices_from(matrix, k=1)
+
+            upper_elements = matrix[i_upper, j_upper]
+            lower_elements = matrix[j_upper, i_upper]
+
+            correlation = pearsonr(upper_elements, lower_elements)[0]
+            
+            return correlation
+        
+        self.rho_A = diagonal_correlation(inter_species_interactions)
          
         total_interact_per_species = np.sum(inter_species_interactions, axis = 1)
         

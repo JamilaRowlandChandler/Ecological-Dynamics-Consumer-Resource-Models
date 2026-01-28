@@ -12,18 +12,18 @@ import pandas as pd
 import os
 import sys
 from tqdm import tqdm
-from typing import Union, Literal
+from typing import Literal
 import numpy.typing as npt
 
-os.chdir('C:/Users/jamil/Documents/PhD/GitHub projects/Ecological-Dynamics-and-Community-Selection/Ecological-Dynamics/Consumer-Resource Models/resource_diversity_stability(sl)/effective_gLV')
+os.chdir('C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/resource_diversity_stability(sl)/effective_gLV')
 
-sys.path.insert(0, "C:/Users/jamil/Documents/PhD/GitHub projects/Ecological-Dynamics-and-Community-Selection/" + \
-                    "Ecological-Dynamics/Consumer-Resource Models/consumer_resource_modules")
+sys.path.insert(0, "C:/Users/jamil/Documents/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models" + \
+                    "/consumer_resource_modules")
 from effective_LV_models import eLV_SL
 from community_level_properties import max_le
     
-sys.path.insert(0, "C:/Users/jamil/Documents/PhD/GitHub projects/Ecological-Dynamics-and-Community-Selection/" + \
-                    "Ecological-Dynamics/Consumer-Resource Models/resource_diversity_stability(sl)")
+sys.path.insert(0, "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models" + \
+                    "/resource_diversity_stability(sl)")
 from simulation_functions import pickle_dump
 
 # %%
@@ -101,17 +101,17 @@ def egLV_M(resource_pool_sizes : npt.NDArray = np.arange(50, 275, 25),
         '''
         
         # read in consumer-resource model (CRM) communities
-        CRM_communities = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/resource_diversity_stability/simulations/M_vs_mu_c/" + \
+        CRM_communities = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/M_vs_mu_c/" + \
                                           "simulations_" + filename + ".pkl")
         
         # generate eLV from CRM communities, run simulations
         egLV_communities = [call_egLV(CRM_community, cavity_phi_R) 
                             for CRM_community in 
-                            tqdm(CRM_communities, leave = True, position = 0,
+                            tqdm(CRM_communities, leave = False, position = 0,
                                  total = len(CRM_communities))]
        
         # save eLV
-        pickle_dump("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/resource_diversity_stability/simulations/" + \
+        pickle_dump("C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/" + \
                     gLV_directory + "/simulations_" + filename + ".pkl",
                     egLV_communities)
         
@@ -133,10 +133,10 @@ def egLV_M(resource_pool_sizes : npt.NDArray = np.arange(50, 275, 25),
     ###################################################################################
     
     # make file directory for eLVs
-    if not os.path.exists("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/resource_diversity_stability/simulations/" + \
+    if not os.path.exists("C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/" + \
                           gLV_directory):
         
-        os.makedirs("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/resource_diversity_stability/simulations/" + \
+        os.makedirs("C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/" + \
                     gLV_directory)
      
     # generate filenames based on mu_c
@@ -147,7 +147,7 @@ def egLV_M(resource_pool_sizes : npt.NDArray = np.arange(50, 275, 25),
     if all_resource_survive is False:
     
         # get the resource survival fraction
-        sces = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/resource_diversity_stability/self_consistency_equations/M_vs_mu_c.pkl")
+        sces = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/self_consistency_equations/M_vs_mu_c.pkl")
         M_phi_Rs = set_phi_R(sces, mu_c)
         ordered_phi_Rs = np.array([M_phi_Rs.loc[M_phi_Rs['M'] == M,
                                                 'phi_R'].to_numpy()

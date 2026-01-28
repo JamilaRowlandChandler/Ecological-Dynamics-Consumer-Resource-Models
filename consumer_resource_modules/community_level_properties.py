@@ -11,15 +11,14 @@ import numpy as np
 import numpy.typing as npt
 from typing import TYPE_CHECKING, Union
 from copy import deepcopy
-from matplotlib import pyplot as plt
 import sys
 
 ########## type checking ########
 
 if TYPE_CHECKING:
     
-    sys.path.insert(0, "C:/Users/jamil/Documents/PhD/GitHub projects/Ecological-Dynamics-and-Community-Selection/" + \
-                        "Ecological-Dynamics/Consumer-Resource Models/consumer_resource_modules")
+    sys.path.insert(0, "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models" + \
+                        "/consumer_resource_modules")
     from models import SL_CRM, SL_SI_CRM, ES_CRM
     from effective_LV_models import eLV_SL, gLV
     

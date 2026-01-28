@@ -11,16 +11,15 @@ import sys
 import os
 from matplotlib import pyplot as plt
 
-os.chdir("C:/Users/jamil/Documents/PhD/GitHub projects/Ecological-Dynamics-and-Community-Selection/" + \
-         "Ecological-Dynamics/Consumer-Resource Models/resource_diversity_stability(sl)/" + \
-             "stability_transitions")
+os.chdir("C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/" + \
+         "resource_diversity_stability(sl)/stability_transitions")
     
-sys.path.insert(0, "C:/Users/jamil/Documents/PhD/GitHub projects/Ecological-Dynamics-and-Community-Selection/" + \
-                    "Ecological-Dynamics/Consumer-Resource Models/resource_diversity_stability(sl)")
+sys.path.insert(0, "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/" + \
+                    "resource_diversity_stability(sl)")
 from simulation_functions import CRM_across_parameter_space, generate_simulation_df, \
     le_pivot, generic_heatmaps
 
-sys.path.insert(0, 'C:/Users/jamil/Documents/PhD/Github Projects/Ecological-Dynamics-and-Community-Selection/Ecological-Dynamics/Consumer-Resource Models/cavity_method_functions')
+sys.path.insert(0, 'C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/cavity_method_functions')
 import self_consistency_equation_functions as sce
 
 # %%
@@ -72,7 +71,7 @@ M_effect_mu_y(resource_pool_sizes, np.array([0.25, 1]), 130, 1.6, 7,
 
 # %%
 
-df_mu_y_M = generate_simulation_df("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/" \
+df_mu_y_M = generate_simulation_df("C:/Users/jamil/Documents/PhD/Data/" \
                                    + 'finite_effects_fixed_C_mu_y_final_2')
     
 # %%

@@ -18,16 +18,15 @@ import sys
 import os
 from matplotlib import pyplot as plt
 
-os.chdir("C:/Users/jamil/Documents/PhD/GitHub projects/Ecological-Dynamics-and-Community-Selection/" + \
-         "Ecological-Dynamics/Consumer-Resource Models/resource_diversity_stability(sl)/" + \
-             "stability_transitions")
+os.chdir("C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/" + \
+         "resource_diversity_stability(sl)/stability_transitions")
     
-sys.path.insert(0, "C:/Users/jamil/Documents/PhD/GitHub projects/Ecological-Dynamics-and-Community-Selection/" + \
-                    "Ecological-Dynamics/Consumer-Resource Models/resource_diversity_stability(sl)")
+sys.path.insert(0, "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/" + \
+                    "resource_diversity_stability(sl)")
 from simulation_functions import CRM_across_parameter_space, generate_simulation_df, \
     le_pivot_r, generic_heatmaps
 
-sys.path.insert(0, 'C:/Users/jamil/Documents/PhD/Github Projects/Ecological-Dynamics-and-Community-Selection/Ecological-Dynamics/Consumer-Resource Models/cavity_method_functions')
+sys.path.insert(0, 'C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/cavity_method_functions')
 import self_consistency_equation_functions as sce
 
 # %%
@@ -38,7 +37,7 @@ def M_effect_fixed_C_fixed_supply(M_range, mu_C_range, sigma_C, b, n,
     parameters = generate_parameters_M_C(M_range, mu_C_range, sigma_C, b, n,
                                          fixed_parameters)
     
-    CRM_across_parameter_space(parameters, 'finite_effects_fixed_C_fixed_supply_final',
+    CRM_across_parameter_space(parameters, 'resource_diversity_stability/simulations/M_vs_mu_c(fixed_supply)_repeat',
                                ['M', 'mu_c'])
                     
 # %%
@@ -81,8 +80,8 @@ M_effect_fixed_C_fixed_supply(resource_pool_sizes, np.array([100, 250]), 1.6, 15
 
 # %%
 
-df_mu_c_b_M = generate_simulation_df("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/" \
-                                     + 'finite_effects_fixed_C_fixed_supply_final')
+df_mu_c_b_M = generate_simulation_df("C:/Users/jamil/Documents/PhD/Data/" \
+                                     + 'resource_diversity_stability/simulations/M_vs_mu_c(fixed_supply)_repeat')
 
 # %%
 
@@ -105,9 +104,9 @@ cbar.set_label(label = 'Proportion of simulations with stable dynamics',
                size = '14')
 cbar.ax.tick_params(labelsize = 12)
 
-plt.savefig("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Figures/self_limit_fixed_C_fixed_supply_M.png",
+plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/self_limit_fixed_C_fixed_supply_M.png",
             bbox_inches='tight', dpi = 400)
-plt.savefig("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Figures/self_limit_fixed_C_fixed_supply_M.svg",
+plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/self_limit_fixed_C_fixed_supply_M.svg",
             bbox_inches='tight')
 
 plt.show()

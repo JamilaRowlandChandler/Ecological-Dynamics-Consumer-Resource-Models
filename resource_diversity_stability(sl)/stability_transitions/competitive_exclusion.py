@@ -7,8 +7,8 @@ Created on Fri Oct 24 16:21:22 2025
 
 import os
 
-os.chdir("C:/Users/jamil/Documents/PhD/GitHub projects/Ecological-Dynamics-and-Community-Selection/" + \
-         "Ecological-Dynamics/Consumer-Resource Models/consumer_resource_modules")
+os.chdir("C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/" + \
+         "consumer_resource_modules")
 
 from models import Consumer_Resource_Model
 
@@ -70,7 +70,7 @@ ax.set_xlabel('')
 
 sns.despine(ax = ax)
 
-plt.savefig("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Figures/competitive_exclusion.png",
+plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/competitive_exclusion.png",
             bbox_inches='tight', dpi = 400)
 
 plt.show()

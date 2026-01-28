@@ -16,14 +16,15 @@ from typing import Union
 
 from matplotlib import pyplot as plt
 import matplotlib.patheffects as patheffects
+from mpl_toolkits.axes_grid1.inset_locator import mark_inset
 
-os.chdir('C:/Users/jamil/Documents/PhD/GitHub projects/Ecological-Dynamics-and-Community-Selection/Ecological-Dynamics/Consumer-Resource Models/resource_diversity_stability(sl)/effective_gLV')
+os.chdir('C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/resource_diversity_stability(sl)/effective_gLV')
 
-sys.path.insert(0, "C:/Users/jamil/Documents/PhD/GitHub projects/Ecological-Dynamics-and-Community-Selection/" + \
-                    "Ecological-Dynamics/Consumer-Resource Models/consumer_resource_modules")
+sys.path.insert(0, "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/" + \
+                    "consumer_resource_modules")
     
-sys.path.insert(0, "C:/Users/jamil/Documents/PhD/GitHub projects/Ecological-Dynamics-and-Community-Selection/" + \
-                    "Ecological-Dynamics/Consumer-Resource Models/resource_diversity_stability(sl)")
+sys.path.insert(0, "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/" + \
+                    "resource_diversity_stability(sl)")
 from simulation_functions import prop_chaotic, generate_simulation_df
 
 # %%
@@ -130,10 +131,10 @@ def CRM_vs_egLV_plot(CRM_simulation, egLV_simulation,
     
     sns.despine()
     
-    plt.savefig("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Figures/" + \
+    plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/" + \
                 filename_save + ".png", #self_limit_stability_egLV_all_resources.png
                 bbox_inches='tight', dpi = 400)
-    plt.savefig("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Figures/" + \
+    plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/" + \
                 filename_save + ".svg",
                 bbox_inches='tight')
     
@@ -141,7 +142,8 @@ def CRM_vs_egLV_plot(CRM_simulation, egLV_simulation,
     
 # %%
 
-def eLV_interact_stats_plot(competition_df, filename_save):
+def eLV_interact_stats_plot(competition_df, filename_save,
+                            zoom_M = [200, 250]):
     
     #breakpoint()
     
@@ -177,6 +179,39 @@ def eLV_interact_stats_plot(competition_df, filename_save):
                           ax = axs[0], linewidth = 2.5,
                           palette = colour_palette, zorder = 10, err_style="bars")
     
+    axins = axs[0].inset_axes([0.3, 0.4, 0.7, 0.4])
+    
+    sns.lineplot(data = df_mu,
+                 x = 'M', y = 'value', hue = "variable",
+                 ax = axins, linewidth = 3,
+                 palette = ['black', 'black', 'black'],
+                 zorder = 1, err_style="bars")
+    
+    sns.lineplot(data = df_mu,
+                 x = 'M', y = 'value', hue = "variable",
+                 ax = axins, linewidth = 2.5,
+                 palette = colour_palette, zorder = 2, err_style="bars")
+    
+    xmin, xmax = zoom_M
+    axins.set_xlim([xmin, xmax])
+    
+    axins.set_ylim([np.min(df_mu.loc[(df_mu['variable'] != "mu_Aij_tot") & \
+                                     (df_mu['M'] >= xmin) & \
+                                     (df_mu['M'] <= xmax), 
+                                     'value']),
+                    np.max(df_mu.loc[(df_mu['variable'] != "mu_Aij_tot") & \
+                                     (df_mu['M'] >= xmin) & \
+                                     (df_mu['M'] <= xmax), 
+                                     'value'])])
+    axins.legend_.remove()
+    axins.xaxis.set_tick_params(labelsize = 8)
+    axins.yaxis.set_tick_params(labelsize = 8)
+    axins.set_xlabel('')
+    axins.set_ylabel('')
+    
+    mark_inset(axs[0], axins, loc1=4, loc2=3, ec="0.5", 
+               zorder = 20)                          
+    
     sns.lineplot(data = df_sigma,
                  x = 'M', y = 'value',
                  ax = axs[1], linewidth = 3, hue = "variable",
@@ -204,10 +239,10 @@ def eLV_interact_stats_plot(competition_df, filename_save):
         sns.despine(ax = ax)
         ax.legend_.remove()
     
-    plt.savefig("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Figures/" + \
+    plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/" + \
                 filename_save + ".png", #self_limit_stability_egLV_all_resources.png
                 bbox_inches='tight', dpi = 400)
-    plt.savefig("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Figures/" + \
+    plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/" + \
                 filename_save + ".svg",
                 bbox_inches='tight')
     
@@ -217,7 +252,7 @@ def eLV_interact_stats_plot(competition_df, filename_save):
 
 def read_eLV_data(subdirectory):
        
-    directory = "C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/resource_diversity_stability/simulations/egLV/" + \
+    directory = "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/egLV/" + \
                     subdirectory
     
     egLV_Ms = [pd.read_pickle(os.path.join(directory, file)) for file in os.listdir(directory)]
@@ -234,7 +269,7 @@ def read_eLV_data(subdirectory):
 
 # %%
 
-CRM_df = generate_simulation_df("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/resource_diversity_stability/simulations/M_vs_mu_c") 
+CRM_df = generate_simulation_df("C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/M_vs_mu_c") 
 
 egLV_145_df, competition_145_df = read_eLV_data("M_vs_mu_c_145")    
 egLV_190_df, competition_190_df = read_eLV_data("M_vs_mu_c_190")    
@@ -260,10 +295,10 @@ CRM_vs_egLV_plot(CRM_df, egLV_190_all_df,
 # %%
 
 eLV_interact_stats_plot(competition_145_df,
-                        "self_limit_interact_stats_egLV_145.png")
+                        "self_limit_interact_stats_egLV_145")
 eLV_interact_stats_plot(competition_190_df,
-                        "self_limit_interact_stats_egLV_190.png")
+                        "self_limit_interact_stats_egLV_190")
 eLV_interact_stats_plot(competition_145_all_df,
-                        "self_limit_interact_stats_egLV_all_resources_145.png")
+                        "self_limit_interact_stats_egLV_all_resources_145")
 eLV_interact_stats_plot(competition_190_all_df,
-                        "self_limit_interact_stats_egLV_all_resources_190.png")
+                        "self_limit_interact_stats_egLV_all_resources_190")

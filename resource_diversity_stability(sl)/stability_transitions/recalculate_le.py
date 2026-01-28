@@ -12,16 +12,15 @@ import os
 from tqdm import tqdm
 from matplotlib import pyplot as plt
 
-os.chdir("C:/Users/jamil/Documents/PhD/GitHub projects/Ecological-Dynamics-and-Community-Selection/" + \
-         "Ecological-Dynamics/Consumer-Resource Models/resource_diversity_stability(sl)/" + \
-             "stability_transitions")
+os.chdir("C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/" + \
+         "resource_diversity_stability(sl)/stability_transitions")
     
-sys.path.insert(0, "C:/Users/jamil/Documents/PhD/GitHub projects/Ecological-Dynamics-and-Community-Selection/" + \
-                    "Ecological-Dynamics/Consumer-Resource Models/resource_diversity_stability(sl)")
+sys.path.insert(0, "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/" + \
+                    "resource_diversity_stability(sl)")
 from simulation_functions import pickle_dump, generic_heatmaps, \
     generate_simulation_df, le_pivot_r
 
-sys.path.insert(0, 'C:/Users/jamil/Documents/PhD/Github Projects/Ecological-Dynamics-and-Community-Selection/Ecological-Dynamics/Consumer-Resource Models/consumer_resource_modules')
+sys.path.insert(0, 'C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/consumer_resource_modules')
 from community_level_properties import max_le
 
 # %%
@@ -29,10 +28,10 @@ from community_level_properties import max_le
 def recalculate_max_le(old_directory, new_directory,
                        le_kwargs = dict(T = 1000, perturbation = 1e-6)):
     
-    full_old_directory = "C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/" \
+    full_old_directory = "C:/Users/jamil/Documents/PhD/Data/" \
                            + old_directory
     
-    full_new_directory = "C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/" \
+    full_new_directory = "C:/Users/jamil/Documents/PhD/Data/" \
                             + new_directory
 
     if not os.path.exists(full_new_directory):
@@ -57,7 +56,7 @@ def recalculate_max_le(old_directory, new_directory,
 def le_test(path,
             le_kwargs = dict(T = 1000, perturbation = 1e-6)):
     
-    communities = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/" \
+    communities = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/" \
                                  + path)
     
     for i, community in enumerate(communities):
@@ -87,7 +86,7 @@ le_test("finite_effect_sigma_y_final/simulations_250_0.05.pkl")
 
 # %%
 
-df_mu_c_M = generate_simulation_df("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/" \
+df_mu_c_M = generate_simulation_df("C:/Users/jamil/Documents/PhD/Data/" \
                                        + 'M_vs_mu_c_new_le_3')
     
 # %%

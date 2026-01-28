@@ -18,7 +18,7 @@ from scipy.stats import pearsonr
 import numpy.typing as npt
 from typing import TYPE_CHECKING, Union, TypedDict, NotRequired, Literal
 
-sys.path.insert(0, 'C:/Users/jamil/Documents/PhD/Github Projects/Ecological-Dynamics-and-Community-Selection/Ecological-Dynamics/Consumer-Resource Models/consumer_resource_modules')
+sys.path.insert(0, 'C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/consumer_resource_modules')
 from models import Consumer_Resource_Model
 from community_level_properties import max_le
 
@@ -82,8 +82,7 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
     
     # create the directory where the communities should be saved (if the directory
     #   doesn't already exist)
-    full_directory = "C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/" \
-                        + subdirectory
+    full_directory = "C:/Users/jamil/Documents/PhD/Data/" + subdirectory
     
     if not os.path.exists(full_directory):
         
@@ -224,7 +223,7 @@ def CRMs_create_and_save(filepath : str,
                                                    model_specific_rates_args,
                                                    **kwargs)
     
-    pickle_dump("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/" + \
+    pickle_dump("C:/Users/jamil/Documents/PhD/Data/" + \
                 filepath + ".pkl",
                 communities)
         
@@ -315,8 +314,12 @@ def consumer_resource_model_dynamics(no_species : int, no_resources : int,
         
         # estimate community properties, including the max. lyapunov exponent
         community.calculate_community_properties()
-        community.lyapunov_exponent = max_le(community, 500, community.ODE_sols[0].y[:, -1],
-                                             dt = 20, separation = 1e-3)
+        #community.lyapunov_exponent = max_le(community, 500, community.ODE_sols[0].y[:, -1],
+        #                                     dt = 20, separation = 1e-3)
+        community.lyapunov_exponent = max_le(community,
+                                             community.ODE_sols[0].y[:, -1],
+                                             T = 1000,
+                                             perturbation = 1e-6)
         
         return community 
 
@@ -326,7 +329,8 @@ def consumer_resource_model_dynamics(no_species : int, no_resources : int,
                                                     growth_consumption_rates_args,
                                                     model_specific_rates_args,
                                                     t_end))
-                                  for _ in range(no_communities)]
+                                  for _ in tqdm(range(no_communities),
+                                                position = 1, leave = False)]
     
     return communities
 
@@ -595,7 +599,7 @@ def generic_heatmaps(df, x, y, xlabel, ylabel, variables, cmaps, titles,
     if mosaic:
         
         fig, axs = plt.subplot_mosaic(mosaic, figsize = figsize,
-                                      gridspec_kw = gridspec_kw, layout = 'constrained')
+                                      gridspec_kw = gridspec_kw)
     
     else:
         

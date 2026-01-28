@@ -19,22 +19,22 @@ from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.patches import Rectangle
 import matplotlib.patheffects as patheffects
 
-os.chdir('C:/Users/jamil/Documents/PhD/GitHub projects/Ecological-Dynamics-and-Community-Selection/Ecological-Dynamics/Consumer-Resource Models/resource_diversity_stability(sl)/cavity_solutions_vs_simulations')
+os.chdir('C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/resource_diversity_stability(sl)/cavity_solutions_vs_simulations')
 
-sys.path.insert(0, "C:/Users/jamil/Documents/PhD/GitHub projects/Ecological-Dynamics-and-Community-Selection/" + \
-                    "Ecological-Dynamics/Consumer-Resource Models/alternative_growth_consumption_coupling")
+sys.path.insert(0, "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/" + \
+                    "resource_diversity_stability(sl)")
 from simulation_functions import generate_simulation_df, le_pivot_r
 
 # %%
 
-df_simulation = generate_simulation_df("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/" \
+df_simulation = generate_simulation_df("C:/Users/jamil/Documents/PhD/Data/" \
                                        + 'resource_diversity_stability/simulations/M_vs_mu_c')
     
 #pd.read_pickle("simulations/M_vs_mu_c.pkl")
-globally_solved_sces = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/" \
+globally_solved_sces = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/" \
                                       + "resource_diversity_stability/self_consistency_equations/M_vs_mu_c.pkl") 
     #pd.read_pickle("self_consistency_equations/M_vs_mu_c.pkl")
-solved_boundary = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/" \
+solved_boundary = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/" \
                                  + "resource_diversity_stability/self_consistency_equations/stability_bound/M_vs_mu_c.pkl")
 
 #pd.read_pickle("self_consistency_equations/M_vs_mu_c_stable_bound.pkl")
@@ -202,11 +202,11 @@ def Stability_Plot(df_simulation, globally_solved_sces, solved_boundary):
     
     example_M = [75, 225]
     
-    chaotic_populations = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/" +
+    chaotic_populations = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/" +
                                          "resource_diversity_stability/simulations/M_vs_mu_c/" + 
                                          "simulations_75_1.9333.pkl")
         
-    stable_populations = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/" +\
+    stable_populations = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/" +\
                                         "resource_diversity_stability/simulations/M_vs_mu_c/" +  
                                         "simulations_225_0.6444.pkl")
                  
@@ -321,10 +321,10 @@ def Stability_Plot(df_simulation, globally_solved_sces, solved_boundary):
     
     sns.despine(ax = axs["M_stability"])
     
-    #plt.savefig("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Figures/self_limit_M_vs_mu_c_digram_condition.png",
-    #            bbox_inches='tight')
-    #plt.savefig("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Figures/self_limit_M_vs_mu_c_digram_condition.svg",
-    #            bbox_inches='tight')
+    plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/self_limit_M_vs_mu_c_digram_condition.png",
+                bbox_inches='tight')
+    plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/self_limit_M_vs_mu_c_digram_condition.svg",
+                bbox_inches='tight')
         
     plt.show()
 
