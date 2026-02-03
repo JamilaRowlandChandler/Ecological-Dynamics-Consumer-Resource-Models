@@ -30,7 +30,9 @@ def solve_sces(parameters : Union[list, dict],
                 bounds : Union[list[tuple[float], tuple[float]],
                                list[list[tuple[float], tuple[float]]]],
                 x_init : Union[npt.NDArray, list[npt.NDArray]],
-                solver_name : Literal['basin-hopping', 'least-squares'],
+                solver_name : Literal['basin-hopping',
+                                      'dual-annealing',
+                                      'least-squares'],
                 solver_kwargs : Union[dict, list] = {'xtol' : 1e-13,
                                                      'ftol' : 1e-13},
                 other_kwargs : Union[dict, list] = {},
@@ -166,7 +168,8 @@ def Global_Solve_SCEs(parameter : str,
                                       solved_quantities,
                                       bounds,
                                       x_init,
-                                      solver_name = 'basin-hopping',
+                                      #solver_name = 'basin-hopping',
+                                      solver_name = 'dual-annealing',
                                       other_kwargs = other_kwargs)
             final_sces = copy(sces)
             bad_solve_idx = final_sces.loc[final_sces['loss'] > -30, :].index.tolist()
@@ -210,16 +213,29 @@ def Global_Solve_SCEs(parameter : str,
                                                    any_fixed_parameters,
                                                    ['rho', parameter]).tolist()
         
+    if len(parameters) == 1:
+        
+        parameters = parameters[0]
+        
     solved_quantities = ['phi_N', 'N_mean', 'q_N', 'v_N',
                          'R_mean', 'q_R', 'chi_R']
     
-    bounds = ([1e-10, 1e-10, 1e-10, -1e15, 1e-10, 1e-10, 1e-10],
-              [0.5, 1e15, 1e15, 1e-10, 1e15, 1e15, 1e15])
+    #bounds = ([1e-10, 1e-10, 1e-10, -1e15, 1e-10, 1e-10, 1e-10],
+     #         [0.5, 1e15, 1e15, 1e-10, 1e15, 1e15, 1e15])
+     
+    bounds = [(1e-10, 0.5),
+              (1e-10, 1e15),
+              (1e-10, 1e15),
+              (-1e15, 1e-10), 
+              (1e-10, 1e15),
+              (1e-10, 1e15),
+              (1e-10, 1e15)]
     
     x_init = np.array([0.1, 1, 30, -0.1, 0.01, 1e-4, 0.05])
     
     solved_sces = solve_sces(parameters, solved_quantities, bounds, x_init,
-                             'basin-hopping', other_kwargs = {'niter' : 200})
+                             #'basin-hopping', other_kwargs = {'niter' : 200})
+                             'dual-annealing', other_kwargs = {'maxiter' : 2000})
     
     final_sces = clean_bad_solves(solved_sces, solved_quantities, bounds, x_init)
 
@@ -246,10 +262,10 @@ sces = Global_Solve_SCEs("sigma",
                          1,
                          "rho_vs_sigma",
                          rhos = (1, 1),
-                         any_fixed_parameters = dict(mu_c = 160., sigma_c = 2.,
-                                                     mu_g = 160., sigma_g = 2.,
+                         any_fixed_parameters = dict(mu_c = 3., sigma_c = 5.,
+                                                     mu_g = 3., sigma_g = 5.,
                                                      mu_d = 1., sigma_d =  0.,
-                                                     mu_b = 1., sigma_b = 0.1,
+                                                     mu_b = 5., sigma_b = 0.,
                                                      mu_o = 1., sigma_o = 0., 
                                                      gamma = 1.))
 

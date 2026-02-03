@@ -302,7 +302,17 @@ def Stability_Plot(df_simulation, globally_solved_sces, solved_boundary):
                  ax = axs['M_stability'], linewidth = 1.5, color = 'black',
                  err_style = "bars", errorbar = ("pi", 100),
                  marker = "o")
-
+    
+    se_95 = 1.96*np.sqrt((example_stability['P(stability)'] * \
+                          (1 - example_stability['P(stability)']))/20)
+    
+    error_bars = axs['M_stability'].errorbar(x = example_stability['M'], 
+                                             y =  example_stability['P(stability)'],
+                                             yerr = se_95,
+                                             fmt = 'none',
+                                             ecolor = 'black',
+                                             linewidth = 1.5) 
+    
     axs['M_stability'].set_xticks(resource_pool_sizes[::4],
                                   labels = resource_pool_sizes[::4],
                                   fontsize = 10, rotation = 0)

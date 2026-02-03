@@ -64,13 +64,13 @@ def generate_parameters(rho_range, sigma_range, n, fixed_parameters):
 
 # %%
 
-rhos = np.linspace(0.1, 1, 10) # np.linspace(0, 1, 11)
-sigmas = np.linspace(2, 5, 11)
+hos = np.linspace(0.1, 1, 10) # np.linspace(0, 1, 11)
+sigmas = np.linspace(2, 8, 11)
 
 # %%
 
 rho_sigma(rhos, sigmas, 11,
-          dict(mu_c = 160, mu_g = 160, d = 1, b = 1, o = 1, M = 150, S = 150))
+          dict(mu_c = 3, mu_g = 3, d = 1, b = 1, M = 100, S = 300))
 
 # %%
 

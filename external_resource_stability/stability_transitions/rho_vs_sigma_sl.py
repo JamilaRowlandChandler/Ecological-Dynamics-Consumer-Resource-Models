@@ -33,8 +33,9 @@ def rho_sigma(rho_range, sigma_range, n, fixed_parameters):
     parameters = generate_parameters(rho_range, sigma_range, n, fixed_parameters)
     
     CRM_across_parameter_space(parameters,
-                               "external_resource_stability/simulations/rho_vs_sigma",
-                               ['rho', 'sigma_M'])
+                               "external_resource_stability/simulations/rho_vs_sigma(sl)",
+                               ['rho', 'sigma_M'],
+                               model = "Self-limiting resource supply")
                     
 # %%
 
@@ -65,17 +66,17 @@ def generate_parameters(rho_range, sigma_range, n, fixed_parameters):
 # %%
 
 rhos = np.linspace(0.1, 1, 10) # np.linspace(0, 1, 11)
-sigmas = np.linspace(2, 5, 11)
+sigmas = np.linspace(2, 8, 11)
 
 # %%
 
 rho_sigma(rhos, sigmas, 11,
-          dict(mu_c = 160, mu_g = 160, d = 1, b = 1, o = 1, M = 150, S = 150))
+          dict(mu_c = 3, mu_g = 3, d = 1, b = 1, M = 100, S = 300))
 
 # %%
 
 df_simulation = generate_simulation_df("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/" \
-                                       + 'external_resource_stability/simulations/rho_vs_sigma')
+                                       + 'external_resource_stability/simulations/rho_vs_sigma(sl)')
     
 # %%
 

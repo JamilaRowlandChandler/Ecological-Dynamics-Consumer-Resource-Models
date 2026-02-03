@@ -54,8 +54,7 @@ def pickle_dump(filename : str, data : any):
 def CRM_across_parameter_space(parameter_sets : list[dict],
                                subdirectory : str,
                                parms_for_filenames : list[str],
-                               simulation_kwargs : dict[str, any] = dict(no_communities = 20,
-                                                                         t_end = 7000)):
+                               **simulation_kwargs : dict[str, any]):
     
     '''
     
@@ -171,8 +170,13 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
                                          rho = parm_set['rho']) 
                            for parm_set in parameter_sets]
     
+    # compile all simulation arguments together with default args (if none are given)
+    complete_sim_kwargs = dict(no_communities = 20,
+                               t_end = 7000) | simulation_kwargs
+    
     # create list of arguments for generating model specific rates
-    m_s_rates_args_list = model_specific_args(parameter_sets, simulation_kwargs)
+    m_s_rates_args_list = model_specific_args(parameter_sets,
+                                              complete_sim_kwargs)
     
     # Iterate through the parameter space, creating and simulating community dynamics
     for name, M, S, growth_consumption_rates_args, model_specific_rates_args in \
@@ -182,7 +186,7 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
         CRMs_create_and_save(subdirectory + "/simulations_" + name,
                              S, M, growth_consumption_rates_args,
                              model_specific_rates_args,
-                             **simulation_kwargs)
+                             **complete_sim_kwargs)
             
 #%%
 
@@ -297,7 +301,9 @@ def consumer_resource_model_dynamics(no_species : int, no_resources : int,
 
     '''
     
-    def community_dynamics(no_init_conds : int,
+    def community_dynamics(model : Literal["Self-limiting resource supply",
+                                           "Self-limiting resource supply, self-inhibition",
+                                           "Externally-supplied resources"],
                            no_species : int, no_resources : int,
                            growth_consumption_rates_args : TypedDict('gc_args',
                                                                      {'method' : str,
@@ -308,6 +314,7 @@ def consumer_resource_model_dynamics(no_species : int, no_resources : int,
                                                                       'conserve_mass' : NotRequired[bool],
                                                                       'kwargs' : NotRequired[any]}),
                            model_specific_rates_args : dict[str, any],
+                           no_init_conds : int,
                            t_end : float):
         
         '''
@@ -315,7 +322,7 @@ def consumer_resource_model_dynamics(no_species : int, no_resources : int,
         create and simulate community dynamics 
         
         '''
-        
+    
         # initialise consumer-resource model class
         community = Consumer_Resource_Model(model, no_species, no_resources)
 
@@ -334,11 +341,12 @@ def consumer_resource_model_dynamics(no_species : int, no_resources : int,
         return community 
 
     # generate n communities, where n = no_communities
-    communities = [deepcopy(community_dynamics(no_init_conds,
-                                                    no_species, no_resources,
-                                                    growth_consumption_rates_args,
-                                                    model_specific_rates_args,
-                                                    t_end))
+    communities = [deepcopy(community_dynamics(model,
+                                               no_species, no_resources,
+                                               growth_consumption_rates_args,
+                                               model_specific_rates_args,
+                                               no_init_conds,
+                                               t_end))
                                   for _ in range(no_communities)]
     
     return communities

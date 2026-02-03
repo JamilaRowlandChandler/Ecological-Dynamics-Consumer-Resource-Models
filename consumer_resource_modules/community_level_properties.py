@@ -179,7 +179,8 @@ def max_le(community : Union["SL_CRM", "SL_SI_CRM", "ES_CRM", "eLV_SL", "gLV"],
         
         trajectories = [original_traj, perturbed_traj]
         
-        long_idx = [traj.y.shape[1] for traj in trajectories].argmax()
+        long_idx = np.array([traj.y.shape[1]
+                             for traj in trajectories]).argmax()
         shortest_traj_length = np.min([traj.y.shape[1] for traj in trajectories])
         
         trajectories[long_idx].t = trajectories[long_idx].t[:shortest_traj_length]

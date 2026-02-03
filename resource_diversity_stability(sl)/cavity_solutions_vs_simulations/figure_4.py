@@ -28,7 +28,7 @@ from simulation_functions import generate_simulation_df, le_pivot_r
 
 df_simulation_c = generate_simulation_df("C:/Users/jamil/Documents/PhD/Data/" \
                                          #+ 'resource_diversity_stability/simulations/M_vs_sigma_c')
-                                         + 'resource_diversity_stability/simulations/M_vs_sigma_c_repeat')
+                                         + 'resource_diversity_stability/simulations/M_vs_sigma_c')
 #pd.read_pickle("simulations/M_vs_sigma_c.pkl")
 globally_solved_sces_c = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/" \
                                       + "resource_diversity_stability/self_consistency_equations/M_vs_sigma_c.pkl") 
@@ -43,7 +43,7 @@ solved_boundary_c = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/" \
 
 df_simulation_y = generate_simulation_df("C:/Users/jamil/Documents/PhD/Data/" \
                                          #+ 'resource_diversity_stability/simulations/M_vs_sigma_y') 
-                                         + 'resource_diversity_stability/simulations/M_vs_sigma_y_repeat')
+                                         + 'resource_diversity_stability/simulations/M_vs_sigma_y')
 #pd.read_pickle("self_consistency_equations/M_vs_sigma_y.pkl")
 globally_solved_sces_y = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/" \
                                         + "resource_diversity_stability/self_consistency_equations/M_vs_sigma_y.pkl") 
@@ -157,7 +157,17 @@ def Stability_Plot(df_simulation_c, globally_solved_sces_c, solved_boundary_c,
         sns.lineplot(data = stability, x = variable, y = 'P(stability)',
                      ax = ax, linewidth = 3, color = 'black',
                      err_style = "bars", errorbar = ("pi", 100),
-                     marker = "o", markersize = 9)
+                     marker = "o", markersize = 8)
+        
+        se_95 = 1.96*np.sqrt((stability['P(stability)'] * \
+                              (1 - stability['P(stability)']))/20)
+        
+        error_bars = ax.errorbar(x = stability[variable], 
+                                 y =  stability['P(stability)'],
+                                 yerr = se_95,
+                                 fmt = 'none',
+                                 ecolor = 'black',
+                                 linewidth = 2) 
 
         ax.set_xticks(sigmas[::2], labels = sigmas[::2], fontsize = 10, 
                       rotation = 0)
@@ -255,13 +265,20 @@ def Stability_Plot(df_simulation_c, globally_solved_sces_c, solved_boundary_c,
     
     sns.set_style('ticks')
   
-    mosaic = [["P_c", ".", "I_C_c"],
-              ["P_y", ".", "I_C_y"]]
+    #mosaic = [["P_c", ".", "I_C_c"],
+    #          ["P_y", ".", "I_C_y"]]
     
-    fig, axs = plt.subplot_mosaic(mosaic, figsize = (6.5, 5.4),
-                                  width_ratios = [5.2, 1.8, 5.4],
-                                  height_ratios = [1, 1],
-                                  gridspec_kw = {'hspace' : 0.5, 'wspace' : 0.1})
+    #fig, axs = plt.subplot_mosaic(mosaic, figsize = (6.5, 5.4),
+    #                              width_ratios = [5.2, 1.8, 5.4],
+    #                              height_ratios = [1, 1],
+    #                              gridspec_kw = {'hspace' : 0.5, 'wspace' : 0.1})
+    
+    mosaic = [["P_c", "I_C_c", ".", "P_y", "I_C_y"]]
+    
+    fig, axs = plt.subplot_mosaic(mosaic, figsize = (9, 2),
+                                  width_ratios = [4.7, 5.9, 1, 4.7, 5.9],
+                                  height_ratios = [1],
+                                  gridspec_kw = {'hspace' : 0.5, 'wspace' : 0.2})
     
     ######################## Stability diagram ######################################
     
@@ -287,9 +304,9 @@ def Stability_Plot(df_simulation_c, globally_solved_sces_c, solved_boundary_c,
     sigma_vs_stability(axs["P_y"], 'sigma_y', stability_pivot_y, sigma_ys,
                        'std. deviation in yield\nconversion, ' + r'$\sigma_y$')
     
-    axs["P_c"].set_title("Different sources of interaction heterogeneity" + \
-                          "\ninduce opposing stability transitions",
-                          fontsize = 11, weight = "bold", y = 1.1)
+    #axs["P_c"].set_title("Different sources of interaction heterogeneity" + \
+    #                      "\ninduce opposing stability transitions",
+    #                      fontsize = 11, weight = "bold", y = 1.1)
         
     #axs["P_c"].set_xlabel("")
         
@@ -303,16 +320,16 @@ def Stability_Plot(df_simulation_c, globally_solved_sces_c, solved_boundary_c,
                         solved_boundary_y, "quadratic",
                         'std. deviation in yield\nconversion, ' + r'$\sigma_y$')
     
-    axs["I_C_c"].set_title("by having opposing " + \
-                           "effects on\nreciprocity and the packing ratio",
-                           fontsize = 11, weight = "bold", y = 1.1)
+    #axs["I_C_c"].set_title("by having opposing " + \
+    #                       "effects on\nreciprocity and the packing ratio",
+    #                       fontsize = 11, weight = "bold", y = 1.1)
     
     ###############################################
     
-    #plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/self_limit_M_vs_sigmas_digram_condition.png",
-    #            bbox_inches='tight')
-    #plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/self_limit_M_vs_sigmas_digram_condition.svg",
-    #            bbox_inches='tight')
+    plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/self_limit_M_vs_sigmas_digram_condition.png",
+                bbox_inches='tight')
+    plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/self_limit_M_vs_sigmas_digram_condition.svg",
+                bbox_inches='tight')
     
     plt.show()
 

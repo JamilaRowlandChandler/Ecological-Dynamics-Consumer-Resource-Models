@@ -19,6 +19,7 @@ from inspect import signature
 
 from scipy.optimize import least_squares
 from scipy.optimize import basinhopping
+from scipy.optimize import dual_annealing
 
 os.chdir('C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/cavity_method_functions')
 
@@ -128,7 +129,9 @@ def solve_self_consistency_equations(model : Literal['self-limiting, rho',
                                      bounds : Union[list[tuple[float], tuple[float]],
                                                     list[list[tuple[float], tuple[float]]]],
                                      x_init : Union[npt.NDArray, list[npt.NDArray]],
-                                     solver_name : Literal['basin-hopping', 'least-squares'],
+                                     solver_name : Literal['basin-hopping',
+                                                           'dual-annealing',
+                                                           'least-squares'],
                                      solver_kwargs : Union[dict, list] = {'xtol' : 1e-13,
                                                                           'ftol' : 1e-13},
                                      other_kwargs : Union[dict, list] = {},
@@ -161,13 +164,14 @@ def solve_self_consistency_equations(model : Literal['self-limiting, rho',
     solver_name : str
         The routine for solving the self consistency equations.
         Options: 'basin-hopping' (global optimisation for least-squares),
+        'dual-annealing' (global optimisation for least-squares),
         'least-squares' (local optimisation). 
     solver_kwargs : dict or list of dicts, optional
         Options for the least-squares solver, which is called by both the 
         'basin-hopping' and 'least squares' routine.
         The default is {'xtol' : 1e-13, 'ftol' : 1e-13}  .                                                  
     other_kwargs : dict or list of dicts, optional
-        Options for the basin-hopping solver. The default is {}.
+        Options for the basin-hopping or dual-annealing solver. The default is {}.
     include_multistability : Bool, optional
         Whether or not the stability condition should be solved as well.
         Set as True if you are solving for the phase boundary, or False otherwise.
@@ -188,12 +192,17 @@ def solve_self_consistency_equations(model : Literal['self-limiting, rho',
             
             solver = solve_equations_basinhopping
             
+        case 'dual-annealing':
+            
+            solver = solve_equations_annealing
+            
         case 'least-squares':
             
             solver = solve_equations_least_squares
     
     # This routine solves the self consistency equations
-    sol = solve_sces(parameters, model,
+    sol = solve_sces(parameters,
+                     model,
                      solved_quantities = solved_quantities,
                      bounds = bounds,
                      x_init = x_init,
@@ -204,9 +213,9 @@ def solve_self_consistency_equations(model : Literal['self-limiting, rho',
     
     # This routine solves the multistability equations for each row of the df
     #   (which contains each parameter set + solved self consistency equations)
-    sol[['dNde', 'dRde', 'ms_loss']] = \
-        pd.DataFrame(sol.apply(solve_for_multistability, axis = 1,
-                               multistability_equation_func = model).to_list())
+    #sol[['dNde', 'dRde', 'ms_loss']] = \
+    #    pd.DataFrame(sol.apply(solve_for_multistability, axis = 1,
+    #                           multistability_equation_func = model).to_list())
         
     return sol
     
@@ -369,6 +378,8 @@ def solve_sces(parameters : Union[list, dict],
                                                                position = 0,
                                                                leave = True)])
     
+    #breakpoint()
+    
     # Convert array to dataframe. Each column solved quantity, each row is the 
     # solves sces for a given parameter set
     fitted_values_df = pd.DataFrame(fitted_values_final_loss, columns = solved_quantities + ['loss'])
@@ -382,7 +393,7 @@ def solve_sces(parameters : Union[list, dict],
     else : 
     
         df = pd.concat([pd.DataFrame(parameters), fitted_values_df], axis = 1)
-    
+        
     return df
         
 
@@ -554,7 +565,7 @@ def solve_equations_basinhopping(equation_func, solved_quantities, bounds, x_ini
         else:
         
             return sol
-
+        
     # Construct the function to be minimised - STEVEN YOU DON'T NEED THIS, JUST
     #   SET FUN TO THE FUNCTION OF THE EQUATIONS YOU'RE MINIMISING 
     if ms_function:
@@ -718,6 +729,49 @@ def filter_ls_kwargs(kwargs): # STEVEN IGNORE THIS
                   and any(value))}
     
     return new_kwargs
+
+# %%
+
+def solve_equations_annealing(equation_func, solved_quantities, bounds, x_init,
+                              ls_kwargs, solver_kwargs, other_kwargs = {},
+                              ms_function = None, return_all = False):
+        
+    if ms_function:
+        
+        fun = lambda x : np.sum(equation_func(**{key: val for key, val in 
+                                                 zip(solved_quantities, x)}, **ls_kwargs) \
+                         + ms_function(**{key: val for key, val in 
+                                          zip(solved_quantities, x)}, **ls_kwargs))**2
+    
+    else:
+
+        fun = lambda x : np.sum(equation_func(**{key: val for key, val in 
+                                          zip(solved_quantities, x)}, **ls_kwargs))**2
+    
+    # Globally minimise the functions
+    fitted_values = dual_annealing(fun,
+                                   bounds = bounds,
+                                   x0 = x_init,
+                                   minimizer_kwargs = {"method" : "L-BFGS-B",
+                                                       "bounds" : bounds},
+                                   #callback = decent_solve,
+                                   accept = -25.0,
+                                   **other_kwargs)
+    
+    breakpoint()
+    
+    if return_all is True:
+        
+        # return all attributes of the OptimizeResult object
+        returned_values = fitted_values
+        
+    else: 
+        
+        # returned solved values + loss function
+        returned_values = np.append(fitted_values.x,
+                                    np.log10(np.sum(fitted_values.fun**2)))
+    
+    return returned_values
     
 # %%
 

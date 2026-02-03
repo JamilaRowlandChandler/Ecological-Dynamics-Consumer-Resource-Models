@@ -617,7 +617,8 @@ class ES_CRM(ParametersInterface, DifferentialEquationsInterface,
         return solve_ivp(model, [0, t_end], initial_abundance, 
                          args = (self.no_species, self.growth, self.consumption, 
                                  self.d, self.b, self.o),
-                         method = 'LSODA', rtol = 1e-7, atol = 1e-9,
+                         method = 'LSODA',
+                         rtol = 1e-7, atol = 1e-9,
                          t_eval = np.linspace(0, t_end, 200), events = unbounded_growth)
     
 # %%
