@@ -7,9 +7,9 @@ Created on Mon May  5 18:08:45 2025
 """
 
 import os
+import sys
 
-os.chdir("C:/Users/jamil/Documents/PhD/GitHub projects/Ecological-Dynamics-and-Community-Selection/" + \
-         "Ecological-Dynamics/Consumer-Resource Models/consumer_resource_modules")
+os.chdir("C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/consumer_resource_modules")
 
 from models import Consumer_Resource_Model
 from community_level_properties import max_le, max_le_2
@@ -17,20 +17,50 @@ from community_level_properties import max_le, max_le_2
 from matplotlib import pyplot as plt
 import numpy as np
 from scipy.stats import pearsonr
+from inspect import getattr_static
+from types import MethodType, FunctionType
+
+sys.path.insert(0, "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/" + \
+                    "resource_diversity_stability(sl)")
+from simulation_functions import save_models, load_in_communities
 
 # %%
 
-community = Consumer_Resource_Model("Self-limiting resource supply", 100, 100)
+community = Consumer_Resource_Model("Self-limiting resource supply", 250, 250)
 
 community.growth_consumption_rates('coupled by rho',
                                    1, 0.1, 1, 0.1, rho = 1)
 community.model_specific_rates()
 
-community.simulate_community(3500, 1)
+community.simulate_community(7000, 2)
 
 community.calculate_community_properties()
 #community.lyapunov_exponent = max_le(community, 500, community.ODE_sols[0].y[:, -1],
 #                                     1e-3, dt = 20, separation = 1e-3)
+
+
+# %%
+
+C = community.ODE_sols[0].y[:100, :].T
+
+# %%
+
+plt.plot(community.ODE_sols[0].t, community.ODE_sols[0].y[:100, :].T)
+plt.show()
+
+
+# %%
+
+save_models(np.repeat(community, 20),
+            "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/" + \
+            "new_save_test",
+            "simulation_test")
+    
+# %%
+
+read_in_communities = load_in_communities("C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/" + \
+                                          "new_save_test/simulation_test.pkl")
+community_read = read_in_communities[0]
 
 # %%
 

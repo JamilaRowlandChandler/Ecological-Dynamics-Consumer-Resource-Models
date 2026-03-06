@@ -17,6 +17,9 @@ from tqdm import tqdm
 from scipy.stats import pearsonr
 import numpy.typing as npt
 from typing import TYPE_CHECKING, Union, TypedDict, NotRequired, Literal
+from ast import literal_eval
+import re
+from json import dumps, loads
 
 sys.path.insert(0, 'C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/consumer_resource_modules')
 from models import Consumer_Resource_Model
@@ -333,6 +336,128 @@ def consumer_resource_model_dynamics(no_species : int, no_resources : int,
                                                 position = 1, leave = False)]
     
     return communities
+
+# %%
+
+def save_models(communities : list,
+                directory : str,
+                filename: str):
+    
+    def model_attr_to_dict(community):
+        
+        attributes = list(community.__dict__.keys())
+        
+        attributes_dict = {attr : getattr(community, attr)
+                           for attr in attributes
+                           if attr != "ODE_sols"}
+        
+        attributes_dict['simulation_t'] = [rep.t for rep in community.ODE_sols]
+        attributes_dict['simulation_y'] = [rep.y.T for rep in community.ODE_sols]
+        
+        ####
+        
+        all_models = {"SL_CRM" : "Self-limiting resource supply",
+                      "SL_SI_CRM" : "Self-limiting resource supply, self-inhibition",
+                      "ES_CRM" : "Externally-supplied resources",
+                      "ES_Tox_CRM" : "Externally-supplied resources, toxins",
+                      "eLV" : "eLV"}
+        
+        attributes_dict['model'] = all_models[type(community).__name__]
+        
+        return attributes_dict
+    
+    attr_dicts = [model_attr_to_dict(community) for community in communities]
+    
+    attr_df = pd.DataFrame(attr_dicts)
+    
+    #for col in list(attr_df.columns):
+        
+    #    if isinstance(attr_df.loc[0, col], np.ndarray):
+        
+    #        attr_df[col] = attr_df[col].apply(lambda x : dumps(x.tolist()))
+            
+    #        attr_df.rename(columns = {col : col + "_array"}, inplace = True)
+
+    #    elif isinstance(attr_df.loc[0, col], list):
+            
+    #        if col == "simulation_y" or "simulation_t":
+                
+    #            attr_df[col] = \
+    #                attr_df[col].apply(lambda x : dumps([arr.tolist() 
+    #                                                     for arr in x]))
+                           
+    #        else:
+                
+    #            attr_df[col] = attr_df[col].apply(lambda x : dumps(x))
+                
+    #        attr_df.rename(columns = {col : col + "_array"}, inplace = True) 
+        
+    if not os.path.exists(directory):
+        
+        os.makedirs(directory)
+    
+    attr_df.to_pickle(directory + "/" + filename + ".bz2",
+                      compression='bz2')
+    #attr_df.to_csv(directory + "/" + filename + ".csv", index = False)
+    #attr_df.to_hdf(directory + "/" + filename + ".h5", key='df', mode='w')
+    
+# %%
+
+def load_in_communities(filepath : str):
+    
+    def dict_to_model(community_dict):
+        
+        community = Consumer_Resource_Model(community_dict['model'],
+                                            community_dict['no_species'],
+                                            community_dict['no_resources'])
+        
+        for attr, val in community_dict.items():
+        
+            if attr not in ['model', 'no_species', 'no_resources',
+                            'simulation_t', 'simulation_y']: 
+                
+                setattr(community, attr, val)
+                
+        community.ODE_sols = [ReloadedODEs(t, y.T)
+                              for t, y in zip(community_dict['simulation_t'],
+                                              community_dict['simulation_y'])]
+                
+        return community
+    
+   # attr_df = pd.read_csv(filepath, index_col = False)
+    
+    #for col in list(attr_df.columns):
+        
+    #    if col.endswith("_array") == True:
+            
+    #        if col in ["simulation_t_array", "simulation_y_array"]:
+                
+    #            attr_df[col] = attr_df[col].apply(lambda x : [np.array(arr) 
+    #                                                         for arr in loads(x)])
+    #        else:
+         
+    #            attr_df[col] = attr_df[col].apply(lambda x : np.array(loads(x)))
+                
+    #renamed_cols = {col : col.removesuffix("_array") 
+    #                for col in list(attr_df.columns) 
+    #                if col.endswith("_array") == True}
+    
+    #attr_df.rename(columns = renamed_cols, inplace = True)
+    
+    attr_df = pd.read_pickle(filepath)
+    
+    attr_dicts = attr_df.to_dict("records")
+ 
+    communities = [dict_to_model(attr_dict) for attr_dict in attr_dicts]
+    
+    return communities
+
+class ReloadedODEs:
+    
+    def __init__(self, t : npt.NDArray, y : npt.NDArray):
+        
+        self.t = t
+        self.y = y
 
 # %%
 

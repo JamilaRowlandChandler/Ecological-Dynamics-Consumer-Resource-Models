@@ -7,7 +7,8 @@ Created on Thu Sep 12 18:10:06 2024
 
 # %%
 import numpy as np
-from typing import Literal
+import numpy.typing as npt
+from typing import Literal, Union
 
 # %%
 
@@ -19,14 +20,15 @@ class ParametersInterface:
                                  method : Literal['coupled by rho',
                                                   'growth function of consumption',
                                                   'consumption function of growth',
-                                                  'user supplied'],
-                                 mu_c : float,
-                                 sigma_c : float,
-                                 mu_g : float,
-                                 sigma_g : float,
-                                 conserve_mass : bool = False,
-                                 no_negative : bool = False,
-                                 **kwargs : any):
+                                                  'user-supplied'],
+                                 mu_c : Union[float, None],
+                                 sigma_c : Union[float, None],
+                                 mu_g : Union[float, None],
+                                 sigma_g : Union[float, None],
+                                 rho : Union[float, None] = None,
+                                 consumption : Union[npt.NDArray, None] = None,
+                                 growth : Union[npt.NDArray, None] = None,
+                                 no_negative : bool = False):
         
         '''
         
@@ -71,10 +73,10 @@ class ParametersInterface:
         '''
         
         # assign statistical properties of growth and consumption rates to object
-        for name, statistic in zip(['mu_c', 'mu_g', 'sigma_c', 'sigma_g'],
-                                   [mu_c, mu_g, sigma_c, sigma_g]): 
+        for name, statistic in zip(['mu_c', 'mu_g', 'sigma_c', 'sigma_g', 'rho'],
+                                   [mu_c, mu_g, sigma_c, sigma_g, rho]): 
             
-            setattr(self, name, statistic)
+                setattr(self, name, statistic)
 
         # generate random variables for growth and consumption rates
         X_c, X_g = np.random.randn(self.no_resources, self.no_species),\
@@ -88,26 +90,20 @@ class ParametersInterface:
             
             case 'coupled by rho':
                 
-                if 'rho' in kwargs:
-                
-                    self.rho = kwargs.get('rho')
+                if hasattr(self, "rho") is True:
                     
+                    self.consumption = self.mu_c + self.sigma_c*X_c
+                    self.growth = self.mu_g + self.sigma_g*(self.rho*X_c.T + np.sqrt(1 - self.rho**2)*X_g)
+                
                 else:
                     
                     raise Exception('Please supply a value for rho.\n' + \
                                     '(In growth_consumption_method(), add a rho = x argument.)')
                 
-                self.consumption = self.mu_c + self.sigma_c*X_c
-                self.growth = self.mu_g + self.sigma_g*(self.rho*X_c.T + np.sqrt(1 - self.rho**2)*X_g)
-            
             case 'growth function of consumption':
                 
                 self.consumption = self.mu_c + self.sigma_c*X_c
                 self.rue = self.mu_g + self.sigma_g*X_g
-                
-                if conserve_mass == True:
-                    
-                    self.rue[self.rue > 1] = 1
                 
                 self.growth = self.rue * self.consumption.T
             
@@ -115,29 +111,21 @@ class ParametersInterface:
             
                 self.growth = self.mu_g + self.sigma_g*X_g
                 self.rue = self.mu_c + self.sigma_c*X_c
-                
-                if conserve_mass == True: # set yield conversions > 1 to 1 to maintain conservation of mass
-                    
-                    self.rue[self.rue > 1] = 1
                     
                 self.consumption = self.rue * self.growth.T
                 
-            case 'user supplied':
+            case 'user-supplied':
                 
-                consumption, growth = kwargs.get('consumption',
-                                                 np.array([])), kwargs.get('growth',
-                                                                           np.array([]))
-                
-                if not consumption.any() or not growth.any():
+                if consumption is not None and growth is not None:
+                    
+                    self.consumption = consumption
+                    self.growth = growth 
+                    
+                else: 
                         
                     raise Exception('Please supply your growth or consumption rates.\n'
                                     '(In growth_consumption_method(), add the arguments ' 
                                     'consumption = <some np.array>, growth = <some np.array>')
-                            
-                else:
-                
-                    self.consumption = consumption
-                    self.growth = growth 
                     
             case _:
                 
@@ -145,7 +133,7 @@ class ParametersInterface:
                       'Please chose from either "coupled by rho", ' + \
                           '"growth function of consumption", ' + \
                               '"consumption function of growth", or ' + \
-                                  '"user supplied".')
+                                  '"user-supplied".')
                     
     def growth_consumption_rates_noneg(self,
                                  method : Literal['coupled by rho',

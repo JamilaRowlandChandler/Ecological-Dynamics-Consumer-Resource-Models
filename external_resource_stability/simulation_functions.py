@@ -183,14 +183,16 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
         tqdm(zip(names_list, M_list, S_list, g_c_rates_args_list, m_s_rates_args_list),
              position = 0, leave = True, total = len(names_list)):
             
-        CRMs_create_and_save(subdirectory + "/simulations_" + name,
+        CRMs_create_and_save(subdirectory,
+                             "simulations_" + name,
                              S, M, growth_consumption_rates_args,
                              model_specific_rates_args,
                              **complete_sim_kwargs)
             
 #%%
 
-def CRMs_create_and_save(filepath : str,
+def CRMs_create_and_save(subdirectory : str,
+                         filename : str,
                          no_species : int, no_resources : int,
                          growth_consumption_rates_args : TypedDict('gc_args',
                                                                    {'method' : str,
@@ -240,11 +242,15 @@ def CRMs_create_and_save(filepath : str,
                                                    model_specific_rates_args,
                                                    **kwargs)
     
-    pickle_dump("C:/Users/jamil/Documents/PhD/Data/" + \
-                filepath + ".pkl",
-                communities)
-        
-    del communities
+    save_models(communities,
+                "C:/Users/jamil/Documents/PhD/Data/" + subdirectory,
+                filename)
+    
+    del communities 
+    
+   # pickle_dump("C:/Users/jamil/Documents/PhD/Data/" + \
+   #             filepath + ".pkl",
+   #             communities)
 
 # %%
 
@@ -353,6 +359,90 @@ def consumer_resource_model_dynamics(no_species : int, no_resources : int,
 
 # %%
 
+def save_models(communities : list,
+                directory : str,
+                filename: str):
+    
+    def model_attr_to_dict(community):
+        
+        attributes = list(community.__dict__.keys())
+        
+        attributes_dict = {attr : getattr(community, attr)
+                           for attr in attributes
+                           if attr != "ODE_sols"}
+        
+        attributes_dict['simulation_t'] = [rep.t for rep in community.ODE_sols]
+        attributes_dict['simulation_y'] = [rep.y.T for rep in community.ODE_sols]
+        
+        ####
+        
+        all_models = {"SL_CRM" : "Self-limiting resource supply",
+                      "SL_SI_CRM" : "Self-limiting resource supply, self-inhibition",
+                      "ES_CRM" : "Externally-supplied resources",
+                      "ES_Tox_CRM" : "Externally-supplied resources, toxins",
+                      "eLV" : "eLV"}
+        
+        attributes_dict['model'] = all_models[type(community).__name__]
+        
+        return attributes_dict
+    
+    attr_dicts = [model_attr_to_dict(community) for community in communities]
+    
+    attr_df = pd.DataFrame(attr_dicts)
+        
+    if not os.path.exists(directory):
+        
+        os.makedirs(directory)
+    
+    attr_df.to_pickle(directory + "/" + filename + ".bz2",
+                      compression='bz2')
+    
+# %%
+
+def load_in_communities(filepath : str):
+    
+    def dict_to_model(community_dict):
+        
+        community = Consumer_Resource_Model(community_dict['model'],
+                                            community_dict['no_species'],
+                                            community_dict['no_resources'])
+        
+        for attr, val in community_dict.items():
+        
+            if attr not in ['model', 'no_species', 'no_resources',
+                            'simulation_t', 'simulation_y']: 
+                
+                setattr(community, attr, val)
+                
+        community.ODE_sols = [ReloadedODEs(t, y.T)
+                              for t, y in zip(community_dict['simulation_t'],
+                                              community_dict['simulation_y'])]
+                
+        return community
+    
+    attr_df = pd.read_pickle(filepath)
+    
+    if isinstance(attr_df, list):
+        
+        return attr_df
+    
+    else:
+    
+        attr_dicts = attr_df.to_dict("records")
+     
+        communities = [dict_to_model(attr_dict) for attr_dict in attr_dicts]
+        
+        return communities
+
+class ReloadedODEs:
+    
+    def __init__(self, t : npt.NDArray, y : npt.NDArray):
+        
+        self.t = t
+        self.y = y
+
+# %%
+
 def generate_simulation_df(directory : str):
     
     '''
@@ -430,7 +520,8 @@ def CRM_df(directory : str, parameters : list):
     
     def load_data_create_df(filepath):
     
-        communities = pd.read_pickle(filepath)
+        #communities = pd.read_pickle(filepath)
+        communities = load_in_communities(filepath)
         
         df = community_dynamics_df(communities, parameters)
     

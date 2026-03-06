@@ -64,7 +64,7 @@ def generate_parameters(rho_range, sigma_range, n, fixed_parameters):
 
 # %%
 
-hos = np.linspace(0.1, 1, 10) # np.linspace(0, 1, 11)
+rhos = np.linspace(0.1, 1, 10) # np.linspace(0, 1, 11)
 sigmas = np.linspace(2, 8, 11)
 
 # %%

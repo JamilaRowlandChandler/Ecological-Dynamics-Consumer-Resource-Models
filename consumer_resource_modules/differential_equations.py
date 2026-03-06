@@ -13,12 +13,15 @@ Created on Fri Sep 20 15:29:00 2024
 # %%
 
 import numpy as np
+import numpy.typing as npt
+from abc import ABC, abstractmethod
 
-from initial_abundances import InitialConditionsInterface
+from initial_abundances import InitialConditionsInterface, \
+                               InitialConditionsInterface_ELV
 
 #%%
 
-class DifferentialEquationsInterface(InitialConditionsInterface):
+class DifferentialEquationsInterface(ABC, InitialConditionsInterface):
     
     def simulate_community(self,
                            t_end : float,
@@ -40,7 +43,7 @@ class DifferentialEquationsInterface(InitialConditionsInterface):
         init_cond_func : str, optional
             What function is used to generate the initial conditions. 
             The options: 
-                "Mallmin" - Uniform(dispersal, 2/M)
+                "Mallmin" - Uniform(dispersal, 2/M or S)
                 "user supplied" - supply your own intial abundances
             The default is 'Mallmin'.
         assign : Bool, optional
@@ -78,8 +81,80 @@ class DifferentialEquationsInterface(InitialConditionsInterface):
         else:
             
             return ODE_sols
+        
+    @abstractmethod
+    def simulation(self):
+        
+        pass
     
+class DifferentialEquationsInterface_ELV(ABC, InitialConditionsInterface_ELV):
+    
+    def simulate_community(self,
+                           t_end : float,
+                           no_init_cond : int,
+                           init_cond_func : str ='Mallmin',
+                           assign : bool = True,
+                           **kwargs : any):
+        
+        '''
+        
+        Call methods that generate initial abundances and run simulations. 
 
+        Parameters
+        ----------
+        t_end : float
+            Simulation end time.
+        no_init_cond : int
+            number of sets of initial abundances to simulate from (no. repeats).
+        init_cond_func : str, optional
+            What function is used to generate the initial conditions. 
+            The options: 
+                "Mallmin" - Uniform(dispersal, 2/M or S)
+                "user supplied" - supply your own intial abundances
+            The default is 'Mallmin'.
+        assign : Bool, optional
+            Whether or not to assign simulations as object attributes. True for
+            simulations, false for calculating lyapunov exponents. 
+            The default is True.
+        **kwargs : any
+            Optional argument for initial condition function. Of the form
+            {'user_supplied_init_cond' : {'species' : [initial species abundances],
+                                          'resources' : [initial resource abundances]}}
+
+        Returns
+        -------
+        ODE_sols : list
+            list of simulations from n = no_init_cond initial abundances.
+
+        '''
+        
+        self.t_end = t_end
+        
+        # generate initial species and resource abundances
+        initial_abundances = \
+            self.generate_initial_conditions(no_init_cond, init_cond_func, **kwargs)
+            
+        # simulate community dynamics for each set of initial conditions
+        # - this is called from the object-specific methods
+        ODE_sols = [self.simulation(t_end, initial_abundances[:, i]) 
+                    for i in range(initial_abundances.shape[1])]
+        
+        # should simulations be assigned to a class attribute?
+        if assign is True:
+            
+            self.ODE_sols = ODE_sols
+        
+        else:
+            
+            return ODE_sols
+        
+    @abstractmethod
+    def simulation(self):
+        
+        breakpoint()
+        
+        pass
+          
 def unbounded_growth(t, var, *args):
     
     '''
@@ -116,3 +191,4 @@ def unbounded_growth(t, var, *args):
     else: 
         
         return 1 # the ode solver continues because the returned value is non-zero.
+    
