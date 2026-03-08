@@ -26,16 +26,58 @@ from community_level_properties import max_le
 
 # %%
 
-no_species = 300
+no_species = 100
 no_resources = 100
-mu = 30
-sigma = 8
-b = 1
+mu = 1
+sigma = 3.1
+mu_d = 1
+sigma_d = 0.1
+mu_b = 1
+sigma_b = 0.1
 o = 1
-rhos = [1, 0.5]
+rho = 0.9
 
 t_end = 4000
-no_init_conds = 1
+no_init_conds = 2
+
+
+crm_community = Consumer_Resource_Model("Externally-supplied resources",
+                                        no_species, no_resources)
+
+# generate model parameters
+crm_community.growth_consumption_rates(method = 'coupled by rho',
+                                       mu_c = mu/no_resources,
+                                       sigma_c = sigma/np.sqrt(no_resources),
+                                       mu_g = mu/no_resources,
+                                       sigma_g = sigma/np.sqrt(no_resources),
+                                       rho = rho)
+
+crm_community.model_specific_rates(death_method='normal',
+                                   death_args={'mu' : mu_d, 'sigma' : sigma_d},
+                                   influx_method='normal',
+                                   influx_args={'mu' : mu_b, 'sigma' : sigma_b},
+                                   outflux_method='constant',
+                                   outflux_args={'o' : o})
+
+crm_community.simulate_community(t_end, no_init_conds)
+
+# estimate community properties, including the max. lyapunov exponent
+#crm_community.calculate_community_properties()
+#crm_community.lyapunov_exponent = max_le(crm_community,
+#                                         crm_community.ODE_sols[0].y[:, -1],
+#                                         T = 1000,
+#                                         perturbation = 1e-6)
+
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize = (8, 5))
+
+ax1.plot(crm_community.ODE_sols[0].t,
+         crm_community.ODE_sols[0].y[:no_species, :].T)
+
+ax2.plot(crm_community.ODE_sols[1].t,
+         crm_community.ODE_sols[1].y[:no_species, :].T)
+
+plt.show()
+
 
 # %%
 
