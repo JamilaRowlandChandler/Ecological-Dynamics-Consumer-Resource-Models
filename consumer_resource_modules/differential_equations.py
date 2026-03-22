@@ -61,7 +61,7 @@ class DifferentialEquationsInterface(ABC, InitialConditionsInterface):
             list of simulations from n = no_init_cond initial abundances.
 
         '''
-        
+ 
         self.t_end = t_end
         
         # generate initial species and resource abundances
@@ -150,8 +150,6 @@ class DifferentialEquationsInterface_ELV(ABC, InitialConditionsInterface_ELV):
         
     @abstractmethod
     def simulation(self):
-        
-        breakpoint()
         
         pass
           

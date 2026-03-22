@@ -56,8 +56,9 @@ def pickle_dump(filename : str, data : any):
 def CRM_across_parameter_space(parameter_sets : list[dict],
                                subdirectory : str,
                                parms_for_filenames : list[str],
-                               simulation_kwargs : dict[str, any] = dict(no_communities = 20,
-                                                                         t_end = 7000)):
+                               model = "Self-limiting resource supply",
+                               save_method : Literal['v1', 'v2', 'v3'] = 'v1',
+                               **simulation_kwargs : dict[str, any]):
     
     '''
     
@@ -85,7 +86,8 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
     
     # create the directory where the communities should be saved (if the directory
     #   doesn't already exist)
-    full_directory = "C:/Users/jamil/Documents/PhD/Data/" + subdirectory
+    full_directory = "C:/Users/jamil/Documents/PhD/Data/" \
+                        + subdirectory
     
     if not os.path.exists(full_directory):
         
@@ -94,7 +96,7 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
     ######################################
         
     def model_specific_args(parameter_sets : list[dict],
-                            simulation_kwargs : dict[str, any]):
+                            model):
         
         '''
         
@@ -116,9 +118,15 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
         '''
         
         # extract model type
-        match simulation_kwargs.get('model', "Self-limiting resource supply"):
+        match model:
             
             case "Self-limiting resource supply":
+                
+                # make list of resource and species pool sizes
+                initialisation_list = [dict(model = model,
+                                            M = parm_set['M'], 
+                                            S = parm_set['S'])
+                                       for parm_set in parameter_sets]
                 
                 # extract and rename arguments for death rates and instrinsic
                 # resource growth rates
@@ -130,6 +138,12 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
                 
             case "Self-limiting resource supply, self-inhibition":
                 
+                # make list of resource and species pool sizes
+                initialisation_list = [dict(model = model,
+                                            M = parm_set['M'], 
+                                            S = parm_set['S'])
+                                       for parm_set in parameter_sets]
+                
                 # extract and rename arguments for death rates, instrinsic 
                 # resource growth rates, and consumer self-inhibition
                 m_s_rates_args_list = [dict(death_method = 'constant',
@@ -140,53 +154,167 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
                                             si_args = {'si' : parm_set['si']})
                                        for parm_set in parameter_sets]
                 
-        return m_s_rates_args_list
+                # create list of arguments for generating growth and consumption rates
+               
+                
+            case "Externally-supplied resources":
+                
+                # make list of resource and species pool sizes
+                initialisation_list = [dict(model = model,
+                                            M = parm_set['M'], 
+                                            S = parm_set['S'])
+                                       for parm_set in parameter_sets]
+                
+                m_s_rates_args_list = [dict(death_method = 'constant',
+                                            death_args =  {'d' : parm_set['d']},
+                                            influx_method = 'constant',
+                                            influx_args = {'b' : parm_set['b']},
+                                            outflux_method = 'constant',
+                                            outflux_args = {'o' : parm_set['o']})
+                                       for parm_set in parameter_sets]
+                
+            case "Self-limiting resource supply, multi-trophic level":
+                
+                # make list of resource and species pool sizes
+                initialisation_list = [dict(model = model,
+                                            trophic_levels = parm_set['trophic_levels'], 
+                                            pool_sizes = parm_set['pool_sizes'])
+                                       for parm_set in parameter_sets]
+                
+                m_s_rates_args_list = [dict(death_methods = np.repeat('constant',
+                                                                      parm_set['trophic_levels'] - 1).tolist(),
+                                            death_args =  [{'d_' + str(i) : parm_set['d_' + str(i)]}
+                                                           for i in np.arange(2, parm_set['trophic_levels'] + 1)],
+                                            resource_growth_method = 'constant',
+                                            resource_growth_args = {'b' : parm_set['b']},
+                                            resource_interaction_method = 'normal',
+                                            resource_interaction_args = {'mu' : parm_set['mu_A'], 
+                                                                         'sigma' : parm_set['sigma_A']})
+                                       for parm_set in parameter_sets]
+                
+        return initialisation_list, m_s_rates_args_list
     
+    def growth_consumption_rates(parameter_sets, model):
+        
+        def rho_coupled(parameter_sets):
+            
+            return [dict(method = 'coupled by rho',
+                         mu_c = parm_set['mu_c'],
+                         sigma_c = parm_set['sigma_c'],
+                         mu_g = parm_set['mu_g'],
+                         sigma_g = parm_set['sigma_g']) 
+                    for parm_set in parameter_sets]
+        
+        def rue_coupled(parameter_sets):
+            
+            return [dict(method = 'growth function of consumption',
+                         mu_c = parm_set['mu_c'],
+                         sigma_c = parm_set['sigma_c'],
+                         mu_g = parm_set['mu_y'],
+                         sigma_g = parm_set['sigma_y']) 
+                    for parm_set in parameter_sets]
+        
+        def rho_coupled_tl(parameter_sets, trophic_levels):
+        
+            return [[dict(method = 'growth function of consumption',
+                          trophic_level = i,
+                          mu_c = parm_set[f'mu_c_{i}'],
+                          sigma_c = parm_set[f'sigma_c_{i}'],
+                          mu_g = parm_set[f'mu_g_{i}'],
+                          sigma_g = parm_set[f'sigma_g_{i}'])
+                     for i in np.arange(2, trophic_levels + 1)]
+                    for parm_set in parameter_sets]
+        
+        def rue_coupled_tl(parameter_sets, trophic_levels):
+            
+            return [[dict(method = 'growth function of consumption',
+                          trophic_level = i,
+                          mu_c = parm_set[f'mu_c_{i}'],
+                          sigma_c = parm_set[f'sigma_c_{i}'],
+                          mu_g = parm_set[f'mu_y_{i}'],
+                          sigma_g = parm_set[f'sigma_y_{i}'])
+                     for i in np.arange(2, trophic_levels + 1)]
+                    for parm_set in parameter_sets]
+        
+        if model.endswith("multi-trophic level") is True:
+            
+            if 'mu_y_2' in parameter_sets[0].keys():
+                
+                g_c_rates_args_list = rue_coupled_tl(parameter_sets,
+                                                     parameter_sets[0]['trophic_levels'])
+            
+            else:
+                
+                g_c_rates_args_list = rho_coupled_tl(parameter_sets,
+                                                     parameter_sets[0]['trophic_levels'])
+        
+        else:
+            
+            if 'mu_y' in parameter_sets[0].keys():
+                
+                g_c_rates_args_list = rue_coupled(parameter_sets)
+            
+            else:
+                
+                g_c_rates_args_list = rho_coupled(parameter_sets)
+        
+        return g_c_rates_args_list
+
     # make list of filenames
-    key0, key1 = parms_for_filenames
+    if 'pool_sizes' in parms_for_filenames: 
+        
+        names_list = ["_".join([str(np.round(parm_set[key], 4))
+                                if key != 'pool_sizes'
+                                else str(np.round(parm_set[key][0], 4))
+                                for key in parms_for_filenames])
+                      for parm_set in parameter_sets]
     
-    names_list = [str(np.round(parm_set[key0], 4)) + "_" + \
-                  str(np.round(parm_set[key1], 4)) 
-                  for parm_set in parameter_sets]
+    else:
     
-    # make list of resource and species pool sizes
-    M_list = [parm_set['M'] for parm_set in parameter_sets]
-    S_list = [parm_set['S'] for parm_set in parameter_sets]
-    
-    # create list of arguments for generating growth and consumption rates
-    g_c_rates_args_list = [dict(method = 'growth function of consumption',
-                                         mu_c = parm_set['mu_c'],
-                                         sigma_c = parm_set['sigma_c'],
-                                         mu_g = parm_set['mu_y'],
-                                         sigma_g = parm_set['sigma_y'])
-                           for parm_set in parameter_sets]
+        names_list = ["_".join([str(np.round(parm_set[key], 4))
+                                for key in parms_for_filenames])
+                      for parm_set in parameter_sets]
+
+    # compile all simulation arguments together with default args (if none are given)
+    complete_sim_kwargs = dict(no_communities = 20,
+                               t_end = 7000) | simulation_kwargs
     
     # create list of arguments for generating model specific rates
-    m_s_rates_args_list = model_specific_args(parameter_sets, simulation_kwargs)
+    initialisation_list, m_s_rates_args_list = model_specific_args(parameter_sets,
+                                                                   model)
+
+    g_c_rates_args_list = growth_consumption_rates(parameter_sets,
+                                                   model)
     
     # Iterate through the parameter space, creating and simulating community dynamics
-    for name, M, S, growth_consumption_rates_args, model_specific_rates_args in \
-        tqdm(zip(names_list, M_list, S_list, g_c_rates_args_list, m_s_rates_args_list),
+    for name, init_class, growth_consumption_rates_args, model_specific_rates_args in \
+        tqdm(zip(names_list, initialisation_list, g_c_rates_args_list, m_s_rates_args_list),
              position = 0, leave = True, total = len(names_list)):
             
-        CRMs_create_and_save(subdirectory + "/simulations_" + name,
-                             S, M, growth_consumption_rates_args,
+        CRMs_create_and_save(subdirectory,
+                             "simulations_" + name,
+                             init_class,
+                             growth_consumption_rates_args,
                              model_specific_rates_args,
-                             **simulation_kwargs)
-            
+                             save_method,
+                             **complete_sim_kwargs)
+    
 #%%
 
-def CRMs_create_and_save(filepath : str,
-                         no_species : int, no_resources : int,
-                         growth_consumption_rates_args : TypedDict('gc_args',
+def CRMs_create_and_save(subdirectory : str,
+                         filename : str,
+                         init_class : list[dict[str : int]],
+                         growth_consumption_rates_args : Union[list,
+                                                               TypedDict('gc_args',
                                                                    {'method' : str,
                                                                     'mu_c' : float,
                                                                     'sigma_c' : float,
                                                                     'mu_g' : float,
                                                                     'sigma_g' : float,
                                                                     'conserve_mass' : NotRequired[bool],
-                                                                    'kwargs' : NotRequired[any]}),
+                                                                    'kwargs' : NotRequired[any]})],
                          model_specific_rates_args : dict[str, any],
+                         save_method : Literal['v1', 'v2', 'v3'],
                          **kwargs : any):
     
     '''
@@ -221,20 +349,50 @@ def CRMs_create_and_save(filepath : str,
 
     '''
     
-    communities = consumer_resource_model_dynamics(no_species, no_resources,
-                                                   growth_consumption_rates_args,
-                                                   model_specific_rates_args,
-                                                   **kwargs)
+    if 'trophic_levels' in init_class.keys():
     
-    pickle_dump("C:/Users/jamil/Documents/PhD/Data/" + \
-                filepath + ".pkl",
-                communities)
+        communities = complex_ecosystem_model_dynamics(init_class,
+                                                       growth_consumption_rates_args,
+                                                       model_specific_rates_args,
+                                                       **kwargs)
         
-    del communities
+    else:
+        
+        communities = consumer_resource_model_dynamics(init_class,
+                                                       growth_consumption_rates_args,
+                                                       model_specific_rates_args,
+                                                       **kwargs)
+        
+    
+    match save_method:
+        
+        case 'v1':
+            
+            pickle_dump("C:/Users/jamil/Documents/PhD/Data/" + \
+                         subdirectory + "/" + filename + ".pkl",
+                         communities)
+        
+        case 'v2':
+    
+            save_models(communities,
+                        "C:/Users/jamil/Documents/PhD/Data/" + subdirectory,
+                        filename)
+            
+        case 'v3':
+            
+            df = simulation_df_from_communities(communities,
+                                                init_class['model'],
+                                                growth_consumption_rates_args[0]['method'])
+            
+            df.to_csv("C:/Users/jamil/Documents/PhD/Data/" + \
+                         subdirectory + "/" + filename + ".csv")
+            
+    del communities 
+   
 
 # %%
 
-def consumer_resource_model_dynamics(no_species : int, no_resources : int,
+def consumer_resource_model_dynamics(init_class,
                                      growth_consumption_rates_args : TypedDict('gc_args',
                                                                                {'method' : str,
                                                                                 'mu_c' : float,
@@ -244,8 +402,6 @@ def consumer_resource_model_dynamics(no_species : int, no_resources : int,
                                                                                 'conserve_mass' : NotRequired[bool],
                                                                                 'kwargs' : NotRequired[any]}),
                                      model_specific_rates_args : dict[str, any],
-                                     model : Literal["Self-limiting resource supply",
-                                                     "Self-limiting resource supply, self-inhibition"] = "Self-limiting resource supply",
                                      no_communities : int = 5,
                                      no_init_conds : int = 2,
                                      t_end : float = 3500):
@@ -286,8 +442,7 @@ def consumer_resource_model_dynamics(no_species : int, no_resources : int,
 
     '''
     
-    def community_dynamics(no_init_conds : int,
-                           no_species : int, no_resources : int,
+    def community_dynamics(init_class,
                            growth_consumption_rates_args : TypedDict('gc_args',
                                                                      {'method' : str,
                                                                       'mu_c' : float,
@@ -297,6 +452,7 @@ def consumer_resource_model_dynamics(no_species : int, no_resources : int,
                                                                       'conserve_mass' : NotRequired[bool],
                                                                       'kwargs' : NotRequired[any]}),
                            model_specific_rates_args : dict[str, any],
+                           no_init_conds : int,
                            t_end : float):
         
         '''
@@ -304,9 +460,9 @@ def consumer_resource_model_dynamics(no_species : int, no_resources : int,
         create and simulate community dynamics 
         
         '''
-        
+    
         # initialise consumer-resource model class
-        community = Consumer_Resource_Model(model, no_species, no_resources)
+        community = Consumer_Resource_Model(**init_class)
 
         # generate model parameters
         community.growth_consumption_rates(**growth_consumption_rates_args)
@@ -317,23 +473,108 @@ def consumer_resource_model_dynamics(no_species : int, no_resources : int,
         
         # estimate community properties, including the max. lyapunov exponent
         community.calculate_community_properties()
-        #community.lyapunov_exponent = max_le(community, 500, community.ODE_sols[0].y[:, -1],
-        #                                     dt = 20, separation = 1e-3)
-        community.lyapunov_exponent = max_le(community,
-                                             community.ODE_sols[0].y[:, -1],
-                                             T = 1000,
-                                             perturbation = 1e-6)
-        
+        community.lyapunov_exponent = max_le(community, community.ODE_sols[0].y[:, -1],
+                                             T = 1000, perturbation = 1e-6)
+
         return community 
 
     # generate n communities, where n = no_communities
-    communities = [deepcopy(community_dynamics(no_init_conds,
-                                                    no_species, no_resources,
-                                                    growth_consumption_rates_args,
-                                                    model_specific_rates_args,
-                                                    t_end))
-                                  for _ in tqdm(range(no_communities),
-                                                position = 1, leave = False)]
+    communities = [deepcopy(community_dynamics(init_class,
+                                               growth_consumption_rates_args,
+                                               model_specific_rates_args,
+                                               no_init_conds,
+                                               t_end))
+                                  for _ in range(no_communities)]
+    
+    return communities
+
+# %%
+
+def complex_ecosystem_model_dynamics(init_class,
+                                     growth_consumption_rates_args : list[dict],
+                                     model_specific_rates_args : dict[str, any],
+                                     no_communities : int = 5,
+                                     no_init_conds : int = 2,
+                                     t_end : float = 3500):
+    
+    '''
+    
+    Simulate communites where model parameters are sampled from the same distributions
+
+    Parameters
+    ----------
+    no_species : int
+        species pool size.
+    no_resources : int
+        resource pool size.
+    growth_consumption_rates_args : TypedDict('gc_args', {'method' : str,
+                                                          'mu_c' : float,
+                                                          'sigma_c' : float,
+                                                          'mu_g' : float,
+                                                          'sigma_g' : float,
+                                                          'conserve_mass' : NotRequired[bool],
+                                                          'kwargs' : NotRequired[any]})
+        Arguments used to generate growth and consumption rates.
+    model_specific_rates_args : Dict(str, any)
+        Arguments used to generate model-specific rates.
+    model : Literal["Self-limiting resource supply", "Self-limiting resource supply, self-inhibition"], optional
+        Models. The default is "Self-limiting resource supply".
+    no_communities : int, optional
+        Number of communities to create. The default is 5.
+    no_init_conds : int, optional
+        Number of initial abundances dynamics are simulated from. The default is 2.
+    t_end : float, optional
+        Simulation end time. The default is 3500.
+
+    Returns
+    -------
+    TYPE
+        DESCRIPTION.
+
+    '''
+    
+    def community_dynamics(init_class,
+                           growth_consumption_rates_args : list[dict],
+                           model_specific_rates_args : dict[str, any],
+                           no_init_conds : int,
+                           t_end : float):
+        
+        '''
+        
+        create and simulate community dynamics 
+        
+        '''
+        
+        #breakpoint()
+    
+        # initialise consumer-resource model class
+        community = Consumer_Resource_Model(**init_class)
+
+        # generate model parameters
+        
+        for gc_rates_args in growth_consumption_rates_args:
+            
+            community.growth_consumption_rates(**gc_rates_args)
+        
+        community.model_specific_rates(**model_specific_rates_args)
+        
+        # simulate commmunity dynamics
+        community.simulate_community(t_end, no_init_conds)
+        
+        # estimate community properties, including the max. lyapunov exponent
+        community.calculate_community_properties()
+        community.lyapunov_exponent = max_le(community, community.ODE_sols[0].y[:, -1],
+                                             T = 1000, perturbation = 1e-6)
+
+        return community 
+
+    # generate n communities, where n = no_communities
+    communities = [deepcopy(community_dynamics(init_class,
+                                               growth_consumption_rates_args,
+                                               model_specific_rates_args,
+                                               no_init_conds,
+                                               t_end))
+                                  for _ in range(no_communities)]
     
     return communities
 
@@ -358,8 +599,8 @@ def save_models(communities : list,
         
         all_models = {"SL_CRM" : "Self-limiting resource supply",
                       "SL_SI_CRM" : "Self-limiting resource supply, self-inhibition",
+                      "SL_TL_CRM" : "Self-limiting resource supply, multi-trophic level",
                       "ES_CRM" : "Externally-supplied resources",
-                      "ES_Tox_CRM" : "Externally-supplied resources, toxins",
                       "eLV" : "eLV"}
         
         attributes_dict['model'] = all_models[type(community).__name__]
@@ -369,28 +610,6 @@ def save_models(communities : list,
     attr_dicts = [model_attr_to_dict(community) for community in communities]
     
     attr_df = pd.DataFrame(attr_dicts)
-    
-    #for col in list(attr_df.columns):
-        
-    #    if isinstance(attr_df.loc[0, col], np.ndarray):
-        
-    #        attr_df[col] = attr_df[col].apply(lambda x : dumps(x.tolist()))
-            
-    #        attr_df.rename(columns = {col : col + "_array"}, inplace = True)
-
-    #    elif isinstance(attr_df.loc[0, col], list):
-            
-    #        if col == "simulation_y" or "simulation_t":
-                
-    #            attr_df[col] = \
-    #                attr_df[col].apply(lambda x : dumps([arr.tolist() 
-    #                                                     for arr in x]))
-                           
-    #        else:
-                
-    #            attr_df[col] = attr_df[col].apply(lambda x : dumps(x))
-                
-    #        attr_df.rename(columns = {col : col + "_array"}, inplace = True) 
         
     if not os.path.exists(directory):
         
@@ -398,22 +617,28 @@ def save_models(communities : list,
     
     attr_df.to_pickle(directory + "/" + filename + ".bz2",
                       compression='bz2')
-    #attr_df.to_csv(directory + "/" + filename + ".csv", index = False)
-    #attr_df.to_hdf(directory + "/" + filename + ".h5", key='df', mode='w')
+    
     
 # %%
-
+    
 def load_in_communities(filepath : str):
     
     def dict_to_model(community_dict):
         
-        community = Consumer_Resource_Model(community_dict['model'],
-                                            community_dict['no_species'],
-                                            community_dict['no_resources'])
+        if community_dict['model'].endswith("multi-trophic level"):
+            
+            community = Consumer_Resource_Model(community_dict['model'],
+                                                community_dict['pool_sizes'])
+        
+        else:
+        
+            community = Consumer_Resource_Model(community_dict['model'],
+                                                community_dict['no_species'],
+                                                community_dict['no_resources'])
         
         for attr, val in community_dict.items():
         
-            if attr not in ['model', 'no_species', 'no_resources',
+            if attr not in ['model', 'no_species', 'no_resources', 'pool_sizes',
                             'simulation_t', 'simulation_y']: 
                 
                 setattr(community, attr, val)
@@ -424,33 +649,19 @@ def load_in_communities(filepath : str):
                 
         return community
     
-   # attr_df = pd.read_csv(filepath, index_col = False)
-    
-    #for col in list(attr_df.columns):
-        
-    #    if col.endswith("_array") == True:
-            
-    #        if col in ["simulation_t_array", "simulation_y_array"]:
-                
-    #            attr_df[col] = attr_df[col].apply(lambda x : [np.array(arr) 
-    #                                                         for arr in loads(x)])
-    #        else:
-         
-    #            attr_df[col] = attr_df[col].apply(lambda x : np.array(loads(x)))
-                
-    #renamed_cols = {col : col.removesuffix("_array") 
-    #                for col in list(attr_df.columns) 
-    #                if col.endswith("_array") == True}
-    
-    #attr_df.rename(columns = renamed_cols, inplace = True)
-    
     attr_df = pd.read_pickle(filepath)
     
-    attr_dicts = attr_df.to_dict("records")
- 
-    communities = [dict_to_model(attr_dict) for attr_dict in attr_dicts]
+    if isinstance(attr_df, list):
+        
+        return attr_df
     
-    return communities
+    else:
+    
+        attr_dicts = attr_df.to_dict("records")
+     
+        communities = [dict_to_model(attr_dict) for attr_dict in attr_dicts]
+        
+        return communities
 
 class ReloadedODEs:
     
@@ -458,7 +669,7 @@ class ReloadedODEs:
         
         self.t = t
         self.y = y
-
+        
 # %%
 
 def generate_simulation_df(directory : str):
@@ -522,7 +733,229 @@ def generate_simulation_df(directory : str):
 
 # %%
 
-def CRM_df(directory : str, parameters : list):
+def simulation_df_from_communities(communities, model, gc_method):
+    
+    '''
+    
+    Load data from consumer-resource models and create a dataframe containing
+    their parameters and community properties.
+    
+    Parameters
+    ----------
+    directory : str
+        filepath for community data.
+
+    Returns
+    -------
+    df : pd.DataFrame
+        Dataframe of model parameters and community properties.
+
+    '''
+    
+    # parameters to include in the dataframe
+    parameters = extract_trophic_level_parms(model, communities[0].trophic_levels) + \
+        model_specific_parameters(model) 
+    
+    # load data and create dataframe
+    df = community_dynamics_df(communities, parameters)
+    
+    df = (
+            df.pipe(parameter_rename_and_calc,
+                    model = model, gc_method = gc_method)
+              .pipe(model_specific_emergent_properties,
+                    model = model)
+              .pipe(np.round, 6)
+          )
+    
+    return df
+
+# %%
+
+def model_specific_parameters(model):
+    
+    if model.startswith("Self-limiting resource supply") is True:
+        
+        ms_parm_list = ['b_val']
+    
+    elif model.startswith("Externally-supplied resources") is True:
+        
+        ms_parm_list = ['b_val', 'o_val']
+        
+    return ms_parm_list
+
+# %% 
+
+def extract_trophic_level_parms(model, trophic_levels):
+    
+    if model.endswith("multi-trophic level") is True:
+        
+        poolsize_parms = ['pool_sizes']
+        
+        m_parms = [string + str(i) for string in ['mu_g_', 'sigma_g_',
+                                                  'mu_c_', 'sigma_c_',
+                                                  'rho_']
+                    for i in np.arange(2, trophic_levels + 1)] + \
+                    ['d_' + str(i) + "_val"
+                     for i in np.arange(2, trophic_levels + 1)] + \
+                    ['mu_A', 'sigma_A']
+        
+    else:
+        
+        poolsize_parms = ['no_resources', 'no_species']
+        m_parms = ['mu_g', 'sigma_g', 'mu_c', 'sigma_g', 'rho', 'd_val']
+        
+    return poolsize_parms + m_parms
+    
+# %%
+
+def parameter_rename_and_calc(df, model, gc_method):
+    
+    def coupled_rho(df, i = None):
+        
+        if i == None:
+            
+            df.rename(columns = {'mu_c' : 'mu_c/M', 'sigma_c' : 'sigma_c/root_M',
+                                 'mu_g' : 'mu_g/M', 'sigma_g' : 'sigma_g/root_m',
+                                 'no_resources' : 'M', 'no_species' : 'S'},
+                                inplace = True)
+            
+            # calculate actual mean and std. deviation in consumption coefficients
+            df['mu_c'] = df['mu_c/M'] * df['M']
+            df['sigma_c'] = df['sigma_c/root_M'] * np.sqrt(df['M'])
+            df['mu_g'] = df['mu_g/M'] * df['M']
+            df['sigma_g'] = df['sigma_g/root_M'] * np.sqrt(df['M'])
+            
+        else:
+            
+            df.rename(columns = {'mu_c_' + str(i) : 'mu_c_' + str(i) + '/PS_'  + str(i),
+                                 'sigma_c_' + str(i) : 'sigma_c_' + str(i) + '/root_PS_' + str(i),
+                                 'mu_g_' + str(i) : 'mu_g_' + str(i) + '/PS_' +  + str(i),
+                                 'sigma_g_' + str(i) : 'sigma_g_' + str(i) + '/root_PS' + str(i)},
+                      inplace = True)
+            
+            # calculate actual mean and std. deviation in consumption coefficients
+            df['mu_c_' + str(i)] = df['mu_c_' + str(i) + '/PS_'  + str(i)] * df['PS_' + str(i)]
+            df['sigma_c_' + str(i)] = df['sigma_c_' + str(i) + '/root_PS_'  + str(i)] * np.sqrt(df['PS_' + str(i)])
+            df['mu_g_' + str(i)] = df['mu_g_' + str(i) + '/PS_'  + str(i)] * df['PS_' + str(i)]
+            df['sigma_g_' + str(i)] = df['sigma_g_' + str(i) + '/root_PS_'  + str(i)] * np.sqrt(df['PS_' + str(i)])
+            
+        return df
+            
+    def coupled_rue(df, i = None): 
+        
+        if i == None: 
+            
+            df.rename(columns = {'mu_c' : 'mu_c/M', 'sigma_c' : 'sigma_c/root_M',
+                                 'mu_g' : 'mu_y', 'sigma_g' : 'sigma_y',
+                                 'no_resources' : 'M', 'no_species' : 'S'},
+                                inplace = True)
+            
+            # calculate actual mean and std. deviation in consumption coefficients
+            df['mu_c'] = df['mu_c/M'] * df['M']
+            df['sigma_c'] = df['sigma_c/root_M'] * np.sqrt(df['M'])
+            
+            # calculate the correlation between growth and consumption
+            df['rho'] = np.sqrt(1 / (1 + \
+                                     ((df['sigma_y']/df['mu_y'])**2 * (1 + \
+                                                                       ((df['mu_c']**2)/(df['M'] * df['sigma_c']**2))))))
+                
+        else: 
+            
+            df.rename(columns = {'mu_c_' + str(i) : 'mu_c_' + str(i) + '/PS_'  + str(i),
+                                 'sigma_c_' + str(i) : 'sigma_c_' + str(i) + '/root_PS_' + str(i),
+                                 'mu_g_' + str(i) : 'mu_y_' + str(i),
+                                 'sigma_g_' + str(i) : 'sigma_y_' + str(i)},
+                      inplace = True)
+            
+            # calculate actual mean and std. deviation in consumption coefficients
+            df['mu_c_' + str(i)] = df['mu_c_' + str(i) + '/PS_'  + str(i)] * df['PS_' + str(i)]
+            df['sigma_c_' + str(i)] = df['sigma_c_' + str(i) + '/root_PS_'  + str(i)] * np.sqrt(df['PS_' + str(i)])
+            
+            df['rho_' + str(i)] = np.sqrt(1 / (1 + \
+                                     ((df['sigma_y_' + str(i)]/df['mu_y_' + str(i)])**2 * (1 + \
+                                                                       ((df['mu_c_' + str(i)]**2)/(df['PS_' + str(i)] * df['sigma_c_' + str(i)]**2))))))
+                
+        return df 
+    
+    if model.endswith("multi-trophic level") is True:
+        
+        match gc_method:
+            
+            case 'coupled by rho':
+        
+                for trophic_level in np.arange(1, df.loc[0, 'trophic_levels'] + 1):
+            
+                    df = df.pipe(coupled_rho, i = trophic_level)
+                    
+            case 'growth function of consumption':
+                
+                for trophic_level in np.arange(2, df.loc[0, 'trophic_levels'] + 1):
+            
+                    df = df.pipe(coupled_rue, i = trophic_level)
+        
+        df.rename(columns = {'mu_A' : 'mu_A/PS_1',
+                             'sigma_A' : 'sigma_A/root_PS_1'},
+                            inplace = True)
+        
+        df['mu_A'] = df['mu_A/PS_1'] * df['PS_1']
+        df['sigma_A'] = df['sigma_A/root_PS_1'] * np.sqrt(df['PS_1'])
+        
+    
+    else:
+        
+        match gc_method:
+            
+            case 'coupled by rho':
+                
+              df = df.pipe(coupled_rho)
+                
+            case 'growth function of consumption':
+                
+                df = df.pipe(coupled_rue)
+
+    return df
+                
+# %%
+
+def model_specific_emergent_properties(df, model):
+    
+    if model.endswith("multi-trophic level") is True:
+        
+        for i in np.arange(2, df.loc[0, 'trophic_levels'] + 1):
+            
+            df['Packing_' + str(i)] = \
+                (df['phi_TL' + str(i)]*df['PS_' + str(i)])/(df['phi_TL' + str(i-1)]*df['PS_' + str(i-1)])
+        
+        for i in np.arange(2, df.loc[0, 'trophic_levels'] + 1):
+            
+            df['PS_' + str(i)] = np.int32(df['PS_' + str(i)])
+    
+    else:
+        
+        # calculate the species packing ratio
+        df['Species packing'] = (df['phi_N']*df['S'])/(df['phi_R']*df['M'])
+        
+        df['M'] = np.int32(df['M'])
+        df['S'] = np.int32(df['S'])
+        
+        if model.startswith("Self-limiting resource supply") is True:
+            
+            # calculate the distance from the stability threshold
+            df['Instability distance'] = df['rho']**2 - df['Species packing']
+            
+            # calculate the distance from the infeasibility threshold
+            df['Infeasibility distance'] = df['phi_R'] - df['phi_N']/(df['M']/df['S'])
+        
+        elif model.startswith("Externally-supplied resources") is True:
+            
+            # calculate the distance from the infeasibility threshold
+            df['Infeasibility distance'] = 0.5 - df['phi_N']/(df['M']/df['S'])
+        
+    return df
+
+# %%
+
+def CRM_df(directory : str, parameters : list, method : Literal['v1', 'v2'] = 'v1'):
     
     '''
     
@@ -542,9 +975,17 @@ def CRM_df(directory : str, parameters : list):
 
     '''
     
-    def load_data_create_df(filepath):
+    def load_data_create_df(filepath, method):
+        
+        match method:
+            
+            case 'v1':
     
-        communities = pd.read_pickle(filepath)
+                communities = load_in_communities(filepath)
+            
+            case 'v2':
+            
+                communities = pd.read_pickle(filepath)
         
         df = community_dynamics_df(communities, parameters)
     
@@ -580,37 +1021,57 @@ def community_dynamics_df(communities : list,
     
     parameters = np.array(parameters)
     
-    # rename parameters to match consumer-resource model class
-    parameters[np.where(parameters == 'mu_y')[0]] = 'mu_g'
-    parameters[np.where(parameters == 'sigma_y')[0]] = 'sigma_g'
+    if (trophic_levels := getattr(communities[0], "trophic_levels", None)) is None:
 
-    # extract community properties
-    properties_df = pd.DataFrame.from_dict({'phi_N' : [phi_N for community in communities for phi_N in community.species_survival_fraction],
-                                            'N_mean' : [N_mean for community in communities for N_mean in community.species_avg_abundance],
-                                            'q_N' : [q_N for community in communities for q_N in community.species_abundance_fluctuations],
-                                            'phi_R' : [phi_R for community in communities for phi_R in community.resource_survival_fraction],
-                                            'R_mean' : [R_mean for community in communities for R_mean in community.resource_avg_abundance],
-                                            'q_R' : [q_R for community in communities for q_R in community.resource_abundance_fluctuations],
-                                            'Max. lyapunov exponent' : np.concatenate([np.repeat(community.lyapunov_exponent, len(community.ODE_sols)) 
-                                                                                       for community in communities]),
-                                            'Divergence measure' : [simulation.t[-1] for community in communities for simulation in community.ODE_sols],
-                                            'rho_est' : np.concatenate([np.repeat(pearsonr(community.consumption.T.flatten(),
-                                                                            community.growth.flatten())[0], len(community.ODE_sols)) 
-                                                                        for community in communities])})
-    
-    # extract model parameters                        
-    parameter_df = pd.DataFrame.from_dict({parameter : \
-                                           np.concatenate([np.repeat(getattr(community, parameter),
-                                                                     len(community.ODE_sols))
-                                                           for community in communities]) 
-                                           for parameter in parameters})
-    
-    # combine parametesr and properties into single df         
-    df = pd.concat([parameter_df, properties_df], axis = 1)
-    
-    # calculate the species packing ratio
-    df['Species packing'] = (df['phi_N']*df['no_species'])/(df['phi_R']*df['no_resources'])
-
+        # extract community properties
+        properties_df = pd.DataFrame.from_dict({'phi_N' : [phi_N for community in communities for phi_N in community.species_survival_fraction],
+                                                'N_mean' : [N_mean for community in communities for N_mean in community.species_avg_abundance],
+                                                'q_N' : [q_N for community in communities for q_N in community.species_abundance_fluctuations],
+                                                'phi_R' : [phi_R for community in communities for phi_R in community.resource_survival_fraction],
+                                                'R_mean' : [R_mean for community in communities for R_mean in community.resource_avg_abundance],
+                                                'q_R' : [q_R for community in communities for q_R in community.resource_abundance_fluctuations],
+                                                'Max. lyapunov exponent' : np.concatenate([np.repeat(community.lyapunov_exponent, len(community.ODE_sols)) 
+                                                                                           for community in communities]),
+                                                'Divergence measure' : [simulation.t[-1] for community in communities for simulation in community.ODE_sols]})
+        
+            # extract model parameters                        
+        parameter_df = pd.DataFrame.from_dict({parameter : \
+                                               np.concatenate([np.repeat(getattr(community, parameter),
+                                                                         len(community.ODE_sols))
+                                                               for community in communities]) 
+                                               for parameter in parameters})
+            
+        df = pd.concat([parameter_df, properties_df], axis = 1)
+            
+    else:
+        
+        abundance_distribution = [{'phi_TL' + str(i) : [phi_L for community in communities for phi_L in getattr(community, "TL_" + str(i) + "_survival_fraction")],
+                                   'mean_TL' + str(i) : [phi_L for community in communities for phi_L in getattr(community, "TL_" + str(i) + "_avg_abundance")],
+                                   'fluct_TL' + str(i) : [phi_L for community in communities for phi_L in getattr(community, "TL_" + str(i) + "_abundance_fluctuations")]}
+                                  for i in np.arange(1, trophic_levels + 1)]
+        
+        abundance_dict = {key : val for dist_list in abundance_distribution for key, val in dist_list.items()}
+        
+        properties_dict = abundance_dict | \
+                            {'trophic_levels' : np.repeat(trophic_levels, len(communities[0].ODE_sols) * len(communities)),
+                             'Max. lyapunov exponent' : np.concatenate([np.repeat(community.lyapunov_exponent, len(community.ODE_sols)) 
+                                                                        for community in communities]),
+                             'Divergence measure' : [simulation.t[-1] for community in communities for simulation in community.ODE_sols]}
+        
+        parameter_dict_wps = {parameter : np.concatenate([np.repeat(getattr(community, parameter),
+                                                                    len(community.ODE_sols))
+                                                          for community in communities]) 
+                              for parameter in parameters if parameter != "pool_sizes"}
+        
+        pool_size_dict = {'PS_' + str(i+1) : np.concatenate([np.repeat(community.pool_sizes[i], 
+                                                                       len(community.ODE_sols))
+                                                             for community in communities])
+                          for i in np.arange(trophic_levels)}
+        
+        parameter_dict = parameter_dict_wps | pool_size_dict
+        
+        df = pd.DataFrame.from_dict(parameter_dict | properties_dict)
+        
     return df
 
 # %%

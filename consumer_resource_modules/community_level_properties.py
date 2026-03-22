@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     
     sys.path.insert(0, "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models" + \
                         "/consumer_resource_modules")
-    from models import SL_CRM, SL_SI_CRM, ES_CRM
+    from models import SL_CRM, SL_SI_CRM, SL_TL_CRM, ES_CRM
     from effective_LV_models import eLV_SL, gLV
     
 # %%
@@ -31,10 +31,8 @@ if TYPE_CHECKING:
 ########### Community properties #############
 
 class CommunityPropertiesInterface:
-    
-    def calculate_community_properties(self,
-                                       average_property : bool = False,
-                                       time_window : float = 500):
+        
+    def calculate_community_properties(self):
         '''
         
         Call methods that calculate the moments of the species and resource
@@ -56,55 +54,51 @@ class CommunityPropertiesInterface:
 
         '''
         
-        if average_property is True:
+        trophic_levels = getattr(self, "trophic_levels", None)
+        
+        if trophic_levels is None:
             
-            # calculate average community property over some time window
+            self.assign_abundance_distribution("species",
+                                                 [0, self.no_species])
             
-            start_idx = np.abs(self.ODE_sols[0].t - (self.t_end - time_window)).argmin()
-            
+            self.assign_abundance_distribution("resource",
+                                                 [self.no_species, -1])
+        
         else:
             
-            # calculate community properties at the end of simulations 
+            pool_idx = np.append(0, np.cumsum(self.pool_sizes))
             
-            start_idx = -1
+            for i in np.arange(0, trophic_levels):
+                
+                self.assign_abundance_distribution("TL_" + str(i + 1),
+                                                     [pool_idx[i],
+                                                      pool_idx[i+1]])
             
-        # moments of the species abundance distribution 
+    def assign_abundance_distribution(self,
+                                        attr_name, attr_idx):
         
-        # extract species abundance distribution and calculate its 0th-2nd moment
-        species_distributions = \
-            [self.__abundance_distribution(simulation.y[:self.no_species,
-                                                        start_idx:])    
+        distributions = \
+            [self.abundance_distribution(simulation.y[attr_idx[0] : attr_idx[1],
+                                                        -1])    
              for simulation in self.ODE_sols] 
         
-        # assign species survival fraction (phi_N, or S*/S) 
-        self.species_survival_fraction = [dist[0] 
-                                          for dist in species_distributions]
+        # assign survival fraction
+        setattr(self,
+                attr_name + "_survival_fraction",
+                [dist[0] for dist in distributions])
         
-        # assign average species abundance (<N>)
-        self.species_avg_abundance = [dist[1] 
-                                      for dist in species_distributions]
+        # assign average abundance
         
-        # assign 2nd moment in speices abundance distribution (<N^2>)
-        self.species_abundance_fluctuations = [dist[2] 
-                                               for dist in species_distributions]
+        setattr(self,
+                attr_name + "_avg_abundance",
+                [dist[1] for dist in distributions])
         
-        # moments of the resource abundance distribution (same process as with species)
-        
-        resource_distributions = \
-            [self.__abundance_distribution(simulation.y[self.no_species:,
-                                                        start_idx:])    
-             for simulation in self.ODE_sols] 
-            
-        self.resource_survival_fraction = [dist[0] 
-                                          for dist in resource_distributions]
-        
-        self.resource_avg_abundance = [dist[1] 
-                                      for dist in resource_distributions]
-
-        self.resource_abundance_fluctuations = [dist[2] 
-                                               for dist in resource_distributions]
-            
-    def __abundance_distribution(self,
+        # assign 2nd moment in bundance distribution
+        setattr(self,
+                attr_name + "_abundance_fluctuations",
+                [dist[2] for dist in distributions])
+             
+    def abundance_distribution(self,
                                  abundances : npt.NDArray,
                                  extinct_thresh : float = 1e-4):
         
@@ -130,25 +124,12 @@ class CommunityPropertiesInterface:
 
         '''
         
-        if abundances.shape[1] == 1: # one abundance distribution, not over time period
+        zeroth_moment = \
+            np.count_nonzero(abundances > extinct_thresh)/len(abundances)
             
-            zeroth_moment = \
-                np.count_nonzero(abundances > extinct_thresh)/len(abundances)
-                
-            first_moment = np.mean(abundances)
-            
-            second_moment = np.mean(abundances**2)
+        first_moment = np.mean(abundances)
         
-        elif abundances.shape[1] > 1: # multiple abundance distributions over time period
-            
-            zeroth_moment = \
-                np.mean(np.count_nonzero(abundances > extinct_thresh,
-                                         axis = 0)/abundances.shape[0])
-                
-            first_moment = np.mean(np.count_nonzero(abundances > extinct_thresh,
-                                    axis = 0)/abundances.shape[0])
-            
-            second_moment = np.mean(np.mean(abundances**2, axis = 0))
+        second_moment = np.mean(abundances**2)
         
         return zeroth_moment, first_moment, second_moment
     
@@ -156,43 +137,45 @@ class CommunityPropertiesInterface:
 
 # %%
 
-def max_le(community : Union["SL_CRM", "SL_SI_CRM", "ES_CRM", "eLV_SL", "gLV"],
+def max_le(community : Union["SL_CRM", "SL_SI_CRM", "SL_TL_CRM", "ES_CRM",
+                             "eLV_SL", "gLV"],
            initial_conditions : npt.NDArray,
            T : float = 100,
            perturbation : float = 1e-8):
     
-    if type(community).__name__ == "eLV_SL" or type(community).__name__ == "gLV":
+    match type(community).__name__:
         
-        original_traj, perturbed_traj = trajectory_LV(community,
-                                                      initial_conditions,
-                                                      T,
-                                                      perturbation)
-    
-    else:
-    
-        original_traj, perturbed_traj = trajectory(community,
-                                                   initial_conditions,
-                                                   T,
-                                                   perturbation)
+        case glv if glv in ["eLV_SL", "gLV"]:
+            
+            original_traj, perturbed_traj = trajectory_LV(community,
+                                                          initial_conditions,
+                                                          T,
+                                                          perturbation)
+            
+        case CRM if CRM in ["SL_CRM", "SL_SI_CRM", "ES_CRM"]:
+            
+            original_traj, perturbed_traj = trajectory(community,
+                                                       initial_conditions,
+                                                       T,
+                                                       perturbation)
+            
+        case "SL_TL_CRM":
+            
+            original_traj, perturbed_traj = \
+                trajectory_multi_trophic(community,
+                                         initial_conditions,
+                                         T,
+                                         perturbation)
     
     if original_traj.y.shape[1] != perturbed_traj.y.shape[1]:
         
-        trajectories = [original_traj, perturbed_traj]
-        
-        long_idx = np.array([traj.y.shape[1]
-                             for traj in trajectories]).argmax()
-        shortest_traj_length = np.min([traj.y.shape[1] for traj in trajectories])
-        
-        trajectories[long_idx].t = trajectories[long_idx].t[:shortest_traj_length]
-        trajectories[long_idx].y = trajectories[long_idx].y[: , :shortest_traj_length]
-        
-        original_traj, perturbed_traj = trajectories
-        
-    # Calculated the new separation between the original and perturbated trajectory (d1)
-    separation = np.log(np.linalg.norm(perturbed_traj.y - original_traj.y,
-                                       axis=0))
+        max_lyapunov_exponent = np.nan
     
     try:
+        
+        # Calculated the new separation between the original and perturbated trajectory (d1)
+        separation = np.log(np.linalg.norm(perturbed_traj.y - original_traj.y,
+                                           axis=0))
    
         separation_grad_abs = np.abs(np.gradient(separation,
                                                  perturbed_traj.t))
@@ -220,17 +203,52 @@ def trajectory(community : Union["SL_CRM", "SL_SI_CRM", "ES_CRM"],
     perturbed_conditions += perturbation * np.ones(len(perturbed_conditions)) #np.random.uniform(-1, 1, len(perturbed_conditions))
     
     # Simulate the original community trajectory for time = T
-    original_traj = community.simulate_community(T, 1, init_cond_func='user supplied',
+    original_traj = community.simulate_community(T, 1, init_cond_func='user-supplied',
                                                  assign = False,
-                                                 user_supplied_init_cond = 
-                                                 {'species' : original_conditions[:community.no_species],
-                                                  'resources' : original_conditions[community.no_species:]})
+                                                 initial_conditions = 
+                                                 [original_conditions[:community.no_species],
+                                                 original_conditions[community.no_species:]])
     # Simulate the perturbated community trajectory for time = T
-    perturbed_traj = community.simulate_community(T, 1, init_cond_func='user supplied',
+    perturbed_traj = community.simulate_community(T, 1, init_cond_func='user-supplied',
                                                   assign = False,
-                                                  user_supplied_init_cond = 
-                                                  {'species' : perturbed_conditions[:community.no_species],
-                                                   'resources' : perturbed_conditions[community.no_species:]})
+                                                  initial_conditions = 
+                                                  [perturbed_conditions[:community.no_species],
+                                                   perturbed_conditions[community.no_species:]])
+    
+    return original_traj[0], perturbed_traj[0]
+
+#############
+
+def trajectory_multi_trophic(community : "SL_TL_CRM",
+                             initial_conditions : npt.NDArray,
+                             T : float,
+                             perturbation : float):
+
+# Set initial conditions of the original and perturbated trajectory
+    original_conditions = deepcopy(initial_conditions)
+
+    perturbed_conditions = deepcopy(initial_conditions)
+    perturbed_conditions += perturbation * np.ones(len(perturbed_conditions)) #np.random.uniform(-1, 1, len(perturbed_conditions))
+    
+    # 
+    
+    pool_idx = np.append(0, np.cumsum(community.pool_sizes))
+    supplied_oc = [original_conditions[pool_idx[i] : pool_idx[i+1]]
+                   for i in range(len(pool_idx) - 1)]
+    
+    supplied_perturb = [perturbed_conditions[pool_idx[i] : pool_idx[i+1]]
+                        for i in range(len(pool_idx) - 1)]
+    
+    # Simulate the original community trajectory for time = T
+    original_traj = community.simulate_community(T, 1, init_cond_func='user-supplied',
+                                                 assign = False,
+                                                 initial_conditions = 
+                                                 supplied_oc)
+    # Simulate the perturbated community trajectory for time = T
+    perturbed_traj = community.simulate_community(T, 1, init_cond_func='user-supplied',
+                                                  assign = False,
+                                                  initial_conditions = 
+                                                  supplied_perturb)
     
     return original_traj[0], perturbed_traj[0]
 
@@ -248,13 +266,17 @@ def trajectory_LV(community : Union["eLV_SL", "gLV"],
     perturbed_conditions += perturbation * np.ones(len(perturbed_conditions))
     
     # Simulate the original community trajectory for time = T
-    original_traj = community.simulation(T,
-                                         original_conditions,
-                                         assign = False)
+    original_traj = community.simulate_community(T, 
+                                                 1,
+                                                 init_cond_func='user-supplied',
+                                                 assign = False,
+                                                 initial_conditions = original_conditions)
     # Simulate the perturbated community trajectory for time = T
-    perturbed_traj = community.simulation(T,
-                                          perturbed_conditions,
-                                          assign = False)
+    perturbed_traj = community.simulate_community(T, 
+                                                 1,
+                                                 init_cond_func='user-supplied',
+                                                 assign = False,
+                                                 initial_conditions = perturbed_conditions)
     
     return original_traj, perturbed_traj
 
@@ -265,33 +287,26 @@ def calculate_max_le(original_traj : npt.NDArray,
                      separation : float,
                      separation_grad_abs : npt.NDArray):
     
-    if len(original_traj.t) < 200 or len(perturbed_traj.t) < 200:
+    if np.all(np.convolve(separation_grad_abs,
+                          np.ones(40)/40,
+                          mode='valid') > 0.001) == False:
         
-        max_lyapunov_exponent, log_offset = np.polyfit(perturbed_traj.t,
-                                                       separation,
-                                                       1)
-    else:
+        final_idx = -1
     
-        if np.all(np.convolve(separation_grad_abs,
-                              np.ones(40)/40,
-                              mode='valid') > 0.001) == False:
-            
-            final_idx = -1
+    else: 
         
-        else: 
-            
-            cutoff_t = np.convolve(perturbed_traj.t,
-                                   np.ones(40)/40,
-                                   mode='valid')[np.convolve(separation_grad_abs,
-                                                             np.ones(40)/40,
-                                                             mode='valid') > 0.001][-1]
-                                            
-            final_idx = np.abs(perturbed_traj.t - cutoff_t).argmin()
-                                                         
-        max_lyapunov_exponent, log_offset = np.polyfit(perturbed_traj.t[10 : final_idx],
-                                                       separation[10 : final_idx],
-                                                       1)
-        
+        cutoff_t = np.convolve(perturbed_traj.t,
+                               np.ones(40)/40,
+                               mode='valid')[np.convolve(separation_grad_abs,
+                                                         np.ones(40)/40,
+                                                         mode='valid') > 0.001][-1]
+                                        
+        final_idx = np.abs(perturbed_traj.t - cutoff_t).argmin()
+                                                     
+    max_lyapunov_exponent, log_offset = np.polyfit(perturbed_traj.t[10 : final_idx],
+                                                   separation[10 : final_idx],
+                                                   1)
+    
     return max_lyapunov_exponent
 
 # %%
