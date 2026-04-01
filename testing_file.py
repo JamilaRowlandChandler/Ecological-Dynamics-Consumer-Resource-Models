@@ -21,21 +21,25 @@ import numpy as np
 
 # %%
 
-community = Consumer_Resource_Model("Self-limiting resource supply", 250, 250)
+community = Consumer_Resource_Model("Self-limiting resource supply", 150, 150)
 
 community.growth_consumption_rates('coupled by rho',
-                                   1, 0.1, 1, 0.1, rho = 1)
-community.model_specific_rates()
+                                   50/150, 3/np.sqrt(150),
+                                   50/150, 3/np.sqrt(150), rho = 0.5)
+community.model_specific_rates(death_method = "normal",
+                               death_args = {'mu' : 1, 'sigma' : 0.1},
+                               resource_growth_method = "normal",
+                               resource_growth_args = {'mu' : 1, 'sigma' : 0.1})
 
-community.simulate_community(7000, 2)
+community.simulate_community(1000, 1)
 
-community.calculate_community_properties() 
+#community.calculate_community_properties() 
 
-community.lyapunov_exponent = max_le(community, community.ODE_sols[0].y[:, -1],
-                                         T = 1000, perturbation = 1e-6)
-print(community.lyapunov_exponent)
+#community.lyapunov_exponent = max_le(community, community.ODE_sols[0].y[:, -1],
+#                                         T = 1000, perturbation = 1e-6)
+#print(community.lyapunov_exponent)
 
-plt.plot(community.ODE_sols[0].t, community.ODE_sols[0].y[:100, :].T)
+plt.plot(community.ODE_sols[0].t, community.ODE_sols[0].y[:150, :].T)
 plt.show()
 
 
