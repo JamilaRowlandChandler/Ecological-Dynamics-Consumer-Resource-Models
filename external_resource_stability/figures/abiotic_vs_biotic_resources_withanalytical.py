@@ -58,6 +58,8 @@ def load_clean_sces(filename):
                        na_values=["Missing[Failed]", "Missing[]"])
     sces = np.round(sces.apply(pd.to_numeric, errors="coerce"), 7)
     
+    sces['Stability Term Simple'] = 1/(4*sces['rho']**2)
+    
     return sces
 
 # %%
@@ -255,7 +257,7 @@ def compare_abiotic_biotic(stability_ab,
         
         dfl = pd.melt(sces.loc[sces['rho'] == example_rho,
                                    ['sigma_c',
-                                    'Stability Term',
+                                    'Stability Term Simple',
                                     'Packing ratio']],
                       ['sigma_c'])
         
@@ -419,5 +421,52 @@ feasibility_biotic = feasible_region(simulations_biotic)
 
 compare_abiotic_biotic(stability_abiotic, # .mask(feasibility_abiotic < 1),
                        stability_biotic, #.mask(feasibility_biotic < 1),
-                       sces_abiotic)
+                       sces_abiotic,
+                       example_rho=0.9)
 
+# %%
+
+def chiR_approx(x):
+    
+    gamma = x['gamma']
+    sigma_c = x['sigma_c']
+    sigma_g = x['sigma_g']
+    rho = x['rho']
+    vN = x['v_N']
+    
+    return -gamma/(2*sigma_c*sigma_g*rho*vN)
+
+sces_abiotic['chi_R_approx'] = sces_abiotic.apply(chiR_approx, axis = 1)
+
+sns.scatterplot((sces_abiotic[sces_abiotic['loss'] < 1e-4]),
+                x = 'chi_R', y = 'chi_R_approx')
+plt.show()
+
+# %%
+
+def first_denom_term(x):
+    
+    gamma = x['gamma']
+    mu_o = x['mu_o']
+    mu_c = x['mu_c']
+    Nmean = x['N_mean']
+    
+    return (mu_o + mu_c*Nmean/gamma)**2
+
+def second_denom_term(x):
+    
+    gamma = x['gamma']
+    sigma_c = x['sigma_c']
+    sigma_g = x['sigma_g']
+    rho = x['rho']
+    vN = x['v_N']
+    mu_b = x['mu_b']
+    
+    return -4*sigma_g*sigma_c*rho*vN*mu_b/gamma
+
+sces_abiotic['first denom'] = sces_abiotic.apply(first_denom_term, axis = 1)
+sces_abiotic['second denom'] = sces_abiotic.apply(second_denom_term, axis = 1)
+
+sns.scatterplot(np.log10(sces_abiotic[sces_abiotic['loss'] < 1e-4]),
+                x = 'first denom', y = 'second denom')
+plt.show()

@@ -75,7 +75,10 @@ def feasible_region(df, index = 'rho', columns = 'sigma_c'):
 
 # %%
 
-def compare_abiotic_biotic(stability_ab, stability_b, sces):
+def compare_abiotic_biotic(stability_ab,
+                           stability_b,
+                           example_simulations,
+                           sces):
     
     def stability_plot(pivot, title, ax):
         
@@ -191,16 +194,16 @@ def compare_abiotic_biotic(stability_ab, stability_b, sces):
          
     ####################### Example population dynamics ######################
     
-    stable_es = pd.read_csv("C:/Users/jamil/Documents/PhD/Data/external_resource_stability/simulations/rho_vs_sigma_abiotic_stable2.csv")
-    unstable_es = pd.read_csv("C:/Users/jamil/Documents/PhD/Data/external_resource_stability/simulations/rho_vs_sigma_abiotic_unstable2.csv")
-    
-    stable_sl = pd.read_csv("C:/Users/jamil/Documents/PhD/Data/external_resource_stability/simulations/rho_vs_sigma_biotic_stable2.csv")
-    unstable_sl = pd.read_csv("C:/Users/jamil/Documents/PhD/Data/external_resource_stability/simulations/rho_vs_sigma_biotic_unstable2.csv")
-    
-    example_dynamics(stable_es, [axs["DA_SR"], axs["DA_SC"]])
-    example_dynamics(unstable_es, [axs["DA_UR"], axs["DA_UC"]])
-    example_dynamics(stable_sl, [axs["DB_SR"], axs["DB_SC"]])
-    example_dynamics(unstable_sl, [axs["DB_UR"], axs["DB_UC"]])
+    for dynamics, axR, axC in zip(example_simulations, 
+                                  ["DA_SR", "DA_UR", "DB_SR", "DB_UR"],
+                                  ["DA_SC", "DA_UC", "DB_SC", "DB_UC"]):
+        
+        example_dynamics(dynamics, [axs[axR], axs[axC]])
+
+    #example_dynamics(stable_es, [axs["DA_SR"], axs["DA_SC"]])
+    #example_dynamics(unstable_es, [axs["DA_UR"], axs["DA_UC"]])
+    #example_dynamics(stable_sl, [axs["DB_SR"], axs["DB_SC"]])
+    #example_dynamics(unstable_sl, [axs["DB_UR"], axs["DB_UC"]])
     
     plt.savefig("C:/Users/jamil/Documents/PhD/Figures/externally_supplied_resources/simulations_rho_sigma_large_mu.png",
                 bbox_inches='tight')
@@ -217,18 +220,20 @@ simulations_biotic, stability_biotic = load_clean_simulations("rho_vs_sigma_biot
 sces_abiotic = load_clean_sces("rho_sigma_newprotocol_upd4")
 sces_abiotic = np.round(sces_abiotic, 7)
 
+stable_es = pd.read_csv("C:/Users/jamil/Documents/PhD/Data/external_resource_stability/simulations/rho_vs_sigma_abiotic_stable2.csv")
+unstable_es = pd.read_csv("C:/Users/jamil/Documents/PhD/Data/external_resource_stability/simulations/rho_vs_sigma_abiotic_unstable2.csv")
+
+stable_sl = pd.read_csv("C:/Users/jamil/Documents/PhD/Data/external_resource_stability/simulations/rho_vs_sigma_biotic_stable2.csv")
+unstable_sl = pd.read_csv("C:/Users/jamil/Documents/PhD/Data/external_resource_stability/simulations/rho_vs_sigma_biotic_unstable2.csv")
+
 feasibility_abiotic = feasible_region(simulations_abiotic)
 feasibility_biotic = feasible_region(simulations_biotic)
 
 # %%
 
-compare_abiotic_biotic(#stability_abiotic.mask(pd.pivot_table(sces_abiotic,
-                       #                                      values = "loss",
-                       #                                      index = "rho",
-                       #                                      columns = "sigma_c") > 10**(-4)),
-                       #stability_biotic.mask(feasibility_biotic < 1),
-                       stability_abiotic,
-                       stability_biotic,
+compare_abiotic_biotic(stability_abiotic.mask(feasibility_abiotic < 0.8),
+                       stability_biotic.mask(feasibility_biotic < 0.8),
+                       [stable_es, unstable_es, stable_sl, unstable_sl],
                        sces_abiotic)
 
 # %%
