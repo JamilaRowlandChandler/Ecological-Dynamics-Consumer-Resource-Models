@@ -486,7 +486,7 @@ class gLV():
                    initial_abundances : np.typing.NDArray,
                    assign : bool = True):
         
-        def gLV(t, species, A):
+        def dNdt(t, species, A):
             
             # change in consumer abundances over time
             dNdt = species * (1 - np.sum(A * species, axis = 1))
@@ -507,7 +507,7 @@ class gLV():
                 
                 return 1 # the ode solver continues because the returned value is non-zero.
                 
-        sol = solve_ivp(gLV,
+        sol = solve_ivp(dNdt,
                         [0, t_end],
                         initial_abundances, 
                         args = (self.interaction_matrix, ),

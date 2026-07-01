@@ -26,12 +26,15 @@ sys.path.insert(0, "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dy
                     "/resource_diversity_stability(sl)")
 from simulation_functions import pickle_dump
 
+
 # %%
 
 def call_egLV(CRM_community : Literal["SL_CRM"], cavity_phi_R : float):
     
     # initialise eLV (generate growth rates, interaction matrices, etc from the CRM)
-    gLV_community = eLV_SL(CRM_community, cavity_phi_R)
+    #gLV_community = eLV_SL(CRM_community, cavity_phi_R)
+    gLV_community = eLV_SL(None, None)
+    gLV_community.elv_from_crm(CRM_community, cavity_phi_R).generate_elv_parameters()
     
     # calculate mean interaction strength, self-inhibition etc
     gLV_community.interaction_statistics()

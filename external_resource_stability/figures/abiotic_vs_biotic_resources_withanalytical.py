@@ -13,9 +13,10 @@ import sys
 from scipy.optimize import curve_fit
 
 from matplotlib import pyplot as plt
-from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.patches import Rectangle
 import matplotlib.patheffects as patheffects
+from matplotlib import colors
+
 
 os.chdir('C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/external_resource_stability/figures')
 
@@ -124,8 +125,20 @@ def compare_abiotic_biotic(stability_ab,
                        title,
                        ax):
         
+        #pal = sns.color_palette("Purples_r",
+        #                        desat=0,
+         #                       n_colors=256)
+         
+        c_white = colors.colorConverter.to_rgba('white',
+                                                alpha = 0)
+        c_black= colors.colorConverter.to_rgba('#595959ff',
+                                               alpha = 1)
+        cmap_rb = colors.LinearSegmentedColormap.from_list("rb_cmap",
+                                                           [c_black, c_white],
+                                                           256)
+
         subfig = sns.heatmap(pivot, ax = ax,
-                             vmin = 0, vmax = 1, cbar = True, cmap = 'Purples_r')
+                             vmin = 0, vmax = 1, cbar = True, cmap = cmap_rb) #pal)
         
         subfig.axhline(0, 0, 1, color = 'black', linewidth = 2)
         subfig.axhline(pivot.shape[0], 0, 1,
@@ -257,7 +270,7 @@ def compare_abiotic_biotic(stability_ab,
         
         dfl = pd.melt(sces.loc[sces['rho'] == example_rho,
                                    ['sigma_c',
-                                    'Stability Term Simple',
+                                    'Stability Term',
                                     'Packing ratio']],
                       ['sigma_c'])
         
@@ -265,7 +278,9 @@ def compare_abiotic_biotic(stability_ab,
                                          np.min(dfl['value']) - 0.05),
                                         np.max(dfl['sigma_c']) + 0.1 - stability_threshold,
                                         np.max(dfl['value']) + 0.15 - np.min(dfl['value']),
-                                        fill = True, color = '#8f8cc0ff', zorder = 0))
+                                        fill = True,
+                                        color = '#595959ff', #'#8f8cc0ff',
+                                        zorder = 0))
         
         axCondition.vlines(stability_threshold,
                            np.min(dfl['value']) - 0.05, np.max(dfl['value']) + 0.09,
@@ -317,31 +332,52 @@ def compare_abiotic_biotic(stability_ab,
         
         #############
         
-        axCompareCondition.hlines(example_rho**2,
-                                  np.min(dfl['sigma_c']), np.max(dfl['sigma_c']),
-                                  zorder = 1,
-                                  color = '#00557aff',
-                                  linewidth = 4)
+        dfl_2 = dfl
+        dfl_2.loc[dfl['variable'] == "Stability Term", "value"] = example_rho**2
         
-        axCompareCondition.hlines(example_rho**2,
-                                  np.min(dfl['sigma_c']), np.max(dfl['sigma_c']),
-                                  zorder = 2,
-                                  color = '#00557aff',
-                                  linewidth = 3.5)
-        
-        sns.lineplot(dfl[dfl['variable'] == 'Packing ratio'],
-                     x = 'sigma_c', y = 'value',
-                     color = 'black',
+        sns.lineplot(dfl_2,
+                     x = 'sigma_c', y = 'value', hue = 'variable',
                      ax = axCompareCondition, zorder = 10,
-                     linewidth = 3)
+                     linewidth = 3,
+                     palette = sns.color_palette(['black', 'black'], 2))
         
-        sns.lineplot(dfl[dfl['variable'] == 'Packing ratio'],
-                     x = 'sigma_c', y = 'value',
-                     color = '#3dc27aff',
-                     ax = axCompareCondition, zorder = 12,
+        sns.lineplot(dfl_2,
+                     x = 'sigma_c', y = 'value', hue = 'variable',
+                     ax = axCompareCondition, zorder = 10,
+                     palette = sns.color_palette(['#00557aff', '#3dc27aff'], 2),
                      linewidth = 2.5, 
                      marker = 'o', markersize = 8,
                      markeredgewidth = 0.4, markeredgecolor = 'black')
+        
+        #axCompareCondition.hlines(example_rho**2,
+        #                          np.min(dfl['sigma_c']), np.max(dfl['sigma_c']),
+        #                          zorder = 1,
+        #                          color = '#00557aff',
+        #                          linewidth = 4)
+        
+        #axCompareCondition.hlines(example_rho**2,
+        #                          np.min(dfl['sigma_c']), np.max(dfl['sigma_c']),
+        #                          zorder = 2,
+        #                          color = '#00557aff',
+        #                          linewidth = 3.5)
+        
+        #sns.lineplot(#dfl[dfl['variable'] == 'Packing ratio'],
+        #             #x = 'sigma_c', y = 'value',
+        #             x = dfl.loc[dfl['variable'] == 'Packing ratio', 'sigma_c'],
+        #             y = 4*dfl.loc[dfl['variable'] == 'Packing ratio', 'value'],
+        #             color = 'black',
+        #             ax = axCompareCondition, zorder = 10,
+        #             linewidth = 3)
+        
+        #sns.lineplot(#dfl[dfl['variable'] == 'Packing ratio'],
+        #             #x = 'sigma_c', y = 'value',
+        #             x = dfl.loc[dfl['variable'] == 'Packing ratio', 'sigma_c'],
+        #             y = 4*dfl.loc[dfl['variable'] == 'Packing ratio', 'value'],
+        #             color = '#3dc27aff',
+        #             ax = axCompareCondition, zorder = 12,
+        #             linewidth = 2.5, 
+        #             marker = 'o', markersize = 8,
+        #             markeredgewidth = 0.4, markeredgecolor = 'black')
         
         axCompareCondition.set_xlabel('')
         axCompareCondition.set_xticks(sigma_labels,
@@ -350,9 +386,11 @@ def compare_abiotic_biotic(stability_ab,
         axCompareCondition.set_ylabel('')
         axCompareCondition.set_ylim([np.min(dfl['value']) - 0.03, np.max(dfl['value']) + 0.1])
         axCompareCondition.tick_params(axis='both', which='major', labelsize=10)
+        axCompareCondition.legend_.remove()
 
         axCompareCondition.text(-0.22, 0,
-                        'correlation' + r'${}^2$', fontsize = 10, weight = 'bold', color = '#00557aff',
+                        'correlation' + r'${}^2$',
+                        fontsize = 10, weight = 'bold', color = '#00557aff',
                         path_effects = [patheffects.withStroke(linewidth=0.5, foreground='black')],
                         verticalalignment = 'bottom', horizontalalignment = 'left',
                         rotation = 90, transform = axCompareCondition.transAxes)
@@ -382,9 +420,9 @@ def compare_abiotic_biotic(stability_ab,
                                   gridspec_kw = {'hspace' : 0.0, 'wspace' : 0})
     
     stability_plot(stability_ab, "Externally-supplied resources", axs["PA"])
-    #stability_plot(stability_b, "Self-limiting resources", axs["PB"])
+    #stability_plot(stability_b, "Self-limiting resources", axs["PA"])
     
-    axs["PA"].set_facecolor('grey')
+    #axs["PA"].set_facecolor('grey')
     #axs["PB"].set_facecolor('grey')
     
     stable_thresh_abiotic = stability_boundary(sces,
@@ -407,10 +445,198 @@ def compare_abiotic_biotic(stability_ab,
 
 # %%
 
+def abiotic_stability_cond(stability_ab,
+                           sces,
+                           example_rho=0.8):
+    
+    ################
+    
+    def ndimension_fit(xvals, yvals,
+                       dim = 10):
+        
+        smoother = np.poly1d(np.polyfit(xvals, yvals, dim))
+        
+        return smoother
+    
+    def log_fit(xvals, yvals):
+        
+        fit_p, _ = curve_fit(log,
+                             xvals, yvals,
+                             bounds = [0, 1e6])
+        
+        return fit_p
+    
+    def log(x,
+            a, b):
+        
+        return a + b*np.log(x) #a - b/x
+    
+    def fitted_threshold(x,
+                         stability_distance = 'stability_distance'):
+        
+        smoothed_x = np.arange(np.min(x['sigma_c']),
+                               np.max(x['sigma_c']) + 2,
+                               0.01)
+        
+        smoother = ndimension_fit(x['sigma_c'].to_numpy(),
+                                  x[stability_distance].to_numpy())
+        
+        stability_threshold = smoothed_x[np.abs(smoother(smoothed_x)).argmin()]
+        
+        return stability_threshold
+        
+    def stability_boundary(sces,
+                           fit_method = "log"):
+         
+        sces_thresh = (sces.loc[(sces['loss'] < 10**(-2)) & (sces['rho'] < 1),
+                               ['rho','sigma_c', 'stability_distance']]
+                       .groupby('rho').apply(fitted_threshold, include_groups=False)
+                       .to_frame("sigma_c_thresh")
+                       .reset_index()
+                       )
+        
+        return sces_thresh
+                                                                            
+    def example_pstability(pivot,
+                           sces,
+                           stable_threshold,
+                           example_rho,
+                           sigmas,
+                           axPstable):
+                           
+        stability_threshold = stable_threshold.loc[stable_threshold['rho'] == example_rho,
+                                                   'sigma_c_thresh'].to_numpy()[0]
+        
+        example_stability = pivot.loc[example_rho, :].to_frame()
+        example_stability.reset_index(inplace = True)
+        example_stability.rename(columns = {example_rho : 'P(stability)'},
+                                 inplace = True)
+        
+        axPstable.vlines(stability_threshold,
+                         0, 1,
+                         zorder = 3,
+                         color = '#bd6900ff',
+                         linewidth = 2.5)
+        
+        sns.lineplot(data = example_stability,
+                     x = 'sigma_c', y = 'P(stability)',
+                     ax = axPstable,
+                     color = 'black',
+                     linewidth = 1.5,
+                     err_style = "bars", errorbar = ("pi", 100),
+                     marker = "o",
+                     zorder = 1)
+        
+        se_95 = 1.96*np.sqrt((example_stability['P(stability)'] * \
+                              (1 - example_stability['P(stability)']))/30)
+        
+        axPstable.errorbar(x = example_stability['sigma_c'], 
+                           y =  example_stability['P(stability)'],
+                           yerr = se_95,
+                           fmt = 'none',
+                           ecolor = 'black',
+                           linewidth = 1,
+                           zorder = 2) 
+        
+        axPstable.set_xticks(sigmas[::9],
+                             labels = sigmas[::9],
+                             fontsize = 8,
+                             rotation = 0)
+        
+        axPstable.yaxis.set_tick_params(labelsize = 8)
+        
+        axPstable.set_xlabel('')
+        axPstable.set_ylabel('prob. (stability)',
+                             fontsize = 10, weight = 'bold',
+                             verticalalignment = 'center', horizontalalignment = 'center')
+        
+        sns.despine(ax = axPstable)
+        
+        ############
+        
+    def stability_condition(sces,
+                            example_rho,
+                            sigmas,
+                            axCondition):
+        
+        sces['biotic_stability_distance'] = sces['rho'] - sces['Packing ratio']
+        
+        dfl = pd.melt(sces.loc[sces['rho'] == example_rho,
+                                   ['sigma_c',
+                                    'stability_distance',
+                                    'biotic_stability_distance']],
+                      ['sigma_c'])
+        
+        axCondition.add_patch(Rectangle((np.min(sigmas) - 0.02,
+                                         np.min(dfl['value']) - 0.05),
+                                        np.max(sigmas) + 0.02,
+                                        0 - (np.min(dfl['value']) - 0.05),
+                                        fill = True,
+                                        color = '#838383ff', #'#8f8cc0ff',
+                                        zorder = 0))
+          
+        sns.lineplot(dfl,
+                     x = 'sigma_c', y = 'value', hue = 'variable',
+                     ax = axCondition, zorder = 10,
+                     linewidth = 2,
+                     palette = sns.color_palette(['black', 'black'], 2))
+        
+        sns.lineplot(dfl,
+                     x = 'sigma_c', y = 'value', hue = 'variable',
+                     ax = axCondition, zorder = 10,
+                     palette = sns.color_palette(['#00557aff', '#3dc27aff'], 2),
+                     linewidth = 1.5, 
+                     marker = 'o', markersize = 5,
+                     markeredgewidth = 0.4, markeredgecolor = 'black')
+        
+        axCondition.set_xlabel('')
+        axCondition.set_xticks(sigmas[::9],
+                               sigmas[::9],
+                               fontsize = 8,
+                               rotation = 0)
+        axCondition.set_ylabel('')
+        axCondition.tick_params(axis='both', which='major', labelsize=8)
+        axCondition.legend_.remove()
+
+    ##################################
+     
+    sigmas = stability_ab.columns.to_numpy()
+    
+    sns.set_style('ticks')
+   
+    fig, (ax1, ax2) = plt.subplots(1, 2,
+                                   figsize = (4, 2),
+                                   layout = 'constrained')
+
+    stable_thresh_abiotic = stability_boundary(sces)
+    
+    example_pstability(stability_ab.loc[:, 0.2:],
+                       sces,
+                       stable_thresh_abiotic,
+                       example_rho,
+                       sigmas,
+                       ax1)
+    
+    stability_condition(sces,
+                        example_rho,
+                        sigmas,
+                        ax2)
+    
+    plt.savefig("C:/Users/jamil/Documents/PhD/Figures/externally_supplied_resources/simulations_analytics_rho_sigma_small_mu.png",
+                bbox_inches='tight')
+    plt.savefig("C:/Users/jamil/Documents/PhD/Figures/externally_supplied_resources/simulations_analytics_rho_sigma_small_mu.svg",
+                bbox_inches='tight')
+                 
+    plt.show()
+
+
+# %%
+
 simulations_abiotic, stability_abiotic  = load_clean_simulations("rho_vs_sigma_abiotic_smallmu.csv")
 simulations_biotic, stability_biotic = load_clean_simulations("rho_vs_sigma_biotic_smallmu.csv")
 
 sces_abiotic = load_clean_sces("rho_sigma_smaller_mu")
+sces_abiotic['stability_distance'] = sces_abiotic['Packing ratio'] - sces_abiotic['Stability Term']
 
 # %%
 
@@ -422,7 +648,13 @@ feasibility_biotic = feasible_region(simulations_biotic)
 compare_abiotic_biotic(stability_abiotic, # .mask(feasibility_abiotic < 1),
                        stability_biotic, #.mask(feasibility_biotic < 1),
                        sces_abiotic,
-                       example_rho=0.9)
+                       example_rho=0.8)
+
+# %%
+
+abiotic_stability_cond(stability_abiotic,
+                       sces_abiotic,
+                       example_rho=0.8)
 
 # %%
 
@@ -434,7 +666,11 @@ def chiR_approx(x):
     rho = x['rho']
     vN = x['v_N']
     
-    return -gamma/(2*sigma_c*sigma_g*rho*vN)
+    mu_o = x['mu_o']
+    mu_c = x['mu_c']
+    Nmean = x['N_mean']
+    
+    return (-gamma/(2*sigma_c*sigma_g*rho*vN))*(1 - (mu_o + mu_c*Nmean/gamma)/((mu_o + mu_c*Nmean/gamma)**2 - 4*sigma_c*sigma_g*rho*vN/gamma)**0.5)
 
 sces_abiotic['chi_R_approx'] = sces_abiotic.apply(chiR_approx, axis = 1)
 
@@ -451,22 +687,29 @@ def first_denom_term(x):
     mu_c = x['mu_c']
     Nmean = x['N_mean']
     
-    return (mu_o + mu_c*Nmean/gamma)**2
+    return np.abs(mu_o + mu_c*Nmean/gamma)
 
 def second_denom_term(x):
     
+    #gamma = x['gamma']
+    #sigma_c = x['sigma_c']
+    #sigma_g = x['sigma_g']
+    #rho = x['rho']
+    #vN = x['v_N']
+    #mu_b = x['mu_b']
+    
+    #return -4*sigma_g*sigma_c*rho*vN*mu_b/gamma
+    
     gamma = x['gamma']
     sigma_c = x['sigma_c']
-    sigma_g = x['sigma_g']
-    rho = x['rho']
-    vN = x['v_N']
-    mu_b = x['mu_b']
+    Nfluct = x['q_N']
+    sigma_o = x['sigma_o']
     
-    return -4*sigma_g*sigma_c*rho*vN*mu_b/gamma
+    return np.abs((sigma_c**2 * Nfluct)/gamma + sigma_o**2)
 
 sces_abiotic['first denom'] = sces_abiotic.apply(first_denom_term, axis = 1)
 sces_abiotic['second denom'] = sces_abiotic.apply(second_denom_term, axis = 1)
 
-sns.scatterplot(np.log10(sces_abiotic[sces_abiotic['loss'] < 1e-4]),
+sns.scatterplot(sces_abiotic[sces_abiotic['loss'] < 1e-4],
                 x = 'first denom', y = 'second denom')
 plt.show()

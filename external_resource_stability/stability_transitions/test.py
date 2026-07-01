@@ -28,17 +28,17 @@ from community_level_properties import max_le
 
 no_species = 100
 no_resources = 100
-mu = 1
-sigma = 3.1
+mu = 50
+sigma = 10.5
 mu_d = 1
 sigma_d = 0.1
-mu_b = 1
-sigma_b = 0.1
-o = 1
-rho = 0.9
+mu_b = 10**(-5)
+sigma_b = 0.0
+o = 10**(-5)
+rho = 0.4
 
-t_end = 4000
-no_init_conds = 2
+t_end = 7000
+no_init_conds = 1
 
 
 crm_community = Consumer_Resource_Model("Externally-supplied resources",
@@ -73,8 +73,8 @@ fig, (ax1, ax2) = plt.subplots(2, 1, figsize = (8, 5))
 ax1.plot(crm_community.ODE_sols[0].t,
          crm_community.ODE_sols[0].y[:no_species, :].T)
 
-ax2.plot(crm_community.ODE_sols[1].t,
-         crm_community.ODE_sols[1].y[:no_species, :].T)
+ax2.plot(crm_community.ODE_sols[0].t,
+         crm_community.ODE_sols[0].y[no_species:, :].T)
 
 plt.show()
 

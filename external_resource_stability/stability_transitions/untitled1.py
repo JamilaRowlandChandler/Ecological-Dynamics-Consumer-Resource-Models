@@ -1,5 +1,12 @@
 # -*- coding: utf-8 -*-
 """
+Created on Fri Apr 24 17:41:08 2026
+
+@author: jamil
+"""
+
+# -*- coding: utf-8 -*-
+"""
 Created on Fri Nov 14 14:24:01 2025
 
 @author: jamil
@@ -24,33 +31,37 @@ from simulation_functions import CRM_across_parameter_space, \
 
 sys.path.insert(0,  file_directory_name.removesuffix("\\external_resource_stability\\stability_transitions") + \
                 "\\cavity_method_functions")
-import self_consistency_equation_functions as sce
+from self_consistency_equation_functions import variable_fixed_parameters, \
+    parameter_combinations
 
 # %%
 
 def rho_sigma(rho_range,
               sigma_range,
+              n,
               fixed_parameters,
-              subdirectory,
+              subdirectory = 'external_resource_stability/simulations/influx_outflux',
               save_method = 'v3',
               **kwargs):
     
-    parameters = generate_parameters(rho_range, sigma_range, fixed_parameters)
+    parameters = generate_parameters(rho_range,
+                                     sigma_range,
+                                     n,
+                                     fixed_parameters)
     
     CRM_across_parameter_space(parameters,
-                               subdirectory,
                                ['rho', 'sigma_M'],
                                save_method=save_method,
-                               model = 'Externally-supplied resources',
+                               model = 'Hybrid resource supply',
                                **kwargs)
                     
 # %%
 
 def generate_parameters(rho_range, sigma_range, n, fixed_parameters):
     
-    rho_sigma_combos = np.unique(sce.parameter_combinations([rho_range,
-                                                             sigma_range],
-                                                            1),
+    rho_sigma_combos = np.unique(parameter_combinations([rho_range,
+                                                         sigma_range],
+                                                        n),
                                     axis = 1)
     
     variable_parameters = np.vstack([rho_sigma_combos,
@@ -72,11 +83,23 @@ def generate_parameters(rho_range, sigma_range, n, fixed_parameters):
 
 # %%
 
-rhos = np.arange(0.1, 1.1, 0.1)
-sigmas = np.arange(2, 13, 1)
+rhos = np.linspace(0.1, 1, 10) # np.linspace(0, 1, 11)
+sigmas = np.linspace(2, 8, 11)
 
 # %%
 
-rho_sigma(rhos, sigmas, 1,
+rho_sigma(rhos, sigmas, 11,
           dict(mu_c = 3, mu_g = 3, d = 1, b = 1, M = 100, S = 300))
 
+# %%
+
+df_simulation = generate_simulation_df("C:/Users/jamil/Documents/PhD/Data files and figures/Ecological-Dynamics-and-Community-Selection/Ecological Dynamics/Data/" \
+                                       + 'external_resource_stability/simulations/rho_vs_sigma')
+    
+# %%
+
+df_simulation.groupby(['rho', 'sigma_c'])['phi_N'].apply('mean')
+    
+# %%
+
+le_pivot_r(df_simulation, index = 'sigma_c', columns = 'rho')

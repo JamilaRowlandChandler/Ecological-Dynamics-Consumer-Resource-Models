@@ -42,6 +42,41 @@ community.simulate_community(1000, 1)
 plt.plot(community.ODE_sols[0].t, community.ODE_sols[0].y[:150, :].T)
 plt.show()
 
+# %%
+
+M = 150
+mu = 100
+sigma = 3
+
+community = Consumer_Resource_Model("Self-limiting resource supply, leached",
+                                    M,
+                                    M)
+
+community.growth_consumption_rates('coupled by rho',
+                                   mu/M, sigma/np.sqrt(M),
+                                   mu/M, sigma/np.sqrt(M),
+                                   rho = 1)
+community.model_specific_rates(death_method = "normal",
+                               death_args = {'mu' : 1.0, 'sigma' : 0.0},
+                               resource_growth_method = "normal",
+                               resource_growth_args = {'mu' : 1.0,
+                                                       'sigma' : 0.0},
+                               resource_interaction_method = "normal",
+                               resource_interaction_args = {'mu' : 0.3,
+                                                            'sigma' : 0.3})
+
+community.simulate_community(7000, 1)
+
+#community.calculate_community_properties() 
+
+#community.lyapunov_exponent = max_le(community, community.ODE_sols[0].y[:, -1],
+#                                         T = 1000, perturbation = 1e-6)
+#print(community.lyapunov_exponent)
+
+plt.plot(community.ODE_sols[0].t,
+         community.ODE_sols[0].y[:M, :].T)
+plt.show()
+
 
 # %%
 

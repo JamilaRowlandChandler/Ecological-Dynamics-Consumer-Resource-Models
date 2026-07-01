@@ -15,7 +15,7 @@ from matplotlib import pyplot as plt
 
 os.chdir('C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/resource_diversity_stability(sl)/cavity_solutions_vs_simulations')
 
-sys.path.insert(0, "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models" + \
+sys.path.insert(0, "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/" + \
                     "resource_diversity_stability(sl)")
 from simulation_functions import generic_heatmaps_multi
 
@@ -81,3 +81,16 @@ def plot_instability_distances():
     plt.show()
     
 plot_instability_distances()
+
+# %%
+
+solved_sces_mu_b['Instability distance'] = \
+    solved_sces_mu_b['rho'] - np.sqrt(solved_sces_mu_b['Species packing'])
+    
+mub_pivot = pd.pivot_table(solved_sces_mu_b,
+                           index = 'M',
+                           columns = 'mu_b',
+                           values = 'Instability distance',
+                           aggfunc = 'mean')
+
+print(mub_pivot)

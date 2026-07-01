@@ -10,12 +10,9 @@ import pandas as pd
 import seaborn as sns
 import os
 import sys
-from scipy.optimize import curve_fit
 
 from matplotlib import pyplot as plt
-from matplotlib.colors import LinearSegmentedColormap
-from matplotlib.patches import Rectangle
-import matplotlib.patheffects as patheffects
+from matplotlib.colors import colorConverter, LinearSegmentedColormap
 
 os.chdir('C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/external_resource_stability/figures')
 
@@ -44,6 +41,9 @@ def load_clean_simulations(data_location):
     
     df.rename(columns = {"maxLe" : "Max. lyapunov exponent"}, inplace = True)
     df = np.round(df, 7)
+    
+    df.loc[df["EndTime"] < np.round(np.max(df["EndTime"]), 5),
+           "Max. lyapunov exponent"] = np.nan
 
     stability_pivot = le_pivot_r(df, index = "rho", columns = "sigma_c")[0]
     
@@ -76,20 +76,44 @@ def feasible_region(df, index = 'rho', columns = 'sigma_c'):
 # %%
 
 def compare_abiotic_biotic(stability_ab,
+                           feasibility_ab,
                            stability_b,
+                           feasibility_b,
                            example_simulations,
                            sces):
     
-    def stability_plot(pivot, title, ax):
+    def stability_plot(stability_pivot,
+                       feasibility_pivot,
+                       title,
+                       ax):
         
-        subfig = sns.heatmap(pivot, ax = ax,
-                             vmin = 0, vmax = 1, cbar = True, cmap = 'Purples_r')
+        cmap_stable = LinearSegmentedColormap.from_list("cmap_feasible",
+                                                        [(0.0, colorConverter.to_rgba('#30007dff', alpha = 1)),
+                                                         #(0.999, colorConverter.to_rgba('#e4e4e4ff', alpha=1)),
+                                                         (1.0, colorConverter.to_rgba('white', alpha=0))]) 
+      
+        cmap_feasible = LinearSegmentedColormap.from_list("cmap_feasible",
+                                                          [(0.0, colorConverter.to_rgba('#595959ff', alpha = 1)),
+                                                           #(0.999, colorConverter.to_rgba('#e4e4e4ff', alpha=1)),
+                                                           (1.0, colorConverter.to_rgba('white', alpha=0))]) 
+        
+        subfig = sns.heatmap(stability_pivot,
+                             ax = ax,
+                             vmin = 0, vmax = 1,
+                             cbar = True,
+                             cmap = cmap_stable)
+    
+        sns.heatmap(feasibility_pivot,
+                    ax = ax,
+                    vmin = 0, vmax = 1,
+                    cbar = False,
+                    cmap = cmap_feasible)
         
         subfig.axhline(0, 0, 1, color = 'black', linewidth = 2)
-        subfig.axhline(pivot.shape[0], 0, 1,
+        subfig.axhline(stability_pivot.shape[0], 0, 1,
                        color = 'black', linewidth = 2)
         subfig.axvline(0, 0, 1, color = 'black', linewidth = 2)
-        subfig.axvline(pivot.shape[1], 0, 1,
+        subfig.axvline(stability_pivot.shape[1], 0, 1,
                        color = 'black', linewidth = 2)
         
         ax.set_yticks(np.arange(0.5, len(rhos) + 0.5, 2),
@@ -186,11 +210,18 @@ def compare_abiotic_biotic(stability_ab,
                                   height_ratios = [2, 2, 2, 2, 2],
                                   gridspec_kw = {'hspace' : 0.0, 'wspace' : 0})
     
-    stability_plot(stability_ab, "Externally-supplied resources", axs["PA"])
-    stability_plot(stability_b, "Self-limiting resources", axs["PB"])
+    stability_plot(stability_ab,
+                   feasibility_ab,
+                   "Externally-supplied resources",
+                   axs["PA"])
     
-    axs["PA"].set_facecolor('grey')
-    axs["PB"].set_facecolor('grey')
+    stability_plot(stability_b,
+                   feasibility_b,
+                   "Self-limiting resources",
+                   axs["PB"])
+    
+    axs["PA"].set_facecolor('white')
+    axs["PB"].set_facecolor('white')
          
     ####################### Example population dynamics ######################
     
@@ -231,8 +262,10 @@ feasibility_biotic = feasible_region(simulations_biotic)
 
 # %%
 
-compare_abiotic_biotic(stability_abiotic.mask(feasibility_abiotic < 0.8),
-                       stability_biotic.mask(feasibility_biotic < 0.8),
+compare_abiotic_biotic(stability_abiotic,
+                       feasibility_abiotic,
+                       stability_biotic,
+                       feasibility_biotic,
                        [stable_es, unstable_es, stable_sl, unstable_sl],
                        sces_abiotic)
 
