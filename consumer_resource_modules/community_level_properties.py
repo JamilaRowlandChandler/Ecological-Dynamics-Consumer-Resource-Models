@@ -223,22 +223,23 @@ class CommunityPropertiesInterface:
 # %%
 
 def max_le(community : Union["SL_CRM", "SL_SI_CRM", "SL_TL_CRM", "ES_CRM",
-                             "Hybrid_CRM",
+                             "Hybrid_CRM", "SL_CRPM", "MP_CRM",
                              "eLV_SL", "gLV"],
            initial_conditions : npt.NDArray,
            T : float = 100,
            perturbation : float = 1e-8):
-    
+
     match type(community).__name__:
-        
+
         case glv if glv in ["eLV_SL", "gLV"]:
-            
+
             original_traj, perturbed_traj = trajectory_LV(community,
                                                           initial_conditions,
                                                           T,
                                                           perturbation)
-            
-        case CRM if CRM in ["SL_CRM", "SL_SI_CRM", "ES_CRM", "Hybrid_CRM"]:
+
+        case CRM if CRM in ["SL_CRM", "SL_SI_CRM", "ES_CRM", "Hybrid_CRM",
+                            "SL_CRPM", "MP_CRM"]:
             
             original_traj, perturbed_traj = trajectory(community,
                                                        initial_conditions,
@@ -280,7 +281,8 @@ def max_le(community : Union["SL_CRM", "SL_SI_CRM", "SL_TL_CRM", "ES_CRM",
 
 ############
 
-def trajectory(community : Union["SL_CRM", "SL_SI_CRM", "ES_CRM"],
+def trajectory(community : Union["SL_CRM", "SL_SI_CRM", "ES_CRM", "Hybrid_CRM",
+                                 "SL_CRPM", "MP_CRM"],
                initial_conditions : npt.NDArray,
                T : float,
                perturbation : float):
