@@ -23,13 +23,13 @@ def Consumer_Resource_Model(model : Literal["Self-limiting resource supply",
                                             "Externally-supplied resources",
                                             "Hybrid resource supply",
                                             "Metabolic pathways"],
+                            pool_sizes : Union[list[int], tuple[int], dict[str, int],
+                                               npt.NDArray, None] = None,
                             no_species : Union[int, None] = None,
-                            no_resources : Union[int, None] = None,
-                            trophic_levels : Union[int, None] = None,
-                            pool_sizes : Union[int, None] = None):
-    
+                            no_resources : Union[int, None] = None):
+
     '''
-    
+
     Wrapper for different consumer resource model classes
 
     Parameters
@@ -37,20 +37,22 @@ def Consumer_Resource_Model(model : Literal["Self-limiting resource supply",
     model : str
         Type of consumer resource model. Options are:
             "Self-limiting resource supply" - resources grow logistically
-            "Self-limiting resource supply, self-inhibition" - same as 
+            "Self-limiting resource supply, self-inhibition" - same as
             "Self-limiting resource supply", but with direct consumer self-inhibition
             "Externally-supplied resources" - chemostat-style resource dynamics
             (constant influx + dilution)
             "Metabolic pathways" - consumer-resource dynamics with a structured
             metabolic network determining consumer growth and resource byproducts
+    pool_sizes : list, tuple, dict, or np.ndarray
+        Size of each pool. If given as a list/tuple/array, the 1st entry is
+        the resource pool size, the 2nd entry is the species pool size (and,
+        for "Self-limiting resource supply, multi-trophic level", subsequent
+        entries are the pool sizes of higher trophic levels).
+        Used by every model except "Self-limiting resource supply, leached".
     no_species : int
-        species pool size
+        species pool size. Only used by "Self-limiting resource supply, leached".
     no_resources : int
-        resource pool size
-    pool_sizes : tuple, list, or np.ndarray
-        Used by "Self-limiting resource supply, multi-trophic level" (trophic
-        level pool sizes) and "Metabolic pathways" (pool_sizes[0] = resource
-        pool size, pool_sizes[1] = species pool size)
+        resource pool size. Only used by "Self-limiting resource supply, leached".
 
     Raises
     ------
@@ -63,39 +65,39 @@ def Consumer_Resource_Model(model : Literal["Self-limiting resource supply",
         Instance of some consumer-resource model class.
 
     '''
-    
+
     match model:
-        
+
         case "Self-limiting resource supply":
-            
-            instance = SL_CRM(no_species, no_resources)
-            
+
+            instance = SL_CRM(pool_sizes)
+
         case "Self-limiting resource supply, leached":
-            
+
             instance = SL_CRPM(no_species, no_resources)
-            
+
         case "Self-limiting resource supply, self-inhibition":
-            
-            instance = SL_SI_CRM(no_species, no_resources)
-            
+
+            instance = SL_SI_CRM(pool_sizes)
+
         case "Self-limiting resource supply, multi-trophic level":
-            
-            instance = SL_TL_CRM(trophic_levels, pool_sizes)
-            
+
+            instance = SL_TL_CRM(len(pool_sizes), pool_sizes)
+
         case "Externally-supplied resources":
-            
-            instance = ES_CRM(no_species, no_resources)
-            
+
+            instance = ES_CRM(pool_sizes)
+
         case "Hybrid resource supply":
 
-            instance = Hybrid_CRM(no_species, no_resources)
+            instance = Hybrid_CRM(pool_sizes)
 
         case "Metabolic pathways":
 
             instance = MP_CRM(pool_sizes)
 
         case _:
-            
+
             raise Exception('You have not selected an exisiting model.\n' + \
                   'Please chose from either "Self-limiting resource supply"' + \
                       '"Self-limiting resource supply, self-inhibition"' + \
@@ -115,49 +117,59 @@ class SL_CRM(ParametersInterface,
     
     '''
     
-    def __init__(self, no_species : int, no_resources : int):
-        
+    def __init__(self, pool_sizes : Union[list[int], tuple[int], dict[str, int],
+                                          npt.NDArray]):
+
         '''
-        
+
         Initiate model
-        
+
         Parameters
         ----------
-        no_species : int
-            species pool size
-        no_resources : int
-            resource pool size
+        pool_sizes : list, tuple, dict, or np.ndarray
+            Size of each pool - 1st entry (or 'no_resources') is the resource
+            pool size, 2nd entry (or 'no_species') is the species pool size.
 
         Returns
         -------
         None.
 
         '''
-        
+
         # assign species and resource pool size as class attributes
-        self.no_species = no_species
-        self.no_resources = no_resources
-        
+        if isinstance(pool_sizes, (list, tuple, np.ndarray)):
+
+            self.no_resources, self.no_species = pool_sizes
+
+        else:
+
+            self.no_resources, self.no_species = \
+                pool_sizes['no_resources'], pool_sizes['no_species']
+
+        # make sure pool sizes are in the right order for generating initial
+        # conditions and supplying them to your ODE
+        self.pool_sizes = [self.no_resources, self.no_species]
+
     def model_specific_rates(self,
-                             death_method : 
-                                 Literal['normal', 'constant', 'user-supplied'] 
+                             death_method :
+                                 Literal['normal', 'constant', 'user-supplied']
                                  = 'constant',
                              death_args : Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
                                                 TypedDict('constant', {'d' : float}),
                                                 TypedDict('user-supplied', {'d' : npt.NDArray})]
                              = {'d' : 1},
-                             resource_growth_method : 
-                                 Literal['normal', 'constant', 'user-supplied'] 
+                             resource_growth_method :
+                                 Literal['normal', 'constant', 'user-supplied']
                                  = 'constant',
-                             resource_growth_args : 
+                             resource_growth_args :
                                  Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
                                        TypedDict('constant', {'b' : float}),
                                        TypedDict('user-supplied', {'b' : npt.NDArray})]
                                  = {'b' : 1}):
-        
+
         '''
-        
-        Generate parameters specific to the CRM with self-limiting resource 
+
+        Generate parameters specific to the CRM with self-limiting resource
         dynamics - consumer death rates and intrinsic resource growth rates
 
 
@@ -174,13 +186,13 @@ class SL_CRM(ParametersInterface,
             e.g., {'mu': mean, 'sigma' : standard deviation}
             If 'constant', the key is the parameter name, argument is the fixed value
             e.g., {'d' : val}
-            If 'used-supplied', argument is the array of death rates 
+            If 'used-supplied', argument is the array of death rates
             e.g., {'d' : array_of_vals}
         resource_growth_method : str
             Method used to generate intrinsic resource growth rates. Options are
             the same as death_method, but named 'b' rather than 'd'
         resource_growth_args : dict
-            Arguments for resource_growth_method. Options are the same as 
+            Arguments for resource_growth_method. Options are the same as
             death_method args.
 
         Returns
@@ -188,31 +200,27 @@ class SL_CRM(ParametersInterface,
         None.
 
         '''
-        
-        # labels used to assign parameters as object attributes
-        p_labels = ['d', 'b']
-        
-        # dimensions for death rates and intrinsic growth rates
-        dims_list = [(self.no_species, ), (self.no_resources, )]
-        
-        # generate parameters used the other_parameter_methods method
-        for p_method, p_args, p_label, dims in \
-            zip([death_method, resource_growth_method],
-                [death_args, resource_growth_args],
-                p_labels, dims_list):
-                
-                self.other_parameter_methods(p_method, p_args, p_label, dims)
-    
+
+        self.other_parameter_methods(resource_growth_method,
+                                     resource_growth_args,
+                                     'b',
+                                     (self.no_resources, ))
+
+        self.other_parameter_methods(death_method,
+                                     death_args,
+                                     'd',
+                                     (self.no_species, ))
+
     #####################################################################
-    
+
     def simulation(self,
                    t_end : float,
                    initial_abundance : npt.NDArray):
-        
+
         '''
-        
+
         Simulate community dynamics
-        
+
         Parameters
         ----------
         t_end : float
@@ -226,12 +234,12 @@ class SL_CRM(ParametersInterface,
             Simulation.
 
         '''
-        
+
         def model(t, y,
-                  S, G, C, D, B):
-            
+                  M, G, C, D, B):
+
             '''
-            
+
             ODE for CRM with self-limiting resource supply
 
             Parameters
@@ -240,8 +248,8 @@ class SL_CRM(ParametersInterface,
                 time
             y : np.ndarray
                 consumer and resource abundances at time t
-            S : int
-                species pool size (used to separate y into species and resource 
+            M : int
+                resource pool size (used to separate y into resource and species
                                    abundances)
             G : np.ndarray
                 matrix of consumer growth rates
@@ -255,37 +263,37 @@ class SL_CRM(ParametersInterface,
             Returns
             -------
             np.ndarray
-                Rate of change in species and resource abundances over time 
+                Rate of change in species and resource abundances over time
                 (dNdt and dRdt)
 
             '''
-            
+
             # extinction threshold
             #y[y < 1e-5] = 0
-            
-            # separate species and resource abundances
-            species, resources = y[:S], y[S:]
-            
+
+            # separate resource and species abundances
+            resources, species = y[:M], y[M:]
+
             # change in consumer abundances over time
             dNdt = species * (np.sum(G * resources, axis = 1) - D)
-            
+
             # change in resource abundances over time
             dRdt = (resources * (B - resources)) - \
                 (resources * np.sum(C * species, axis=1))
-                
-            return np.concatenate((dNdt, dRdt)) + 1e-8
-        
+
+            return np.concatenate((dRdt, dNdt)) + 1e-8
+
         unbounded_growth.terminal = True
-        
+
         # call the ODE solver with the unbounded growth event function
-        # the ode solver stops when the event function is true (returns 0)           
-        return solve_ivp(model, [0, t_end], initial_abundance, 
-                         args = (self.no_species, self.growth, self.consumption, 
+        # the ode solver stops when the event function is true (returns 0)
+        return solve_ivp(model, [0, t_end], initial_abundance,
+                         args = (self.no_resources, self.growth, self.consumption,
                                  self.d, self.b),
                          method = 'LSODA', rtol = 1e-7, atol = 1e-9,
                          t_eval = np.linspace(0, t_end, 200),
                          events = unbounded_growth)
-    
+
 # %%
 
 class SL_CRPM(ParametersInterface,
@@ -321,27 +329,31 @@ class SL_CRPM(ParametersInterface,
         self.no_species = no_species
         self.no_resources = no_resources
         self.no_producers = no_resources
-        
+
+        # so this class works with the shared (pool_sizes-based) initial
+        # condition generation machinery in InitialConditionsInterface
+        self.pool_sizes = [self.no_species, self.no_resources, self.no_producers]
+
     def model_specific_rates(self,
-                             death_method : 
-                                 Literal['normal', 'constant', 'user-supplied'] 
+                             death_method :
+                                 Literal['normal', 'constant', 'user-supplied']
                                  = 'constant',
                              death_args : Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
                                                 TypedDict('constant', {'d' : float}),
                                                 TypedDict('user-supplied', {'d' : npt.NDArray})]
                              = {'d' : 1},
-                             resource_growth_method : 
-                                 Literal['normal', 'constant', 'user-supplied'] 
+                             resource_growth_method :
+                                 Literal['normal', 'constant', 'user-supplied']
                                  = 'constant',
-                             resource_growth_args : 
+                             resource_growth_args :
                                  Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
                                        TypedDict('constant', {'b' : float}),
                                        TypedDict('user-supplied', {'b' : npt.NDArray})]
                                  = {'b' : 1},
-                             resource_interaction_method : 
-                                 Literal['normal', 'constant', 'user-supplied'] 
+                             resource_interaction_method :
+                                 Literal['normal', 'constant', 'user-supplied']
                                  = 'constant',
-                             resource_interaction_args : 
+                             resource_interaction_args :
                                  Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
                                        TypedDict('constant', {'Aij' : float}),
                                        TypedDict('user-supplied', {'Aij' : npt.NDArray})]
@@ -496,55 +508,65 @@ class SL_SI_CRM(ParametersInterface, DifferentialEquationsInterface,
     
     '''
     
-    def __init__(self, no_species : int, no_resources : int):
-        
+    def __init__(self, pool_sizes : Union[list[int], tuple[int], dict[str, int],
+                                          npt.NDArray]):
+
         '''
-        
+
         Initiate model
-        
+
         Parameters
         ----------
-        no_species : int
-            species pool size
-        no_resources : int
-            resource pool size
+        pool_sizes : list, tuple, dict, or np.ndarray
+            Size of each pool - 1st entry (or 'no_resources') is the resource
+            pool size, 2nd entry (or 'no_species') is the species pool size.
 
         Returns
         -------
         None.
 
         '''
-        
-        self.no_species = no_species
-        self.no_resources = no_resources
-        
+
+        if isinstance(pool_sizes, (list, tuple, np.ndarray)):
+
+            self.no_resources, self.no_species = pool_sizes
+
+        else:
+
+            self.no_resources, self.no_species = \
+                pool_sizes['no_resources'], pool_sizes['no_species']
+
+        # make sure pool sizes are in the right order for generating initial
+        # conditions and supplying them to your ODE
+        self.pool_sizes = [self.no_resources, self.no_species]
+
     def model_specific_rates(self,
-                             death_method : 
-                                 Literal['normal', 'constant', 'user-supplied'] 
+                             death_method :
+                                 Literal['normal', 'constant', 'user-supplied']
                                  = 'constant',
                              death_args : Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
                                                 TypedDict('constant', {'d' : float}),
                                                 TypedDict('user-supplied', {'d' : npt.NDArray})]
                              = {'d' : 1},
-                             resource_growth_method : 
-                                 Literal['normal', 'constant', 'user-supplied'] 
+                             resource_growth_method :
+                                 Literal['normal', 'constant', 'user-supplied']
                                  = 'constant',
-                             resource_growth_args : 
+                             resource_growth_args :
                                  Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
                                        TypedDict('constant', {'b' : float}),
                                        TypedDict('user-supplied', {'b' : npt.NDArray})]
                                  = {'b' : 1},
-                             si_method : 
+                             si_method :
                                  Literal['normal', 'constant', 'user-supplied'] = 'constant',
-                             si_args : 
+                             si_args :
                                  Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
                                        TypedDict('constant', {'si' : float}),
                                        TypedDict('user-supplied', {'si' : npt.NDArray})]
                                  = {'si' : 1}):
-        
+
         '''
-        
-        Generate parameters specific to the CRM with self-limiting resource 
+
+        Generate parameters specific to the CRM with self-limiting resource
         dynamics - consumer death rates and intrinsic resource growth rates
 
 
@@ -560,13 +582,13 @@ class SL_SI_CRM(ParametersInterface, DifferentialEquationsInterface,
              e.g., {'mu': mean, 'sigma' : mean}
              If 'constant', the key is the parameter name, argument is the fixed value
              e.g., {'d' : val}
-             If 'used-supplied', argument is the array of death rates 
+             If 'used-supplied', argument is the array of death rates
              e.g., {'d' : array_of_vals}
         resource_growth_method : str
             Method used to generate intrinsic resource growth rates. Options are
             the same as death_method, but named 'b' rather than 'd'
         resource_growth_args : dict
-            Arguments for resource_growth_method. Options are the same as 
+            Arguments for resource_growth_method. Options are the same as
             death_method args.
         si_method : str
             Method used to generate direct self-interaction coefficients between consumers.
@@ -580,32 +602,32 @@ class SL_SI_CRM(ParametersInterface, DifferentialEquationsInterface,
         None.
 
         '''
-        
-        # labels used to assign parameters as object attributes
-        p_labels = ['d', 'b', 'si']
-        
-        # dimensions for death rates, intrinsic growth rates, and self-interaction coeffients
-        dims_list = [(self.no_species, ), (self.no_resources, ),
-                     (self.no_species, )]
-        
-        # generate parameters used the other_parameter_methods method
-        for p_method, p_args, p_label, dims in \
-            zip([death_method, resource_growth_method, si_method],
-                [death_args, resource_growth_args, si_args],
-                p_labels, dims_list):
-                
-                self.other_parameter_methods(p_method, p_args, p_label, dims)
-    
+
+        self.other_parameter_methods(resource_growth_method,
+                                     resource_growth_args,
+                                     'b',
+                                     (self.no_resources, ))
+
+        self.other_parameter_methods(death_method,
+                                     death_args,
+                                     'd',
+                                     (self.no_species, ))
+
+        self.other_parameter_methods(si_method,
+                                     si_args,
+                                     'si',
+                                     (self.no_species, ))
+
     #####################################################################
-    
+
     def simulation(self,
                    t_end : float,
                    initial_abundance : npt.NDArray):
-        
+
         '''
-        
+
         Simulate community dynamics
-        
+
         Parameters
         ----------
         t_end : float
@@ -619,12 +641,12 @@ class SL_SI_CRM(ParametersInterface, DifferentialEquationsInterface,
             Simulation.
 
         '''
-        
+
         def model(t, y,
-                  S, G, C, D, B, SI):
-            
+                  M, G, C, D, B, SI):
+
             '''
-            
+
             ODE for CRM with self-limiting resource supply
 
             Parameters
@@ -633,8 +655,8 @@ class SL_SI_CRM(ParametersInterface, DifferentialEquationsInterface,
                 time
             y : np.ndarray
                 consumer and resource abundances at time t
-            S : int
-                species pool size (used to separate y into species and resource 
+            M : int
+                resource pool size (used to separate y into resource and species
                                    abundances)
             G : np.ndarray
                 matrix of consumer growth rates
@@ -645,38 +667,38 @@ class SL_SI_CRM(ParametersInterface, DifferentialEquationsInterface,
             B : np.ndarray
                 intrinsic resource growth rates
             SI : np.ndarray
-                consumer self-interaction coefficients 
+                consumer self-interaction coefficients
 
             Returns
             -------
             np.ndarray
-                Rate of change in species and resource abundances over time 
+                Rate of change in species and resource abundances over time
                 (dNdt and dRdt)
 
             '''
-            
-            # separate species and resource abundances
-            species, resources = y[:S], y[S:]
-            
+
+            # separate resource and species abundances
+            resources, species = y[:M], y[M:]
+
             # change in consumer abundances over time
             dNdt = species * ((np.sum(G * resources, axis = 1) - D) - SI*species)
-           
+
             # change in resource abundances over time
             dRdt = (resources * (B - resources)) - \
                 (resources * np.sum(C * species, axis=1))
 
-            return np.concatenate((dNdt, dRdt)) + 1e-8
-        
+            return np.concatenate((dRdt, dNdt)) + 1e-8
+
         unbounded_growth.terminal = True
-        
+
         # call the ODE solver with the unbounded growth event function
-        # the ode solver stops when the event function is true (returns 0)           
-        return solve_ivp(model, [0, t_end], initial_abundance, 
-                         args = (self.no_species, self.growth, self.consumption, 
+        # the ode solver stops when the event function is true (returns 0)
+        return solve_ivp(model, [0, t_end], initial_abundance,
+                         args = (self.no_resources, self.growth, self.consumption,
                                  self.d, self.b, self.si),
                          method = 'LSODA', rtol = 1e-7, atol = 1e-9,
                          t_eval = np.linspace(0, t_end, 200), events = unbounded_growth)
-    
+
 # %%
 
 class SL_TL_CRM(ParametersInterface,
@@ -919,38 +941,49 @@ class SL_TL_CRM(ParametersInterface,
 
 class ES_CRM(ParametersInterface, DifferentialEquationsInterface,
              CommunityPropertiesInterface):
-    
-    def __init__(self, no_species, no_resources):
-        
-        self.no_species = no_species
-        self.no_resources = no_resources
-    
-    def model_specific_rates(self, 
-                             death_method : 
-                                 Literal['normal', 'constant', 'user-supplied'] 
+
+    def __init__(self, pool_sizes : Union[list[int], tuple[int], dict[str, int],
+                                          npt.NDArray]):
+
+        if isinstance(pool_sizes, (list, tuple, np.ndarray)):
+
+            self.no_resources, self.no_species = pool_sizes
+
+        else:
+
+            self.no_resources, self.no_species = \
+                pool_sizes['no_resources'], pool_sizes['no_species']
+
+        # make sure pool sizes are in the right order for generating initial
+        # conditions and supplying them to your ODE
+        self.pool_sizes = [self.no_resources, self.no_species]
+
+    def model_specific_rates(self,
+                             death_method :
+                                 Literal['normal', 'constant', 'user-supplied']
                                  = 'constant',
                              death_args : Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
                                                 TypedDict('constant', {'d' : float}),
                                                 TypedDict('user-supplied', {'d' : npt.NDArray})]
                              = {'d' : 1},
-                             influx_method: 
-                                 Literal['normal', 'constant', 'user-supplied'] 
+                             influx_method:
+                                 Literal['normal', 'constant', 'user-supplied']
                                  = 'constant',
                              influx_args : Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
                                                 TypedDict('constant', {'b' : float}),
                                                 TypedDict('user-supplied', {'b' : npt.NDArray})]
                              = {'b' : 1},
-                             outflux_method: 
-                                 Literal['normal', 'constant', 'user-supplied'] 
+                             outflux_method:
+                                 Literal['normal', 'constant', 'user-supplied']
                                  = 'constant',
                              outflux_args : Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
                                                 TypedDict('constant', {'o' : float}),
                                                 TypedDict('user-supplied', {'o' : npt.NDArray})]
                              = {'o' : 1}):
-        
+
         '''
-        
-        Generate parameters specific to the CRM with self-limiting resource 
+
+        Generate parameters specific to the CRM with self-limiting resource
         dynamics - consumer death rates and intrinsic resource growth rates
 
 
@@ -967,49 +1000,49 @@ class ES_CRM(ParametersInterface, DifferentialEquationsInterface,
             e.g., {'mu': mean, 'sigma' : standard deviation}
             If 'constant', the key is the parameter name, argument is the fixed value
             e.g., {'d' : val}
-            If 'used-supplied', argument is the array of death rates 
+            If 'used-supplied', argument is the array of death rates
             e.g., {'d' : array_of_vals}
         influx_method : str
             Method used to generate intrinsic resource influx rates. Options are
             the same as death_method, but named 'b' rather than 'd'
         influx_args : dict
-            Arguments for influx_method. Options are the same as 
+            Arguments for influx_method. Options are the same as
             death_method args.
         outflux_method : str
             Method used to generate intrinsic resource outflux rates. Options are
             the same as death_method, but named 'o' rather than 'd'.
         outflux_args : dict
-            Arguments for outflux_method. Options are the same as 
+            Arguments for outflux_method. Options are the same as
             death_method args.
         Returns
         -------
         None.
 
         '''
-        
-        # labels used to assign parameters as object attributes
-        p_labels = ['d', 'b', 'o']
-        
-        # dimensions for death rates and intrinsic growth rates
-        dims_list = [(self.no_species, ), (self.no_resources, ),
-                     (self.no_resources, )]
-        
-        # generate parameters used the other_parameter_methods method
-        for p_method, p_args, p_label, dims in \
-            zip([death_method, influx_method, outflux_method],
-                [death_args, influx_args, outflux_args],
-                p_labels, dims_list):
-                
-                self.other_parameter_methods(p_method, p_args, p_label, dims)
-                
+
+        self.other_parameter_methods(influx_method,
+                                     influx_args,
+                                     'b',
+                                     (self.no_resources, ))
+
+        self.other_parameter_methods(outflux_method,
+                                     outflux_args,
+                                     'o',
+                                     (self.no_resources, ))
+
+        self.other_parameter_methods(death_method,
+                                     death_args,
+                                     'd',
+                                     (self.no_species, ))
+
     def simulation(self,
                    t_end : float,
                    initial_abundance : npt.NDArray):
-        
+
         '''
-        
+
         Simulate community dynamics
-        
+
         Parameters
         ----------
         t_end : float
@@ -1023,12 +1056,12 @@ class ES_CRM(ParametersInterface, DifferentialEquationsInterface,
             Simulation.
 
         '''
-        
+
         def model(t, y,
-                  S, G, C, D, B, O):
-            
+                  M, G, C, D, B, O):
+
             '''
-            
+
             ODE for CRM with self-limiting resource supply
 
             Parameters
@@ -1037,8 +1070,8 @@ class ES_CRM(ParametersInterface, DifferentialEquationsInterface,
                 time
             y : np.ndarray
                 consumer and resource abundances at time t
-            S : int
-                species pool size (used to separate y into species and resource 
+            M : int
+                resource pool size (used to separate y into resource and species
                                    abundances)
             G : np.ndarray
                 matrix of consumer growth rates
@@ -1052,46 +1085,58 @@ class ES_CRM(ParametersInterface, DifferentialEquationsInterface,
             Returns
             -------
             np.ndarray
-                Rate of change in species and resource abundances over time 
+                Rate of change in species and resource abundances over time
                 (dNdt and dRdt)
 
             '''
-            
+
             # extinction threshold
             #y[y < 1e-5] = 0
-            
-            # separate species and resource abundances
-            species, resources = y[:S], y[S:]
-            
+
+            # separate resource and species abundances
+            resources, species = y[:M], y[M:]
+
             # change in consumer abundances over time
             dNdt = species * (np.sum(G * resources, axis = 1) - D)
-        
+
             # change in resource abundances over time
             dRdt = (B - O * resources) - \
                 (resources * np.sum(C * species, axis=1))
-                
-            return np.concatenate((dNdt, dRdt)) + 1e-8
-        
+
+            return np.concatenate((dRdt, dNdt)) + 1e-8
+
         unbounded_growth.terminal = True
-        
+
         # call the ODE solver with the unbounded growth event function
         # the ode solver stops when the event function is true (returns 0)           
-        return solve_ivp(model, [0, t_end], initial_abundance, 
-                         args = (self.no_species, self.growth, self.consumption, 
+        return solve_ivp(model, [0, t_end], initial_abundance,
+                         args = (self.no_resources, self.growth, self.consumption,
                                  self.d, self.b, self.o),
                          method = 'LSODA', rtol = 1e-7, atol = 1e-9,
                          t_eval = np.linspace(0, t_end, 200), events = unbounded_growth)
-    
+
 # %%
-    
+
 class Hybrid_CRM(ParametersInterface, DifferentialEquationsInterface,
                  CommunityPropertiesInterface):
-    
-    def __init__(self, no_species, no_resources):
-        
-        self.no_species = no_species
-        self.no_resources = no_resources
-    
+
+    def __init__(self, pool_sizes : Union[list[int], tuple[int], dict[str, int],
+                                          npt.NDArray]):
+
+        if isinstance(pool_sizes, (list, tuple, np.ndarray)):
+
+            self.no_resources, self.no_species = pool_sizes
+
+        else:
+
+            self.no_resources, self.no_species = \
+                pool_sizes['no_resources'], pool_sizes['no_species']
+
+        # make sure pool sizes are in the right order for generating initial
+        # conditions and supplying them to your ODE
+        self.pool_sizes = [self.no_resources, self.no_species]
+
+
     def model_specific_rates(self, 
                              death_method : 
                                  Literal['normal', 'constant', 'user-supplied'] 
@@ -1161,29 +1206,34 @@ class Hybrid_CRM(ParametersInterface, DifferentialEquationsInterface,
 
         '''
         
-        # labels used to assign parameters as object attributes
-        p_labels = ['d', 'b', 'o', 'a']
-        
-        # dimensions for death rates and intrinsic growth rates
-        dims_list = [(self.no_species, ), (self.no_resources, ),
-                     (self.no_resources, ), (self.no_resources, )]
-        
-        # generate parameters used the other_parameter_methods method
-        for p_method, p_args, p_label, dims in \
-            zip([death_method, influx_method, outflux_method, resource_inhibition_method],
-                [death_args, influx_args, outflux_args, resource_inhibition_args],
-                p_labels, dims_list):
-                
-                self.other_parameter_methods(p_method, p_args, p_label, dims)
-                
+        self.other_parameter_methods(influx_method,
+                                     influx_args,
+                                     'b',
+                                     (self.no_resources, ))
+
+        self.other_parameter_methods(outflux_method,
+                                     outflux_args,
+                                     'o',
+                                     (self.no_resources, ))
+
+        self.other_parameter_methods(resource_inhibition_method,
+                                     resource_inhibition_args,
+                                     'a',
+                                     (self.no_resources, ))
+
+        self.other_parameter_methods(death_method,
+                                     death_args,
+                                     'd',
+                                     (self.no_species, ))
+
     def simulation(self,
                    t_end : float,
                    initial_abundance : npt.NDArray):
-        
+
         '''
-        
+
         Simulate community dynamics
-        
+
         Parameters
         ----------
         t_end : float
@@ -1197,12 +1247,12 @@ class Hybrid_CRM(ParametersInterface, DifferentialEquationsInterface,
             Simulation.
 
         '''
-        
+
         def model(t, y,
-                  S, G, C, D, B, O, A):
-            
+                  M, G, C, D, B, O, A):
+
             '''
-            
+
             ODE for CRM with self-limiting resource supply
 
             Parameters
@@ -1211,8 +1261,8 @@ class Hybrid_CRM(ParametersInterface, DifferentialEquationsInterface,
                 time
             y : np.ndarray
                 consumer and resource abundances at time t
-            S : int
-                species pool size (used to separate y into species and resource 
+            M : int
+                resource pool size (used to separate y into resource and species
                                    abundances)
             G : np.ndarray
                 matrix of consumer growth rates
@@ -1226,32 +1276,32 @@ class Hybrid_CRM(ParametersInterface, DifferentialEquationsInterface,
             Returns
             -------
             np.ndarray
-                Rate of change in species and resource abundances over time 
+                Rate of change in species and resource abundances over time
                 (dNdt and dRdt)
 
             '''
-            
+
             # extinction threshold
             #y[y < 1e-5] = 0
-            
-            # separate species and resource abundances
-            species, resources = y[:S], y[S:]
-            
+
+            # separate resource and species abundances
+            resources, species = y[:M], y[M:]
+
             # change in consumer abundances over time
             dNdt = species * (np.sum(G * resources, axis = 1) - D)
-            
+
             # change in resource abundances over time
             dRdt = (B + O * resources - A * resources**2) - \
                 (resources * np.sum(C * species, axis=1))
-                
-            return np.concatenate((dNdt, dRdt)) + 1e-8
-        
+
+            return np.concatenate((dRdt, dNdt)) + 1e-8
+
         unbounded_growth.terminal = True
-        
+
         # call the ODE solver with the unbounded growth event function
-        # the ode solver stops when the event function is true (returns 0)           
+        # the ode solver stops when the event function is true (returns 0)
         return solve_ivp(model, [0, t_end], initial_abundance,
-                         args = (self.no_species, self.growth, self.consumption,
+                         args = (self.no_resources, self.growth, self.consumption,
                                  self.d, self.b, self.o, self.a),
                          method = 'LSODA', # 'Radau', #'RK45',
                          rtol = 1e-9, atol = 1e-7,
@@ -1259,7 +1309,8 @@ class Hybrid_CRM(ParametersInterface, DifferentialEquationsInterface,
 
 # %%
 
-class MP_CRM(ParametersInterface, DifferentialEquationsInterface,
+class MP_CRM(ParametersInterface,
+             DifferentialEquationsInterface,
              CommunityPropertiesInterface):
 
     '''
@@ -1271,7 +1322,8 @@ class MP_CRM(ParametersInterface, DifferentialEquationsInterface,
 
     '''
 
-    def __init__(self, pool_sizes : Union[tuple[int], list[int], npt.NDArray]):
+    def __init__(self, pool_sizes : Union[list[int], tuple[int], dict[str, int],
+                                          npt.NDArray]):
 
         '''
 
@@ -1279,8 +1331,9 @@ class MP_CRM(ParametersInterface, DifferentialEquationsInterface,
 
         Parameters
         ----------
-        pool_sizes : tuple, list, or np.ndarray
-            pool_sizes[0] = resource pool size, pool_sizes[1] = species pool size
+        pool_sizes : list, tuple, dict, or np.ndarray
+            Size of each pool - 1st entry (or 'no_resources') is the resource
+            pool size, 2nd entry (or 'no_species') is the species pool size.
 
         Returns
         -------
@@ -1288,10 +1341,18 @@ class MP_CRM(ParametersInterface, DifferentialEquationsInterface,
 
         '''
 
-        self.pool_sizes = pool_sizes
+        if isinstance(pool_sizes, (list, tuple, np.ndarray)):
 
-        self.no_resources = pool_sizes[0]
-        self.no_species = pool_sizes[1]
+            self.no_resources, self.no_species = pool_sizes
+
+        else:
+
+            self.no_resources, self.no_species = \
+                pool_sizes['no_resources'], pool_sizes['no_species']
+
+        # make sure pool sizes are in the right order for generating initial
+        # conditions and supplying them to your ODE
+        self.pool_sizes = [self.no_resources, self.no_species]
 
     def model_specific_rates(self,
                              death_method :
@@ -1370,22 +1431,25 @@ class MP_CRM(ParametersInterface, DifferentialEquationsInterface,
 
         '''
 
-        # labels used to assign parameters as object attributes
-        p_labels = ['d', 'o', 'b', 'A']
+        self.other_parameter_methods(outflux_method,
+                                     outflux_args,
+                                     'o',
+                                     (self.no_resources, ))
 
-        # dimensions for death rates, and resource supply/decay/inhibition rates
-        dims_list = [(self.no_species, ), (self.no_resources, ),
-                     (self.no_resources, ), (self.no_resources, )]
+        self.other_parameter_methods(resource_growth_method,
+                                     resource_growth_args,
+                                     'b',
+                                     (self.no_resources, ))
 
-        # generate parameters used the other_parameter_methods method
-        for p_method, p_args, p_label, dims in \
-            zip([death_method, outflux_method, resource_growth_method,
-                resource_inhibition_method],
-                [death_args, outflux_args, resource_growth_args,
-                resource_inhibition_args],
-                p_labels, dims_list):
+        self.other_parameter_methods(resource_inhibition_method,
+                                     resource_inhibition_args,
+                                     'A',
+                                     (self.no_resources, ))
 
-                self.other_parameter_methods(p_method, p_args, p_label, dims)
+        self.other_parameter_methods(death_method,
+                                     death_args,
+                                     'd',
+                                     (self.no_species, ))
 
     #####################################################################
 
@@ -1412,7 +1476,7 @@ class MP_CRM(ParametersInterface, DifferentialEquationsInterface,
         '''
 
         def model(t, y,
-                  S, G, C, Q, W, D, O, B, A, P, eps):
+                  M, G, C, Q, W, D, O, B, A, P, eps):
 
             '''
 
@@ -1424,8 +1488,8 @@ class MP_CRM(ParametersInterface, DifferentialEquationsInterface,
                 time
             y : np.ndarray
                 consumer and resource abundances at time t
-            S : int
-                species pool size (used to separate y into species and resource
+            M : int
+                resource pool size (used to separate y into resource and species
                                    abundances)
             G : np.ndarray
                 matrix of consumer growth rates, g_{i, alpha}
@@ -1457,8 +1521,8 @@ class MP_CRM(ParametersInterface, DifferentialEquationsInterface,
 
             '''
 
-            # separate species and resource abundances
-            species, resources = y[:S], y[S:]
+            # separate resource and species abundances
+            resources, species = y[:M], y[M:]
 
             # pairwise energy differences, w_alpha - w_beta
             energy_differences = W[:, np.newaxis] - W[np.newaxis, :]
@@ -1500,14 +1564,14 @@ class MP_CRM(ParametersInterface, DifferentialEquationsInterface,
             # change in resource abundances over time
             dRdt = (O - B*resources - A*resources**2) - consumed + produced
 
-            return np.concatenate((dNdt, dRdt)) + 1e-8
+            return np.concatenate((dRdt, dNdt)) + 1e-8
 
         unbounded_growth.terminal = True
 
         # call the ODE solver with the unbounded growth event function
         # the ode solver stops when the event function is true (returns 0)
         return solve_ivp(model, [0, t_end], initial_abundance,
-                         args = (self.no_species, self.growth, self.consumption,
+                         args = (self.no_resources, self.growth, self.consumption,
                                  self.q, self.w, self.d, self.o, self.b, self.A,
                                  self.p, 1e-8),
                          method = 'LSODA', rtol = 1e-7, atol = 1e-9,

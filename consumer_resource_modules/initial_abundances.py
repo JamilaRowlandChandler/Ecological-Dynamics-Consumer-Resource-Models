@@ -32,9 +32,10 @@ class Base_InitialConditions:
                 initial_abundance = self.initial_abundances_mallmin(dims, no_init_cond)
             
             case 'user-supplied':
-                
-                initial_abundance = initial_condition.reshape((dims, no_init_cond))
-                
+
+                initial_abundance = np.array(initial_condition).reshape((len(initial_condition[0]),
+                                                                         len(initial_condition)))
+
         return initial_abundance
         
     ########## Functions for generating initial conditions ############
@@ -81,73 +82,23 @@ class InitialConditionsInterface(Base_InitialConditions):
 
         '''
 
-        if hasattr(self, "trophic_levels"):
-            
-            if init_cond_func == "user-supplied":
-                
-                initial_abundances = np.vstack([self.initial_variable_conditions(no_init_cond,
-                                                                                 pool_size,
-                                                                                 init_cond_func,
-                                                                                 var_initcond)
-                                                for pool_size, var_initcond in 
-                                                zip(self.pool_sizes,
-                                                    kwargs.get("initial_conditions"))])
-                
-            else:
-                
-                initial_abundances = np.vstack([self.initial_variable_conditions(no_init_cond,
-                                                                                 pool_size,
-                                                                                 init_cond_func)
-                                                for pool_size in self.pool_sizes])
-                    
-        elif hasattr(self, "no_producers"):
-            
-            if init_cond_func == "user-supplied":
+        # user-supplied initial conditions
+        if init_cond_func == "user-supplied":
 
-                
-                initial_abundances = \
-                    np.vstack([self.initial_variable_conditions(no_init_cond,
-                                                                pool_size,
-                                                                init_cond_func,
-                                                                var_initcond)
-                               for pool_size, var_initcond in 
-                               zip([self.no_species,
-                                    self.no_resources,
-                                    self.no_producers], 
-                                   kwargs.get("initial_conditions"))])
-        
-            else:
-                
-                initial_abundances = \
-                    np.vstack([self.initial_variable_conditions(no_init_cond,
-                                                                pool_size,
-                                                                init_cond_func)
-                               for pool_size in [self.no_species,
-                                                 self.no_resources,
-                                                 self.no_producers]])
-                
+            initial_conditions = kwargs.get("initial_conditions")
+
+            initial_abundances = self.initial_variable_conditions(None,
+                                                                   None,
+                                                                   init_cond_func,
+                                                                   initial_conditions)
+        # automatically generate initial conditions
         else:
-            
-            if init_cond_func == "user-supplied":
 
-                
-                initial_abundances = \
-                    np.vstack([self.initial_variable_conditions(no_init_cond,
-                                                                pool_size,
-                                                                init_cond_func,
-                                                                var_initcond)
-                               for pool_size, var_initcond in 
-                               zip([self.no_species, self.no_resources], 
-                                   kwargs.get("initial_conditions"))])
-        
-            else:
-                
-                initial_abundances = \
-                    np.vstack([self.initial_variable_conditions(no_init_cond,
-                                                                pool_size,
-                                                                init_cond_func)
-                               for pool_size in [self.no_species, self.no_resources]])
-                    
+            initial_abundances = np.vstack([self.initial_variable_conditions(no_init_cond,
+                                                                             pool_size,
+                                                                             init_cond_func)
+                                            for pool_size in self.pool_sizes])
+
         return initial_abundances
     
 class InitialConditionsInterface_ELV(Base_InitialConditions):

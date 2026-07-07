@@ -57,15 +57,27 @@ class CommunityPropertiesInterface:
         '''
         
         trophic_levels = getattr(self, "trophic_levels", None)
-        
+
         if trophic_levels is None:
-            
-            self.assign_abundance_distribution("species",
-                                                 [0, self.no_species])
-            
-            self.assign_abundance_distribution("resource",
-                                                 [self.no_species, -1])
-            
+
+            # SL_CRPM keeps the older species-then-resources(-then-producers)
+            # layout, everything else uses resources-then-species
+            if hasattr(self, "no_producers"):
+
+                self.assign_abundance_distribution("species",
+                                                     [0, self.no_species])
+
+                self.assign_abundance_distribution("resource",
+                                                     [self.no_species, -1])
+
+            else:
+
+                self.assign_abundance_distribution("resource",
+                                                     [0, self.no_resources])
+
+                self.assign_abundance_distribution("species",
+                                                     [self.no_resources, -1])
+
             if sensitivity_distribution == True:
             
                 self.assign_sensitivity_distribution()
@@ -182,10 +194,19 @@ class CommunityPropertiesInterface:
     def dRdconsumption(self,
                        abundances : npt.NDArray,
                        i : int):
-        
-        species = abundances[:self.no_species, i]
-        resources = abundances[self.no_species:, i]
-        
+
+        # SL_CRPM keeps the older species-then-resources(-then-producers)
+        # layout, everything else uses resources-then-species
+        if hasattr(self, "no_producers"):
+
+            species = abundances[:self.no_species, i]
+            resources = abundances[self.no_species:, i]
+
+        else:
+
+            resources = abundances[:self.no_resources, i]
+            species = abundances[self.no_resources:, i]
+
         tot_c = np.sum(self.consumption * species, axis=1)
         
         sort_idx = np.argsort(tot_c)
@@ -273,16 +294,12 @@ def trajectory(community : Union["SL_CRM", "SL_SI_CRM", "ES_CRM"],
     # Simulate the original community trajectory for time = T
     original_traj = community.simulate_community(T, 1, init_cond_func='user-supplied',
                                                  assign = False,
-                                                 initial_conditions = 
-                                                 [original_conditions[:community.no_species],
-                                                 original_conditions[community.no_species:]])
+                                                 initial_conditions = [original_conditions])
     # Simulate the perturbated community trajectory for time = T
     perturbed_traj = community.simulate_community(T, 1, init_cond_func='user-supplied',
                                                   assign = False,
-                                                  initial_conditions = 
-                                                  [perturbed_conditions[:community.no_species],
-                                                   perturbed_conditions[community.no_species:]])
-    
+                                                  initial_conditions = [perturbed_conditions])
+
     return original_traj[0], perturbed_traj[0]
 
 #############
@@ -297,27 +314,16 @@ def trajectory_multi_trophic(community : "SL_TL_CRM",
 
     perturbed_conditions = deepcopy(initial_conditions)
     perturbed_conditions += perturbation * np.ones(len(perturbed_conditions)) #np.random.uniform(-1, 1, len(perturbed_conditions))
-    
-    # 
-    
-    pool_idx = np.append(0, np.cumsum(community.pool_sizes))
-    supplied_oc = [original_conditions[pool_idx[i] : pool_idx[i+1]]
-                   for i in range(len(pool_idx) - 1)]
-    
-    supplied_perturb = [perturbed_conditions[pool_idx[i] : pool_idx[i+1]]
-                        for i in range(len(pool_idx) - 1)]
-    
+
     # Simulate the original community trajectory for time = T
     original_traj = community.simulate_community(T, 1, init_cond_func='user-supplied',
                                                  assign = False,
-                                                 initial_conditions = 
-                                                 supplied_oc)
+                                                 initial_conditions = [original_conditions])
     # Simulate the perturbated community trajectory for time = T
     perturbed_traj = community.simulate_community(T, 1, init_cond_func='user-supplied',
                                                   assign = False,
-                                                  initial_conditions = 
-                                                  supplied_perturb)
-    
+                                                  initial_conditions = [perturbed_conditions])
+
     return original_traj[0], perturbed_traj[0]
 
 #############
