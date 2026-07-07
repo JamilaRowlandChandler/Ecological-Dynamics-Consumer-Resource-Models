@@ -24,7 +24,7 @@ def communities_M(M, no_communities = 20):
     def community_S_star(M):
         
         community = Consumer_Resource_Model("Self-limiting resource supply",
-                                            M, M)
+                                            pool_sizes = [M, M])
         
         community.growth_consumption_rates('growth function of consumption',
                                            160/M, 1.6/np.sqrt(M), 1, 0)

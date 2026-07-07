@@ -42,7 +42,7 @@ no_init_conds = 1
 
 
 crm_community = Consumer_Resource_Model("Externally-supplied resources",
-                                        no_species, no_resources)
+                                        pool_sizes = [no_resources, no_species])
 
 # generate model parameters
 crm_community.growth_consumption_rates(method = 'coupled by rho',
@@ -86,7 +86,7 @@ def CRM_eLV(rho):
     ### CRM ###
 
     crm_community = Consumer_Resource_Model("Externally-supplied resources",
-                                            no_species, no_resources)
+                                            pool_sizes = [no_resources, no_species])
 
     # generate model parameters
     crm_community.growth_consumption_rates(method = 'coupled by rho',
@@ -162,7 +162,7 @@ plt.show()
 # %%
 
 community_sl = Consumer_Resource_Model("Self-limiting resource supply",
-                                       no_species, no_resources)
+                                       pool_sizes = [no_resources, no_species])
 
 # generate model parameters
 community_sl.growth_consumption_rates(method = 'coupled by rho',
@@ -210,8 +210,8 @@ def rep():
     
     
     crm_community = Consumer_Resource_Model("Externally-supplied resources",
-                                            no_species, no_resources)
-    
+                                            pool_sizes = [no_resources, no_species])
+
     # generate model parameters
     crm_community.growth_consumption_rates(method = 'coupled by rho',
                                            mu_c = mu/no_resources,

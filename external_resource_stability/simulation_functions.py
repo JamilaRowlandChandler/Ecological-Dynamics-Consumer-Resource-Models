@@ -330,7 +330,7 @@ def consumer_resource_model_dynamics(no_species : int, no_resources : int,
         '''
     
         # initialise consumer-resource model class
-        community = Consumer_Resource_Model(model, no_species, no_resources)
+        community = Consumer_Resource_Model(model, pool_sizes = [no_resources, no_species])
 
         # generate model parameters
         community.growth_consumption_rates(**growth_consumption_rates_args)
@@ -404,8 +404,8 @@ def load_in_communities(filepath : str):
     def dict_to_model(community_dict):
         
         community = Consumer_Resource_Model(community_dict['model'],
-                                            community_dict['no_species'],
-                                            community_dict['no_resources'])
+                                            pool_sizes = [community_dict['no_resources'],
+                                                          community_dict['no_species']])
         
         for attr, val in community_dict.items():
         

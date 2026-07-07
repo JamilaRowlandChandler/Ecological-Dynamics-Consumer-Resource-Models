@@ -3,9 +3,9 @@
 Smoke test for the pool_sizes / initial-conditions / model_specific_rates
 refactor ported from the "Student tutorials" copy of these modules.
 
-Covers: SL_CRM, SL_SI_CRM, ES_CRM, Hybrid_CRM, SL_TL_CRM (unchanged),
-SL_CRPM (left untouched, only patched for the shared initial-conditions
-machinery), and the "user-supplied" initial condition path.
+Covers: SL_CRM, SL_SI_CRM, ES_CRM, Hybrid_CRM, SL_TL_CRM (incl. the fixed
+model_specific_rates dims-ordering bug), SL_CRPM (now also pool_sizes-based),
+and the "user-supplied" initial condition path.
 
 Run with:
     python test_pool_sizes_refactor.py
@@ -78,13 +78,12 @@ hybrid_crm.simulate_community(t_end=50, no_init_cond=1)
 assert not np.any(np.isnan(hybrid_crm.ODE_sols[0].y))
 print("Hybrid_CRM: OK", hybrid_crm.ODE_sols[0].y.shape)
 
-# %% ---- SL_TL_CRM (multi-trophic, unchanged - pool_sizes = [resources, level2, level3]) ----
-# NOTE: all levels deliberately given the SAME pool size here. SL_TL_CRM's
-# model_specific_rates has a pre-existing (and unrelated to this refactor)
-# dimension-ordering quirk that only bites when trophic levels have different
-# sizes - see note left for the user separately. SL_TL_CRM itself was left
-# untouched by this refactor (matches the unchanged tutorial version).
-pool_sizes_tl = [M, M, M]
+# %% ---- SL_TL_CRM (multi-trophic - pool_sizes = [resources, level2, level3]) ----
+# deliberately DIFFERENT pool sizes per level, to exercise the fixed
+# dims_list/p_labels ordering bug in model_specific_rates (previously this
+# would silently misassign death-rate/resource-growth dims across levels
+# whenever the trophic levels had different pool sizes).
+pool_sizes_tl = [M, S, 4]
 sl_tl_crm = Consumer_Resource_Model('Self-limiting resource supply, multi-trophic level',
                                     pool_sizes=pool_sizes_tl)
 assert sl_tl_crm.trophic_levels == 3
@@ -94,17 +93,27 @@ for tl in [2, 3]:
                                        mu_g=1, sigma_g=0.1, rho=0.5, trophic_level=tl)
 
 sl_tl_crm.model_specific_rates(death_methods=['constant', 'constant'],
-                               death_args=[{'d': 0.5}, {'d': 0.5}],
+                               death_args=[{'d_2': 0.5}, {'d_3': 0.5}],
                                resource_growth_args={'b': 1},
                                resource_interaction_args={'Aij': 0})
+
+# verify each parameter now has the dims matching its OWN pool, not a
+# neighbouring level's pool (the bug this test is guarding against)
+assert sl_tl_crm.d_2.shape == (S,)
+assert sl_tl_crm.d_3.shape == (4,)
+assert sl_tl_crm.b.shape == (M,)
+assert sl_tl_crm.Aij.shape == (M, M)
+
 sl_tl_crm.simulate_community(t_end=50, no_init_cond=1)
 assert not np.any(np.isnan(sl_tl_crm.ODE_sols[0].y))
-print("SL_TL_CRM: OK", sl_tl_crm.ODE_sols[0].y.shape)
+print("SL_TL_CRM (unequal pool sizes): OK", sl_tl_crm.ODE_sols[0].y.shape)
 
-# %% ---- SL_CRPM ("leached", untouched aside from the pool_sizes compatibility patch) ----
+# %% ---- SL_CRPM ("leached", now also pool_sizes-based, internal species-first
+# ODE layout unchanged) ----
 
 sl_crpm = Consumer_Resource_Model('Self-limiting resource supply, leached',
-                                  no_species=S, no_resources=M)
+                                  pool_sizes=(M, S))
+assert sl_crpm.no_resources == M and sl_crpm.no_species == S
 assert sl_crpm.pool_sizes == [S, M, M]
 
 sl_crpm.growth_consumption_rates('coupled by rho', mu_c=1, sigma_c=0.1,

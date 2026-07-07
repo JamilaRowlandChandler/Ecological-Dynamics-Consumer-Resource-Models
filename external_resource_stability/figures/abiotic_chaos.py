@@ -84,7 +84,7 @@ no_init_conds = 1
 
 
 crm_community = Consumer_Resource_Model("Externally-supplied resources",
-                                        no_species, no_resources)
+                                        pool_sizes = [no_resources, no_species])
 
 # generate model parameters
 crm_community.growth_consumption_rates(method = 'coupled by rho',

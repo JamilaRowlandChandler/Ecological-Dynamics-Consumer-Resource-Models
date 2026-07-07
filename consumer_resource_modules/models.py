@@ -24,9 +24,7 @@ def Consumer_Resource_Model(model : Literal["Self-limiting resource supply",
                                             "Hybrid resource supply",
                                             "Metabolic pathways"],
                             pool_sizes : Union[list[int], tuple[int], dict[str, int],
-                                               npt.NDArray, None] = None,
-                            no_species : Union[int, None] = None,
-                            no_resources : Union[int, None] = None):
+                                               npt.NDArray] = None):
 
     '''
 
@@ -47,12 +45,8 @@ def Consumer_Resource_Model(model : Literal["Self-limiting resource supply",
         Size of each pool. If given as a list/tuple/array, the 1st entry is
         the resource pool size, the 2nd entry is the species pool size (and,
         for "Self-limiting resource supply, multi-trophic level", subsequent
-        entries are the pool sizes of higher trophic levels).
-        Used by every model except "Self-limiting resource supply, leached".
-    no_species : int
-        species pool size. Only used by "Self-limiting resource supply, leached".
-    no_resources : int
-        resource pool size. Only used by "Self-limiting resource supply, leached".
+        entries are the pool sizes of higher trophic levels). If given as a
+        dict, use the keys 'no_resources' and 'no_species'.
 
     Raises
     ------
@@ -74,7 +68,7 @@ def Consumer_Resource_Model(model : Literal["Self-limiting resource supply",
 
         case "Self-limiting resource supply, leached":
 
-            instance = SL_CRPM(no_species, no_resources)
+            instance = SL_CRPM(pool_sizes)
 
         case "Self-limiting resource supply, self-inhibition":
 
@@ -306,32 +300,41 @@ class SL_CRPM(ParametersInterface,
     
     '''
     
-    def __init__(self, no_species : int, no_resources : int):
-        
+    def __init__(self, pool_sizes : Union[list[int], tuple[int], dict[str, int],
+                                          npt.NDArray]):
+
         '''
-        
+
         Initiate model
-        
+
         Parameters
         ----------
-        no_species : int
-            species pool size
-        no_resources : int
-            resource pool size
+        pool_sizes : list, tuple, dict, or np.ndarray
+            Size of each pool - 1st entry (or 'no_resources') is the resource
+            pool size, 2nd entry (or 'no_species') is the species pool size.
+            The producer pool size is always equal to the resource pool size.
 
         Returns
         -------
         None.
 
         '''
-        
+
         # assign species and resource pool size as class attributes
-        self.no_species = no_species
-        self.no_resources = no_resources
-        self.no_producers = no_resources
+        if isinstance(pool_sizes, (list, tuple, np.ndarray)):
+
+            self.no_resources, self.no_species = pool_sizes
+
+        else:
+
+            self.no_resources, self.no_species = \
+                pool_sizes['no_resources'], pool_sizes['no_species']
+
+        self.no_producers = self.no_resources
 
         # so this class works with the shared (pool_sizes-based) initial
-        # condition generation machinery in InitialConditionsInterface
+        # condition generation machinery in InitialConditionsInterface -
+        # this class keeps a species-then-resources-then-producers ODE layout
         self.pool_sizes = [self.no_species, self.no_resources, self.no_producers]
 
     def model_specific_rates(self,
@@ -801,8 +804,10 @@ class SL_TL_CRM(ParametersInterface,
                     ['b', 'Aij']
         
         # dimensions for death rates and intrinsic growth rates
-        dims_list = [(pool_size, ) for pool_size in self.pool_sizes] + \
-                        [(self.pool_sizes[0], self.pool_sizes[0])]
+        # (death rates are per consumer trophic level, i.e. pool_sizes[1:] -
+        #  pool_sizes[0] is the resource pool, used by 'b' and 'Aij' instead)
+        dims_list = [(pool_size, ) for pool_size in self.pool_sizes[1:]] + \
+                        [(self.pool_sizes[0], ), (self.pool_sizes[0], self.pool_sizes[0])]
         
         methods_list = death_methods + [resource_growth_method,
                                         resource_interaction_method]

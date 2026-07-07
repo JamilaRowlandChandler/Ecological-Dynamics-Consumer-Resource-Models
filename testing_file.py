@@ -21,7 +21,7 @@ import numpy as np
 
 # %%
 
-community = Consumer_Resource_Model("Self-limiting resource supply", 150, 150)
+community = Consumer_Resource_Model("Self-limiting resource supply", pool_sizes=[150, 150])
 
 community.growth_consumption_rates('coupled by rho',
                                    50/150, 3/np.sqrt(150),
@@ -49,8 +49,7 @@ mu = 100
 sigma = 3
 
 community = Consumer_Resource_Model("Self-limiting resource supply, leached",
-                                    M,
-                                    M)
+                                    pool_sizes = [M, M])
 
 community.growth_consumption_rates('coupled by rho',
                                    mu/M, sigma/np.sqrt(M),
@@ -84,7 +83,6 @@ M = 180
 mu_c = 200
 
 community = Consumer_Resource_Model("Self-limiting resource supply, multi-trophic level",
-                                    trophic_levels = 3,
                                     pool_sizes = [M, M, M])
 
 community.growth_consumption_rates('growth function of consumption',

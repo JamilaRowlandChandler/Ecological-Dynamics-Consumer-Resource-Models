@@ -94,8 +94,7 @@ def community_sensitivity(rho,
     sigma = 4
     
     crm_community = Consumer_Resource_Model("Hybrid resource supply",
-                                            system_size,
-                                            system_size)
+                                            pool_sizes = [system_size, system_size])
 
     # generate model parameters
     crm_community.growth_consumption_rates(method = 'coupled by rho',

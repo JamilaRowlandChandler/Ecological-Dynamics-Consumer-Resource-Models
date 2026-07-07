@@ -124,8 +124,7 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
                 
                 # make list of resource and species pool sizes
                 initialisation_list = [dict(model = model,
-                                            no_resources = parm_set['M'], 
-                                            no_species = parm_set['S'])
+                                            pool_sizes = [parm_set['M'], parm_set['S']])
                                        for parm_set in parameter_sets]
                 
                 # extract and rename arguments for death rates and instrinsic
@@ -140,8 +139,7 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
                 
                 # make list of resource and species pool sizes
                 initialisation_list = [dict(model = model,
-                                            no_resources = parm_set['M'], 
-                                            no_species = parm_set['S'])
+                                            pool_sizes = [parm_set['M'], parm_set['S']])
                                        for parm_set in parameter_sets]
                 
                 # extract and rename arguments for death rates, instrinsic 
@@ -161,8 +159,7 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
                 
                 # make list of resource and species pool sizes
                 initialisation_list = [dict(model = model,
-                                            no_resources = parm_set['M'], 
-                                            no_species = parm_set['S'])
+                                            pool_sizes = [parm_set['M'], parm_set['S']])
                                        for parm_set in parameter_sets]
                 
                 m_s_rates_args_list = [dict(death_method = 'constant',
@@ -177,8 +174,7 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
                 
                 # make list of resource and species pool sizes
                 initialisation_list = [dict(model = model,
-                                            no_resources = parm_set['M'], 
-                                            no_species = parm_set['S'])
+                                            pool_sizes = [parm_set['M'], parm_set['S']])
                                        for parm_set in parameter_sets]
                 
                 m_s_rates_args_list = [dict(death_method = 'constant',
@@ -195,7 +191,6 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
                 
                 # make list of resource and species pool sizes
                 initialisation_list = [dict(model = model,
-                                            trophic_levels = parm_set['trophic_levels'], 
                                             pool_sizes = parm_set['pool_sizes'])
                                        for parm_set in parameter_sets]
                 
@@ -369,7 +364,7 @@ def CRMs_create_and_save(subdirectory : str,
 
     '''
     
-    if 'trophic_levels' in init_class.keys():
+    if init_class['model'].endswith("multi-trophic level"):
     
         communities = complex_ecosystem_model_dynamics(init_class,
                                                        growth_consumption_rates_args,
@@ -400,7 +395,7 @@ def CRMs_create_and_save(subdirectory : str,
             
         case 'v3':
             
-            if 'trophic_levels' in init_class.keys():
+            if init_class['model'].endswith("multi-trophic level"):
                 
                 df = simulation_df_from_communities(communities,
                                                     init_class['model'],
@@ -662,10 +657,10 @@ def load_in_communities(filepath : str):
                                                 community_dict['pool_sizes'])
         
         else:
-        
+
             community = Consumer_Resource_Model(community_dict['model'],
-                                                community_dict['no_species'],
-                                                community_dict['no_resources'])
+                                                pool_sizes = [community_dict['no_resources'],
+                                                              community_dict['no_species']])
         
         for attr, val in community_dict.items():
         
