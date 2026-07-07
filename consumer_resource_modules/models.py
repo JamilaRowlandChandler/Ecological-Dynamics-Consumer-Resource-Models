@@ -271,7 +271,8 @@ class SL_CRM(ParametersInterface,
                          args = (self.no_species, self.growth, self.consumption, 
                                  self.d, self.b),
                          method = 'LSODA', rtol = 1e-7, atol = 1e-9,
-                         t_eval = np.linspace(0, t_end, 200), events = unbounded_growth)
+                         t_eval = np.linspace(0, t_end, 200),
+                         events = unbounded_growth)
     
 # %%
 
