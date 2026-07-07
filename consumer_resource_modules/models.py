@@ -20,7 +20,9 @@ def Consumer_Resource_Model(model : Literal["Self-limiting resource supply",
                                             "Self-limiting resource supply, leached",
                                             "Self-limiting resource supply, self-inhibition",
                                             "Self-limiting resource supply, multi-trophic level"
-                                            "Externally-supplied resources"],
+                                            "Externally-supplied resources",
+                                            "Hybrid resource supply",
+                                            "Metabolic pathways"],
                             no_species : Union[int, None] = None,
                             no_resources : Union[int, None] = None,
                             trophic_levels : Union[int, None] = None,
@@ -39,10 +41,16 @@ def Consumer_Resource_Model(model : Literal["Self-limiting resource supply",
             "Self-limiting resource supply", but with direct consumer self-inhibition
             "Externally-supplied resources" - chemostat-style resource dynamics
             (constant influx + dilution)
+            "Metabolic pathways" - consumer-resource dynamics with a structured
+            metabolic network determining consumer growth and resource byproducts
     no_species : int
         species pool size
     no_resources : int
         resource pool size
+    pool_sizes : tuple, list, or np.ndarray
+        Used by "Self-limiting resource supply, multi-trophic level" (trophic
+        level pool sizes) and "Metabolic pathways" (pool_sizes[0] = resource
+        pool size, pool_sizes[1] = species pool size)
 
     Raises
     ------
@@ -79,9 +87,13 @@ def Consumer_Resource_Model(model : Literal["Self-limiting resource supply",
             instance = ES_CRM(no_species, no_resources)
             
         case "Hybrid resource supply":
-            
+
             instance = Hybrid_CRM(no_species, no_resources)
-            
+
+        case "Metabolic pathways":
+
+            instance = MP_CRM(pool_sizes)
+
         case _:
             
             raise Exception('You have not selected an exisiting model.\n' + \
@@ -1238,10 +1250,267 @@ class Hybrid_CRM(ParametersInterface, DifferentialEquationsInterface,
         
         # call the ODE solver with the unbounded growth event function
         # the ode solver stops when the event function is true (returns 0)           
-        return solve_ivp(model, [0, t_end], initial_abundance, 
-                         args = (self.no_species, self.growth, self.consumption, 
+        return solve_ivp(model, [0, t_end], initial_abundance,
+                         args = (self.no_species, self.growth, self.consumption,
                                  self.d, self.b, self.o, self.a),
                          method = 'LSODA', # 'Radau', #'RK45',
                          rtol = 1e-9, atol = 1e-7,
                          t_eval = np.linspace(0, t_end, 200), events = unbounded_growth)
-    
+
+# %%
+
+class MP_CRM(ParametersInterface, DifferentialEquationsInterface,
+             CommunityPropertiesInterface):
+
+    '''
+
+    Consumer-resource model (CRM) with structured metabolic pathways.
+
+    Consumers grow by metabolising resources along a structured metabolic
+    network, and release metabolic byproducts back into the resource pool.
+
+    '''
+
+    def __init__(self, pool_sizes : Union[tuple[int], list[int], npt.NDArray]):
+
+        '''
+
+        Initiate model
+
+        Parameters
+        ----------
+        pool_sizes : tuple, list, or np.ndarray
+            pool_sizes[0] = resource pool size, pool_sizes[1] = species pool size
+
+        Returns
+        -------
+        None.
+
+        '''
+
+        self.pool_sizes = pool_sizes
+
+        self.no_resources = pool_sizes[0]
+        self.no_species = pool_sizes[1]
+
+    def model_specific_rates(self,
+                             death_method :
+                                 Literal['normal', 'constant', 'user-supplied']
+                                 = 'constant',
+                             death_args : Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
+                                                TypedDict('constant', {'d' : float}),
+                                                TypedDict('user-supplied', {'d' : npt.NDArray})]
+                             = {'d' : 1},
+                             outflux_method:
+                                 Literal['normal', 'constant', 'user-supplied']
+                                 = 'constant',
+                             outflux_args : Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
+                                                TypedDict('constant', {'o' : float}),
+                                                TypedDict('user-supplied', {'o' : npt.NDArray})]
+                             = {'o' : 1},
+                             resource_growth_method :
+                                 Literal['normal', 'constant', 'user-supplied']
+                                 = 'constant',
+                             resource_growth_args :
+                                 Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
+                                       TypedDict('constant', {'b' : float}),
+                                       TypedDict('user-supplied', {'b' : npt.NDArray})]
+                                 = {'b' : 1},
+                             resource_inhibition_method:
+                                 Literal['normal', 'constant', 'user-supplied']
+                                 = 'constant',
+                             resource_inhibition_args : Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
+                                                              TypedDict('constant', {'A' : float}),
+                                                              TypedDict('user-supplied', {'A' : npt.NDArray})]
+                             = {'A' : 1}):
+
+        '''
+
+        Generate parameters specific to the metabolic pathway CRM - consumer
+        death rates, and the resource supply, self-decay and self-inhibition
+        rates (o_alpha, b_alpha, A_{alpha alpha}).
+
+        Parameters
+        ----------
+        death_method : str
+            Method used to generate death rates. Options are:
+                'normal' : normally distributed parameters
+                'constant' : death rates are fixed
+                'user-supplied' : supply your own death rates
+        death_args : dict
+            Arguments for death_method.
+            If 'normal', first argument is the mean, second is the stand deviation
+            e.g., {'mu': mean, 'sigma' : standard deviation}
+            If 'constant', the key is the parameter name, argument is the fixed value
+            e.g., {'d' : val}
+            If 'used-supplied', argument is the array of death rates
+            e.g., {'d' : array_of_vals}
+        outflux_method : str
+            Method used to generate intrinsic resource supply rates, o_alpha.
+            Options are the same as death_method, but named 'o' rather than 'd'.
+        outflux_args : dict
+            Arguments for outflux_method. Options are the same as
+            death_method args.
+        resource_growth_method : str
+            Method used to generate resource self-decay rates, b_alpha.
+            Options are the same as death_method, but named 'b' rather than 'd'.
+        resource_growth_args : dict
+            Arguments for resource_growth_method. Options are the same as
+            death_method args.
+        resource_inhibition_method : str
+            Method used to generate resource self-inhibition rates, A_{alpha alpha}.
+            Options are the same as death_method, but named 'A' rather than 'd'.
+        resource_inhibition_args : dict
+            Arguments for resource_inhibition_method. Options are the same as
+            death_method args.
+
+        Returns
+        -------
+        None.
+
+        '''
+
+        # labels used to assign parameters as object attributes
+        p_labels = ['d', 'o', 'b', 'A']
+
+        # dimensions for death rates, and resource supply/decay/inhibition rates
+        dims_list = [(self.no_species, ), (self.no_resources, ),
+                     (self.no_resources, ), (self.no_resources, )]
+
+        # generate parameters used the other_parameter_methods method
+        for p_method, p_args, p_label, dims in \
+            zip([death_method, outflux_method, resource_growth_method,
+                resource_inhibition_method],
+                [death_args, outflux_args, resource_growth_args,
+                resource_inhibition_args],
+                p_labels, dims_list):
+
+                self.other_parameter_methods(p_method, p_args, p_label, dims)
+
+    #####################################################################
+
+    def simulation(self,
+                   t_end : float,
+                   initial_abundance : npt.NDArray):
+
+        '''
+
+        Simulate community dynamics
+
+        Parameters
+        ----------
+        t_end : float
+            Simulation end time.
+        initial_abundance : np.ndarray
+            Initial abundances of species and resources.
+
+        Returns
+        -------
+        Bunch object produced by scipy.integrate.solve_ivp
+            Simulation.
+
+        '''
+
+        def model(t, y,
+                  S, G, C, Q, W, D, O, B, A, P, eps):
+
+            '''
+
+            ODE for the metabolic pathway CRM
+
+            Parameters
+            ----------
+            t : float
+                time
+            y : np.ndarray
+                consumer and resource abundances at time t
+            S : int
+                species pool size (used to separate y into species and resource
+                                   abundances)
+            G : np.ndarray
+                matrix of consumer growth rates, g_{i, alpha}
+            C : np.ndarray
+                matrix of resource consumption rates, c_{i, alpha}
+            Q : np.ndarray
+                metabolic network, q_{i, alpha, beta}
+            W : np.ndarray
+                resource 'energies', w_alpha
+            D : np.ndarray
+                consumer death rates, d_i
+            O : np.ndarray
+                intrinsic resource supply rates, o_alpha
+            B : np.ndarray
+                resource self-decay rates, b_alpha
+            A : np.ndarray
+                resource self-inhibition rates, A_{alpha alpha}
+            P : np.ndarray
+                resource production (byproduct) rates, p_{i, beta}
+            eps : float
+                small constant preventing division by 0 for consumers with no
+                outgoing metabolic links from a given resource
+
+            Returns
+            -------
+            np.ndarray
+                Rate of change in species and resource abundances over time
+                (dNdt and dRdt)
+
+            '''
+
+            # separate species and resource abundances
+            species, resources = y[:S], y[S:]
+
+            # pairwise energy differences, w_alpha - w_beta
+            energy_differences = W[:, np.newaxis] - W[np.newaxis, :]
+
+            # normalisation over outgoing metabolic links from each resource,
+            # for each consumer - sum_gamma q_{i, alpha, gamma} + eps
+            out_degree = np.sum(Q, axis=2) + eps
+
+            # metabolic energy gain per unit resource, for each consumer -
+            # sum_beta q_{i, alpha, beta}(w_alpha - w_beta) / out_degree
+            metabolic_gain = np.sum(Q * energy_differences[np.newaxis, :, :],
+                                    axis=2) / out_degree
+
+            # change in consumer abundances over time
+            dNdt = species * (np.sum(G * resources * metabolic_gain, axis=1) - D)
+
+            # fraction of consumption of resource alpha channelled through the
+            # metabolic network, for each consumer -
+            # sum_beta q_{i, alpha, beta} / out_degree
+            consumption_gate = np.sum(Q, axis=2) / out_degree
+
+            # resources consumed, summed over consumers
+            consumed = resources * np.sum(species[:, np.newaxis] * C.T *
+                                          consumption_gate, axis=0)
+
+            # fraction of consumption of resource beta channelled into
+            # byproduct resource alpha, for each consumer -
+            # q_{i, beta, alpha} / out_degree_beta
+            production_gate = Q / out_degree[:, :, np.newaxis]
+
+            # weight of byproduct production from each consumer/source resource
+            production_weight = species[:, np.newaxis] * C.T * P * \
+                resources[np.newaxis, :]
+
+            # resources produced as metabolic byproducts, summed over
+            # consumers and source resources
+            produced = np.einsum('ib,iba->a', production_weight, production_gate)
+
+            # change in resource abundances over time
+            dRdt = (O - B*resources - A*resources**2) - consumed + produced
+
+            return np.concatenate((dNdt, dRdt)) + 1e-8
+
+        unbounded_growth.terminal = True
+
+        # call the ODE solver with the unbounded growth event function
+        # the ode solver stops when the event function is true (returns 0)
+        return solve_ivp(model, [0, t_end], initial_abundance,
+                         args = (self.no_species, self.growth, self.consumption,
+                                 self.q, self.w, self.d, self.o, self.b, self.A,
+                                 self.p, 1e-8),
+                         method = 'LSODA', rtol = 1e-7, atol = 1e-9,
+                         t_eval = np.linspace(0, t_end, 200),
+                         events = unbounded_growth)
+

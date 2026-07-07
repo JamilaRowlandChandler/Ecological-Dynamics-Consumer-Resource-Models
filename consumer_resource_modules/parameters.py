@@ -8,7 +8,8 @@ Created on Thu Sep 12 18:10:06 2024
 # %%
 import numpy as np
 import numpy.typing as npt
-from typing import Literal, Union
+from typing import Literal, Union, TypedDict
+from scipy.stats import gamma
 
 # %%
 
@@ -412,6 +413,87 @@ class ParametersInterface:
                 except KeyError as e:
                     
                     print("You need to supply parameters for " + p_label + " in your dictionary argument.")
+
+    def metabolic_network(self,
+                          energies : Union[None, npt.NDArray] = None,
+                          resource_conversions : TypedDict('generate',
+                                                           {'mean' : float,
+                                                            'variance' : float})
+                              = {'mean' : 1, 'variance' : 1},
+                          production_method :
+                              Literal['normal', 'constant', 'user-supplied']
+                              = 'constant',
+                          production_args :
+                              Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
+                                    TypedDict('constant', {'p' : float}),
+                                    TypedDict('user-supplied', {'p' : npt.NDArray})]
+                              = {'p' : 1}):
+
+        '''
+
+        Generate a structured metabolic network and resource production rates
+        for the metabolic pathway consumer-resource model.
+
+        Parameters
+        ----------
+        energies : np.ndarray or None
+            Resource 'energies' w_alpha. If None, sampled from Uniform(0, 1)
+            with sample size = no_resources. If supplied, used directly.
+        resource_conversions : dict
+            Mean and variance of the gamma distribution used as a likelihood
+            function f(x) for the probability that a metabolic link exists
+            between a pair of resources alpha, beta, evaluated at
+            x = w_alpha - w_beta.
+            e.g. {'mean' : mean, 'variance' : variance}
+        production_method : str
+            Method used to generate resource production rates, p_{i, beta}.
+            Options are:
+                'normal' : normally distributed parameters
+                'constant' : production rates are fixed
+                'user-supplied' : supply your own production rates
+        production_args : dict
+            Arguments for production_method. Options are the same as
+            other_parameter_methods args, but named 'p' rather than 'd'.
+
+        Returns
+        -------
+        None.
+
+        '''
+
+        # resource energies, w_alpha - either user-supplied or Uniform(0, 1)
+        if energies is None:
+
+            self.w = np.random.uniform(0, 1, self.no_resources)
+
+        else:
+
+            self.w = energies
+
+        # pairwise energy differences, w_alpha - w_beta
+        energy_differences = self.w[:, np.newaxis] - self.w[np.newaxis, :]
+
+        # gamma distribution used as a likelihood function f(x), giving the
+        # probability of a metabolic link existing between resources alpha and beta
+        mean, variance = resource_conversions['mean'], resource_conversions['variance']
+
+        self.mean_q, self.variance_q = mean, variance
+
+        gamma_shape, gamma_scale = mean**2/variance, variance/mean
+
+        likelihood = gamma.pdf(energy_differences, a = gamma_shape, scale = gamma_scale)
+
+        link_probability = likelihood/np.max(likelihood)
+
+        # sample the metabolic network - an independent Bernoulli trial for
+        # each consumer, for every ordered pair of resources (alpha, beta)
+        self.q = np.random.binomial(1, link_probability,
+                                    size = (self.no_species, self.no_resources,
+                                            self.no_resources))
+
+        # generate resource production rates, p_{i, beta}
+        self.other_parameter_methods(production_method, production_args, 'p',
+                                     (self.no_species, self.no_resources))
 
     def __normal_parameters(self, mu, sigma, dims):
         
