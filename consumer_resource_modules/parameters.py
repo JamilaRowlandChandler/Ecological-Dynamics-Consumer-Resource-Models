@@ -480,10 +480,17 @@ class ParametersInterface:
         self.mean_q, self.variance_q = mean, variance
 
         gamma_shape, gamma_scale = mean**2/variance, variance/mean
+        
+        if gamma_shape >= 1: 
+            
+            mode = (gamma_shape - 1) * gamma_scale 
+            
+        else: 
+            
+            mode = 0 
 
-        likelihood = gamma.pdf(energy_differences, a = gamma_shape, scale = gamma_scale)
-
-        link_probability = likelihood/np.max(likelihood)
+        link_probability = gamma.pdf(energy_differences, a = gamma_shape, scale = gamma_scale) / \
+                        gamma.pdf(mode, a=gamma_shape, scale=gamma_scale)
 
         # sample the metabolic network - an independent Bernoulli trial for
         # each consumer, for every ordered pair of resources (alpha, beta)

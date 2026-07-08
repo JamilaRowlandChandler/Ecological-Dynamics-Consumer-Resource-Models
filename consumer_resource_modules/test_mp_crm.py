@@ -51,7 +51,7 @@ assert community.b.shape == (M,)
 assert community.A.shape == (M,)
 
 # --- metabolic network + production rates ---
-community.metabolic_network(resource_conversions={'mean': 1, 'variance': 1},
+community.metabolic_network(resource_conversions={'mean': 2.00001, 'variance': 1},
                              production_args={'p': 0.3})
 
 assert community.w.shape == (M,)
