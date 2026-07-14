@@ -10,6 +10,7 @@ Run with:
 
 import sys
 import os
+from time import time
 
 # make sure this folder is importable regardless of cwd
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -51,7 +52,8 @@ assert community.b.shape == (M,)
 assert community.A.shape == (M,)
 
 # --- metabolic network + production rates ---
-community.metabolic_network(resource_conversions={'mean': 2.00001, 'variance': 1},
+community.metabolic_network(resource_conversions={'mean': 2,
+                                                  'variance': 1},
                              production_args={'p': 0.3})
 
 assert community.w.shape == (M,)
@@ -60,10 +62,13 @@ assert set(np.unique(community.q)).issubset({0, 1})
 assert community.p.shape == (S, M)
 
 # --- simulate ---
-community.simulate_community(t_end=50, no_init_cond=2)
+start_time = time()
+community.simulate_community(t_end=50, no_init_cond=1)
+end_time = time()
+print("runtime =", end_time - start_time)
 
-print("ODE solutions:", [sol.y.shape for sol in community.ODE_sols])
-print("q shape:", community.q.shape, " w shape:", community.w.shape, " p shape:", community.p.shape)
+#print("ODE solutions:", [sol.y.shape for sol in community.ODE_sols])
+#print("q shape:", community.q.shape, " w shape:", community.w.shape, " p shape:", community.p.shape)
 
 for sol in community.ODE_sols:
     assert not np.any(np.isnan(sol.y)), "NaNs found in simulation output"
@@ -71,8 +76,10 @@ for sol in community.ODE_sols:
 # --- community properties ---
 community.calculate_community_properties()
 
-print("species survival fraction:", community.species_survival_fraction)
-print("resource survival fraction:", community.resource_survival_fraction)
+#print("species survival fraction:", community.species_survival_fraction)
+#print("resource survival fraction:", community.resource_survival_fraction)
+
+# %%
 
 # --- also test the user-supplied energies / normal production / user-supplied network options ---
 community2 = Consumer_Resource_Model('Metabolic pathways', pool_sizes=(M, S))
@@ -90,6 +97,6 @@ assert np.allclose(community2.w, np.linspace(0, 1, M))
 assert community2.p.shape == (S, M)
 
 community2.simulate_community(t_end=20, no_init_cond=1)
-print("Second community ODE solution shape:", community2.ODE_sols[0].y.shape)
+#print("Second community ODE solution shape:", community2.ODE_sols[0].y.shape)
 
-print("\nAll MP_CRM smoke tests passed.")
+#print("\nAll MP_CRM smoke tests passed.")

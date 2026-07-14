@@ -1480,8 +1480,59 @@ class MP_CRM(ParametersInterface,
 
         '''
 
-        def model(t, y,
-                  M, G, C, Q, W, D, O, B, A, P, eps):
+        M = self.no_resources
+        G, C, Q, W = self.growth, self.consumption, self.q, self.w
+        D, O, B, A, P = self.d, self.o, self.b, self.A, self.p
+        eps = 1e-8
+
+        # --- everything below depends only on the fixed metabolic network
+        # (Q, W) and rate parameters, never on the dynamical state (N, R) or
+        # time - so it's computed once here, rather than from scratch at
+        # every single ODE function evaluation (which is what made this model
+        # so expensive: several O(S x M x M) array operations were being
+        # redone on every LSODA step, including the same np.sum(Q, axis=2)
+        # computed twice over) ---
+
+        # pairwise energy differences, w_alpha - w_beta
+        energy_differences = W[:, np.newaxis] - W[np.newaxis, :]
+
+        # normalisation over outgoing metabolic links from each resource,
+        # for each consumer - sum_gamma q_{i, alpha, gamma} (+ eps)
+        out_degree_raw = np.sum(Q, axis=2)
+        out_degree = out_degree_raw + eps
+
+        # metabolic energy gain per unit resource, for each consumer -
+        # sum_beta q_{i, alpha, beta}(w_alpha - w_beta) / out_degree
+        metabolic_gain = np.sum(Q * energy_differences[np.newaxis, :, :],
+                                axis=2) / out_degree
+
+        # fraction of consumption of resource alpha channelled through the
+        # metabolic network, for each consumer -
+        # sum_beta q_{i, alpha, beta} / out_degree
+        consumption_gate = out_degree_raw / out_degree
+
+        # fraction of consumption of resource beta channelled into
+        # byproduct resource alpha, for each consumer -
+        # q_{i, beta, alpha} / out_degree_beta
+        production_gate = Q / out_degree[:, :, np.newaxis]
+
+        # fold the (now precomputed) network-dependent gating terms directly
+        # into the growth/consumption rate matrices
+        G_effective = G * metabolic_gain
+        C_gated = C.T * consumption_gate
+        CP = C.T * P
+
+        # flatten production_gate's (species, source resource) axes together
+        # so the production term becomes a single BLAS matrix-vector product
+        # per step, rather than an np.einsum contraction (which doesn't
+        # reliably dispatch to BLAS for this index pattern)
+        production_gate_flat = production_gate.reshape(self.no_species * M, M)
+
+        # production_gate transposed to (source resource, species, target
+        # resource) - used by the analytic Jacobian's dR/dR block below
+        production_gate_T = production_gate.transpose(1, 0, 2)
+
+        def model(t, y):
 
             '''
 
@@ -1493,30 +1544,6 @@ class MP_CRM(ParametersInterface,
                 time
             y : np.ndarray
                 consumer and resource abundances at time t
-            M : int
-                resource pool size (used to separate y into resource and species
-                                   abundances)
-            G : np.ndarray
-                matrix of consumer growth rates, g_{i, alpha}
-            C : np.ndarray
-                matrix of resource consumption rates, c_{i, alpha}
-            Q : np.ndarray
-                metabolic network, q_{i, alpha, beta}
-            W : np.ndarray
-                resource 'energies', w_alpha
-            D : np.ndarray
-                consumer death rates, d_i
-            O : np.ndarray
-                intrinsic resource supply rates, o_alpha
-            B : np.ndarray
-                resource self-decay rates, b_alpha
-            A : np.ndarray
-                resource self-inhibition rates, A_{alpha alpha}
-            P : np.ndarray
-                resource production (byproduct) rates, p_{i, beta}
-            eps : float
-                small constant preventing division by 0 for consumers with no
-                outgoing metabolic links from a given resource
 
             Returns
             -------
@@ -1529,57 +1556,73 @@ class MP_CRM(ParametersInterface,
             # separate resource and species abundances
             resources, species = y[:M], y[M:]
 
-            # pairwise energy differences, w_alpha - w_beta
-            energy_differences = W[:, np.newaxis] - W[np.newaxis, :]
-
-            # normalisation over outgoing metabolic links from each resource,
-            # for each consumer - sum_gamma q_{i, alpha, gamma} + eps
-            out_degree = np.sum(Q, axis=2) + eps
-
-            # metabolic energy gain per unit resource, for each consumer -
-            # sum_beta q_{i, alpha, beta}(w_alpha - w_beta) / out_degree
-            metabolic_gain = np.sum(Q * energy_differences[np.newaxis, :, :],
-                                    axis=2) / out_degree
-
             # change in consumer abundances over time
-            dNdt = species * (np.sum(G * resources * metabolic_gain, axis=1) - D)
-
-            # fraction of consumption of resource alpha channelled through the
-            # metabolic network, for each consumer -
-            # sum_beta q_{i, alpha, beta} / out_degree
-            consumption_gate = np.sum(Q, axis=2) / out_degree
+            dNdt = species * (np.sum(G_effective * resources, axis=1) - D)
 
             # resources consumed, summed over consumers
-            consumed = resources * np.sum(species[:, np.newaxis] * C.T *
-                                          consumption_gate, axis=0)
-
-            # fraction of consumption of resource beta channelled into
-            # byproduct resource alpha, for each consumer -
-            # q_{i, beta, alpha} / out_degree_beta
-            production_gate = Q / out_degree[:, :, np.newaxis]
-
-            # weight of byproduct production from each consumer/source resource
-            production_weight = species[:, np.newaxis] * C.T * P * \
-                resources[np.newaxis, :]
+            consumed = resources * np.sum(species[:, np.newaxis] * C_gated, axis=0)
 
             # resources produced as metabolic byproducts, summed over
             # consumers and source resources
-            produced = np.einsum('ib,iba->a', production_weight, production_gate)
+            production_weight = species[:, np.newaxis] * CP * resources[np.newaxis, :]
+            produced = production_weight.reshape(-1) @ production_gate_flat
 
             # change in resource abundances over time
             dRdt = (O - B*resources - A*resources**2) - consumed + produced
 
             return np.concatenate((dRdt, dNdt)) + 1e-8
 
+        def jacobian(t, y):
+
+            '''
+
+            Analytic Jacobian of the metabolic pathway CRM's ODE, d(dy/dt)/dy.
+
+            Supplying this to solve_ivp avoids LSODA falling back to a
+            finite-difference Jacobian, which needs ~2*(M + S) extra calls
+            to model() per Jacobian update - one analytic evaluation here
+            costs about the same as a single call to model().
+
+            '''
+
+            resources, species = y[:M], y[M:]
+
+            # d(dNdt)/d(species) - diagonal (no direct species-species term)
+            dNdN_diag = np.sum(G_effective * resources, axis=1) - D
+
+            # d(dNdt)/d(resources)
+            dNdR = species[:, np.newaxis] * G_effective
+
+            # d(dRdt)/d(resources) - diagonal self-decay/inhibition/consumption
+            # terms, plus a dense block from the production term
+            dRdR_diag = -(B + 2*A*resources + species @ C_gated)
+            production_weight_by_species = species[:, np.newaxis] * CP
+            dense_RR = np.matmul(production_weight_by_species.T[:, np.newaxis, :],
+                                 production_gate_T)[:, 0, :]
+            dRdR = np.diag(dRdR_diag) + dense_RR.T
+
+            # d(dRdt)/d(species) - consumption term + production term
+            dRdN_consumption = -resources[:, np.newaxis] * C_gated.T
+            production_weight_by_resource = CP * resources[np.newaxis, :]
+            dense_RN = np.matmul(production_weight_by_resource[:, np.newaxis, :],
+                                 production_gate)[:, 0, :]
+            dRdN = dRdN_consumption + dense_RN.T
+
+            J = np.zeros((M + self.no_species, M + self.no_species))
+            J[:M, :M] = dRdR
+            J[:M, M:] = dRdN
+            J[M:, :M] = dNdR
+            J[M:, M:] = np.diag(dNdN_diag)
+
+            return J
+
         unbounded_growth.terminal = True
 
         # call the ODE solver with the unbounded growth event function
         # the ode solver stops when the event function is true (returns 0)
         return solve_ivp(model, [0, t_end], initial_abundance,
-                         args = (self.no_resources, self.growth, self.consumption,
-                                 self.q, self.w, self.d, self.o, self.b, self.A,
-                                 self.p, 1e-8),
-                         method = 'LSODA', rtol = 1e-7, atol = 1e-9,
+                         method = 'LSODA', jac = jacobian,
+                         rtol = 1e-7, atol = 1e-9,
                          t_eval = np.linspace(0, t_end, 200),
                          events = unbounded_growth)
 
