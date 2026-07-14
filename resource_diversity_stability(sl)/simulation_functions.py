@@ -672,7 +672,8 @@ class ReloadedODEs:
         
 # %%
 
-def generate_simulation_df(directory : str):
+def generate_simulation_df(directory : str,
+                           method : Literal["v1", "v2"] = "v2"):
     
     '''
     
@@ -692,11 +693,11 @@ def generate_simulation_df(directory : str):
     '''
     
     # parameters to include in the dataframe
-    parameters = ['no_species', 'no_resources', 'mu_c', 'sigma_c', 'mu_y',
-                  'sigma_y', 'd_val', 'b_val'] 
+    parameters = ['no_species', 'no_resources', 'mu_c', 'sigma_c', 'mu_g',
+                  'sigma_g', 'd_val', 'b_val'] 
     
     # load data and create dataframe
-    df = CRM_df(directory, parameters)
+    df = CRM_df(directory, parameters, method)
     
     # rename columns to useful names for our analysis (e.g., taking into account M-scaling)
     df.rename(columns = {'mu_c' : 'mu_c/M', 'sigma_c' : 'sigma_c/root_M',
@@ -753,7 +754,8 @@ def simulation_df_from_communities(communities, model, gc_method):
     '''
     
     # parameters to include in the dataframe
-    parameters = extract_trophic_level_parms(model, communities[0].trophic_levels) + \
+    parameters = extract_trophic_level_parms(model,
+                                             communities[0].trophic_levels) + \
         model_specific_parameters(model) 
     
     # load data and create dataframe
@@ -955,7 +957,9 @@ def model_specific_emergent_properties(df, model):
 
 # %%
 
-def CRM_df(directory : str, parameters : list, method : Literal['v1', 'v2'] = 'v1'):
+def CRM_df(directory : str,
+           parameters : list,
+           method : Literal['v1', 'v2']):
     
     '''
     
@@ -991,7 +995,8 @@ def CRM_df(directory : str, parameters : list, method : Literal['v1', 'v2'] = 'v
     
         return df
     
-    df = pd.concat([load_data_create_df(directory + "/" + file) 
+    df = pd.concat([load_data_create_df(directory + "/" + file,
+                                        method) 
                     for file in os.listdir(directory)],
                    axis = 0, ignore_index = True)
         
@@ -1042,6 +1047,7 @@ def community_dynamics_df(communities : list,
                                                for parameter in parameters})
             
         df = pd.concat([parameter_df, properties_df], axis = 1)
+        df['Species packing'] = (df['phi_N']*df['no_species'])/(df['phi_R']*df['no_resources'])
             
     else:
         
