@@ -21,26 +21,44 @@ import numpy as np
 
 # %%
 
-community = Consumer_Resource_Model("Self-limiting resource supply", 150, 150)
+resource_pool_sizes = [50, 250]
+mu_c = 130
+sigma_c = 1.6
+mu_y = 1
+sigma_y= 0.13
+d = 1
+b = 1
 
-community.growth_consumption_rates('coupled by rho',
-                                   50/150, 3/np.sqrt(150),
-                                   50/150, 3/np.sqrt(150), rho = 0.5)
-community.model_specific_rates(death_method = "normal",
-                               death_args = {'mu' : 1, 'sigma' : 0.1},
-                               resource_growth_method = "normal",
-                               resource_growth_args = {'mu' : 1, 'sigma' : 0.1})
+for M in resource_pool_sizes:
 
-community.simulate_community(1000, 1)
 
-#community.calculate_community_properties() 
+    community = Consumer_Resource_Model("Self-limiting resource supply",
+                                        M,
+                                        M)
+    
+    community.growth_consumption_rates('growth function of consumption',
+                                       mu_c = mu_c/M,
+                                       sigma_c = sigma_c/np.sqrt(M),
+                                       mu_g = mu_y,
+                                       sigma_g = sigma_y)
+    community.model_specific_rates(death_method = "constant",
+                                   death_args = {'d' : 1},
+                                   resource_growth_method = "constant",
+                                   resource_growth_args = {'b' : 1})
+    
+    community.simulate_community(3000, 1)
 
-#community.lyapunov_exponent = max_le(community, community.ODE_sols[0].y[:, -1],
-#                                         T = 1000, perturbation = 1e-6)
-#print(community.lyapunov_exponent)
+    #community.calculate_community_properties() 
 
-plt.plot(community.ODE_sols[0].t, community.ODE_sols[0].y[:150, :].T)
-plt.show()
+    community.lyapunov_exponent = max_le(community,
+                                         community.ODE_sols[0].y[:, -1],
+                                         T = 1000,
+                                         perturbation = 1e-6)
+    print(community.lyapunov_exponent)
+
+    plt.plot(community.ODE_sols[0].t,
+             community.ODE_sols[0].y[:M, :].T)
+    plt.show()
 
 # %%
 
