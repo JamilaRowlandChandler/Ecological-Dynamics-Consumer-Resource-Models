@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     
     sys.path.insert(0, "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models" + \
                         "/consumer_resource_modules")
-    from models import SL_CRM, SL_SI_CRM, SL_TL_CRM, ES_CRM, Hybrid_CRM
+    from models import SL_CRM, SL_SI_CRM, SL_TL_CRM, ES_CRM, Hybrid_CRM, SL_CRPM, MP_CRM
     from effective_LV_models import eLV_SL, gLV
     
 # %%
@@ -253,13 +253,6 @@ def max_le(community : Union["SL_CRM", "SL_SI_CRM", "SL_TL_CRM", "ES_CRM",
                                          initial_conditions,
                                          T,
                                          perturbation)
-    
-    #if (original_traj.y.shape[1] != perturbed_traj.y.shape[1]) or \
-    #    original_traj.y.shape[1] == 1 or perturbed_traj.y.shape[1] == 1:
-        
-    #    max_lyapunov_exponent = np.nan
-        
-    #else:
     
     try:
         

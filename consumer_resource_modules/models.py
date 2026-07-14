@@ -76,7 +76,7 @@ def Consumer_Resource_Model(model : Literal["Self-limiting resource supply",
 
         case "Self-limiting resource supply, multi-trophic level":
 
-            instance = SL_TL_CRM(len(pool_sizes), pool_sizes)
+            instance = SL_TL_CRM(pool_sizes)
 
         case "Externally-supplied resources":
 
@@ -501,7 +501,8 @@ class SL_CRPM(ParametersInterface,
     
 # %%
 
-class SL_SI_CRM(ParametersInterface, DifferentialEquationsInterface,
+class SL_SI_CRM(ParametersInterface,
+                DifferentialEquationsInterface,
                 CommunityPropertiesInterface):
     
     '''
@@ -715,7 +716,6 @@ class SL_TL_CRM(ParametersInterface,
     '''
     
     def __init__(self,
-                 trophic_levels : int,
                  pool_sizes = Union[tuple[int], list[int], npt.NDArray]):
         
         '''
@@ -737,7 +737,7 @@ class SL_TL_CRM(ParametersInterface,
         
         # assign species and resource pool size as class attributes
         
-        self.trophic_levels = trophic_levels
+        self.trophic_levels = len(pool_sizes)
         
         self.pool_sizes = pool_sizes
         
