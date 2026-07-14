@@ -109,6 +109,37 @@ rho_sigma("Self-limiting resource supply",
           t_end = 1000,
           no_init_conds = 1)
 
+# %%
+
+# Example simulations 
+
+rho_sigma("Hybrid resource supply",
+          [0.2, 1.0],
+          [10.0],
+          dict(mu_c = mu, mu_g = mu,
+               d = d, b = b, o = -o, a = 0,
+               M = system_size, S = system_size),
+          "external_resource_stability/simulations/rho_sigma_mu50_es_examplesim",
+          no_communities = 1,
+          t_end = 1000,
+          no_init_conds = 1,
+          save_method="v1")
+
+rho_sigma("Hybrid resource supply",
+          [0.2, 0.9, 1.0],
+          [6.0],
+          dict(mu_c = mu, mu_g = mu,
+               d = d, b = 0, o = o, a = 1,
+               M = system_size, S = system_size),
+          "external_resource_stability/simulations/rho_sigma_mu50_sl_examplesim",
+          no_communities = 1,
+          t_end = 1000,
+          no_init_conds = 1,
+          save_method="v1")
+
+# %%
+
+# non-negligable self-inhibition
 rho_sigma("Hybrid resource supply",
           rhos,
           sigmas,
@@ -121,7 +152,7 @@ rho_sigma("Hybrid resource supply",
           no_init_conds = 1)
 
 rho_sigma("Hybrid resource supply",
-          np.arange(0.7, 1.1, 0.1), #rhos,
+          rhos,
           sigmas,
           dict(mu_c = mu, mu_g = mu,
                d = d, b = 0.001, o = o, a = a,
@@ -131,23 +162,7 @@ rho_sigma("Hybrid resource supply",
           t_end = 1000,
           no_init_conds = 1)
 
-# %%
-
-################################################
-
-rho_sigma("Hybrid resource supply",
-          [0.6], # np.arange(0.7, 1.0, 0.1), #rhos,
-          np.arange(5.0, 13.0, 1.0), #sigmas,
-          dict(mu_c = mu, mu_g = mu,
-               d = d, b = 0, o = o, a = 10**(-5),
-               M = system_size, S = system_size),
-          "external_resource_stability/simulations/rho_sigma_noinflux",
-          no_communities = 20,
-          t_end = 1000,
-          no_init_conds = 1)
-
-# %%
-
+# negligable self-inhibition
 rho_sigma("Hybrid resource supply",
           np.arange(0.7, 1.0, 0.1), #rhos,
           sigmas,
@@ -170,3 +185,17 @@ rho_sigma("Hybrid resource supply",
           t_end = 1000,
           no_init_conds = 1)
 
+# %%
+
+################################################
+
+#rho_sigma("Hybrid resource supply",
+#          [0.6], # np.arange(0.7, 1.0, 0.1), #rhos,
+#          np.arange(5.0, 13.0, 1.0), #sigmas,
+#          dict(mu_c = mu, mu_g = mu,
+#               d = d, b = 0, o = o, a = 10**(-5),
+#               M = system_size, S = system_size),
+#          "external_resource_stability/simulations/rho_sigma_noinflux",
+#          no_communities = 20,
+#          t_end = 1000,
+#          no_init_conds = 1)
