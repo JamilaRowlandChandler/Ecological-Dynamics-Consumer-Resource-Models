@@ -14,6 +14,7 @@ adapted to call MP_CRM via simulation_functions_unified.py instead.
 import numpy as np
 import sys
 import os
+import pandas as pd
 
 # %%
 
@@ -32,16 +33,26 @@ import self_consistency_equation_functions as sce
 
 # %%
 
-def M_effect_fixed_C(M_range, mu_C_range, sigma_C, n, fixed_parameters):
+def M_effect_fixed_C(M_range,
+                     mu_C_range,
+                     sigma_C,
+                     n,
+                     fixed_parameters,
+                     model = "Metabolic pathways"):
 
-    parameters = generate_parameters(M_range, mu_C_range, sigma_C, n,
+    parameters = generate_parameters(M_range,
+                                     mu_C_range,
+                                     sigma_C,
+                                     n,
                                      fixed_parameters)
 
     CRM_across_parameter_space(parameters,
                                "resource_diversity_stability_crossfeeding/mu_c_vs_M",
                                ['M', 'mu_c'],
-                               model = "Metabolic pathways",
-                               save_method = 'v3')
+                               model = model,
+                               save_method = 'v3',
+                               no_communities = 2,
+                               t_end = 1000)
 
 # %%
 
@@ -99,4 +110,28 @@ fixed_parameters = dict(mu_y = 1, sigma_y = 0.13,
 # so this still needs a proper sweep to find where the stability transition
 # actually sits before treating these numbers as final.
 M_effect_fixed_C(resource_pool_sizes, (100, 250), 1.6,
-                 11, fixed_parameters)
+                 11,
+                 fixed_parameters,
+                 model = "Metabolic networks")
+
+# %%
+
+M_effect_fixed_C(np.array([100, 250]),
+                 np.array([100]),
+                 1.6,
+                 1,
+                 dict(mu_y = 1, sigma_y = 0.1369,
+                      d = 1, b = 1,
+                      gamma = 1),
+                 model = "Self-limiting resource supply")
+
+# %%
+
+full_location = "C:/Users/jamil/Documents/PhD/Data/" + \
+    "resource_diversity_stability_crossfeeding/mu_c_vs_M"
+    
+df = pd.concat([pd.read_csv(full_location + "/" + file, index_col=False) 
+               for file in os.listdir(full_location)],
+               axis = 0, ignore_index = True) 
+
+print(df[['M', 'Max. lyapunov exponent']])
