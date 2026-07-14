@@ -1,109 +1,70 @@
-# \# Metabolic Pathway Model
+# \# Resource pool size vs stability in the metabolic pathway model
 
 
 
-Implement a new model in the consumer\_resource\_modules folder, alongside the GLV and other consumer resource models. This model will be a consumer-resource style model which incorporates structured metabolic pathways.
+% I want to investigate how increasing the resource pool size (no\_resources) affects stability in the metabolic pathway model (MP\_CRM).
 
+% This will involve running many simulations across resource pool sizes and other parameter distributions, then estimating the stability of each community.
 
+% Simulations should be run and saved using functions from "simulation\_functions\_unified.py".
 
-\## Model Structure
+% Please write the code that can achieve this, updating "simulation\_functions\_unified.py" as necessary.
 
 
 
-% Consumer dynamics
 
 
+\## Setting up a directory for running simulations
 
-% $\\frac{dN\_i}{dt} = N\_i (\\sum\_\\alpha^M g\_{i, \\alpha} R\_\\alpha \\sum\_\\beta^M \\frac{q\_{i, \\alpha \\beta} (w\_\\alpha - w\_\\beta)}{\\sum\_\\gamma^M q\_{i, \\alpha \\gamma} + \\epsilon} - d\_i)$
 
 
+% Firstly, create a new folder in "/Ecological-Dynamics-Consumer-Resource-Models" called "/resource\_diversity\_stability\_crossfeeding". 
 
-% Resource dynamics
+% Move "simulation\_functions\_unified.py" and "test\_simulation\_functions\_unified.py" from "/consumer\_resource\_modules" to this new folder.
 
+% Also make a copy of "self\_consistency\_equation\_functions.py" and add it to this folder.
 
+% Then, create a folder within "/resource\_diversity\_stability\_crossfeeding" called "stability\_transitions". 
 
-% $\\frac{dR\_\\alpha}{dt} = (o\_\\alpha - b\_\\alpha R\_\\alpha - A\_{\\alpha \\alpha} R\_\\alpha^2) - \\sum\_i^S c\_{i, \\alpha} R\_\\alpha N\_i \\sum\_\\beta^M \\frac{b\_{i, \\alpha \\beta}}{\\sum\_\\gamma^M b\_{i, \\alpha \\gamma} + \\epsilon} + \\sum\_i^S \\sum\_\\beta^M c\_{i, \\beta} p\_{i, \\beta} \\frac{q\_{i, \\beta \\alpha}}{\\sum\_\\gamma^M  q\_{i, \\beta \\gamma} + \\epsilon} R\_\\beta N\_i$
+% Within this folder, create a file called "mu\_c\_vs\_M.py". The structure of this file should look similar to "C:/Users/jamil/Documents/PhD/Code Repositories/CRM-Resource-diversity-vs-Stability/Simulation codes/mu\_c\_vs\_M.py" 
 
 
 
-\## Parameter sampling
+\## Running and saving the simulations
 
+% As stated, the code should follow a similar structure to "C:/Users/jamil/Documents/PhD/Code Repositories/CRM-Resource-diversity-vs-Stability/Simulation codes/mu\_c\_vs\_M.py", tweaking the codes appropriately to make sure they're run in the correct directory.
 
+% You may tweak it to remove inefficient or confusing code, but the code must call CRM\_across\_parameter\_space from "self\_consistency\_equation\_functions.py" to create and save communities.
 
-% c\_{i, \\alpha} is sampled from a normal distribution
+% If necessary, tweak CRM\_across\_parameter\_space so that it can call MP\_CRM using different methods.
 
+% The subdirectory argument in CRM\_across\_parameter\_space should begin with "resource\_diversity\_stability\_crossfeeding/mu\_c\_vs\_M"
 
+\# Use save\_method = 'v3'
 
-% g\_{i, \\alpha} is sampled from a normal distribution that is coupled in some way to c\_{i, \\alpha}
 
 
+\## Model arguments and methods for generating parameters
 
-% w\_\\alpha and w\_\\beta (all w's) are sampled from a uniform distribution with min = 0 and max = 1
 
-% q\_{i, \\alpha \\beta} (all q's) is sampled from a Bernoulli distribution, so takes the values 0 or 1 with probability p. p is determined by a gamma distribution function f(x). For each pair of resources \\alpha and \\beta, for each consumer i, p = f(w\_\\alpha - w\_\\beta).
 
+\# resource\_pool\_sizes (which will eventually be supplied as pool\_sizes to MP\_CRM) = np.arange(50, 275, 25)
 
+\# sigma\_c = 1.6
 
-% d\_i can be sampled from a normal distribution, be constant, or supplied by the user
+\# mu\_y = 1,
 
+\# sigma\_y = 0.13,
 
+\# d = 1,
 
-% o\_\\alpha can be sampled from a normal distribution, be constant, or supplied by the user
+\# b = 1,
 
+\# For the metabolic\_network method, please set network\_method = 'step' and p\_s = 1.
 
+\# You will need to vary mu\_c to find an appropriate range where you observe a stability transition (where the community.lyapunov\_exponent changes sign or where the community.ODE\_sols\[0].t\[-1] changes from equalling t\_end (supplied to solve\_ivp) to terminating early, or visa versa). As a constraint, mu\_c >> sigma\_c Do some tests and find an appropriate range.
 
-% b\_\\alpha can be sampled from a normal distribution, be constant, or supplied by the user
 
 
-
-% A\_{\\alpha \\alpha} can be sampled from a normal distribution, be constant, or supplied by the user
-
-
-
-% p\_{i, \\beta} can be sampled from a normal distribution, be constant, or supplied by the user
-
-
-
-\## Code Structure
-
-
-
-% The model class should be put in models.py, and should inherit from ParametersInterface, DifferentialEquationsInterface, and CommunityPropertiesInterface as the other consumer-resource models do. It should also be an option called by the Consumer\_Resource\_Models wrapper. 
-
-
-
-% It should have the same init function as the other consumer-resource models in model.py, taking in the pool\_sizes argument
-
-
-
-% The class does not need its on methods for generating g\_{i, \\alpha} and c\_{i, \\alpha}, this can be handled by the growth\_consumption\_rates method
-
-
-
-% The model will need its own model\_specific\_rates methods, which should be defined with the class in models.py, for generating o\_\\alpha, b\_\\alpha and A\_{\\alpha \\alpha}. It can use the same version of the method as the Hybrid\_CRM class.
-
-
-
-% You need to develop a new method in ParametersInterface for generating metabolic networks and resource production rates. 
-
-% Sampling the w's: They should either be user-supplied, or sampled from a uniform distribution varying between 0 and 1, sample size = pool\_size\[0]. Then, the gamma distribution function should be generated and used as a likelihood function. 
-
-% Sampling the b's: They should either be user-supplied, or sampled from a Bernoulli distribution with probability x, which will vary with each b. x is defined by a gamma function f(x), where the user should be able to specify some parameters relating to the function, like its mean and variance. To sample b for each resource pair (\\alpha and beta) and consumer, p = f(w\_\\alpha - w\_\\beta), and is then plugged into the Bernoulli distribution function. Make sure to construct the b's in the appropriate tensors. I think the sample size should be something like pool\_size\[0]\*\*2 \* pool\_size\[1]. Finally, generate the p's. They should be normally distributed, constant, or user-supplied. The parameters should then be assigned to the class in the same way as growth\_consumption\_rates method
-
-% Therefore, the method structure should look something like this (doesn't have to be exactly this):
-
-
-def metabolic\_network(energies : Union\[None, npt.NDArray] = None, # for the ws, if None generate, if array use these
-
-&#x09;	      resource\_conversions: Union\[TypedDict('generate', {'mean' : float, 'variance' : float}), None] = {'mean' : 1, 'variance' : 1} # for generating the gamma function and then b's,
-
-&#x09;	     production : Union\[TypedDict('normal', {'mu' : float, 'sigma' : float}), TypedDict('constant', {'p' : float}), TypedDict('user-supplied', {'p' : npt.NDArray})] = {'mu' : 1, 'sigma' : 0})
-
-
-
-% The model will need its own simulation method containing the model function for simulating the ODE. This can follow the same structure as the simulation methods in the other model classes in models.py, but with the correct equations.
-
-
-
-% The model does not need methods for generating initial conditions, saving simulation results, and calculating community properties
+\# The code from "C:/Users/jamil/Documents/PhD/Code Repositories/CRM-Resource-diversity-vs-Stability/Simulation codes/mu\_c\_vs\_M.py" already has functions that scale appropriate parameters by the resource pool size. Make sure these are not removed.
 

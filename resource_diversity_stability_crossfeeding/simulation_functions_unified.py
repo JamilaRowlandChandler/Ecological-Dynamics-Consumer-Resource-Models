@@ -62,6 +62,7 @@ from tqdm import tqdm
 import numpy.typing as npt
 from typing import Union, TypedDict, NotRequired, Literal
 
+sys.path.insert(0, 'C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/consumer_resource_modules')
 from models import Consumer_Resource_Model
 from community_level_properties import max_le
 
@@ -112,16 +113,54 @@ MODEL_RATE_PARAMS = {
 # parameter set (see _metabolic_network_args below).
 def _metabolic_network_args(parm_set : dict):
 
+    '''
+
+    Build kwargs for MP_CRM's metabolic_network() call from a parameter set.
+
+    network_method is resolved first (an explicit 'network_method' key if
+    given, else inferred from which keys are present: 'p_s' -> 'step',
+    'mean_q'/'variance_q' -> 'gamma', neither -> left unset so
+    metabolic_network() falls back to its own default of 'gamma' with
+    mean=1, variance=1). resource_conversions is then built to match
+    whichever network_method was resolved (an explicit 'resource_conversions'
+    dict always wins, if supplied).
+
+    '''
+
     kwargs = {}
 
     if 'w' in parm_set:
 
         kwargs['energies'] = np.asarray(parm_set['w'])
 
-    if 'mean_q' in parm_set or 'variance_q' in parm_set:
+    network_method = parm_set.get('network_method')
 
-        kwargs['resource_conversions'] = {'mean' : parm_set.get('mean_q', 1),
-                                          'variance' : parm_set.get('variance_q', 1)}
+    if network_method is None:
+
+        if 'p_s' in parm_set:
+
+            network_method = 'step'
+
+        elif 'mean_q' in parm_set or 'variance_q' in parm_set:
+
+            network_method = 'gamma'
+
+    if network_method is not None:
+
+        kwargs['network_method'] = network_method
+
+        if 'resource_conversions' in parm_set:
+
+            kwargs['resource_conversions'] = parm_set['resource_conversions']
+
+        elif network_method == 'step':
+
+            kwargs['resource_conversions'] = {'p_s' : parm_set['p_s']}
+
+        elif network_method == 'gamma':
+
+            kwargs['resource_conversions'] = {'mean' : parm_set.get('mean_q', 1),
+                                              'variance' : parm_set.get('variance_q', 1)}
 
     method, method_args = infer_rate_spec(parm_set, 'p')
     kwargs['production_method'] = method
