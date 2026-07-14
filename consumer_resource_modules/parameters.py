@@ -416,9 +416,12 @@ class ParametersInterface:
 
     def metabolic_network(self,
                           energies : Union[None, npt.NDArray] = None,
-                          resource_conversions : TypedDict('generate',
-                                                           {'mean' : float,
-                                                            'variance' : float})
+                          network_method : Literal['gamma', 'step'] = 'gamma',
+                          resource_conversions : Union[TypedDict('gamma',
+                                                                 {'mean' : float,
+                                                                  'variance' : float}),
+                                                       TypedDict('step',
+                                                                 {'p_s' : float})]
                               = {'mean' : 1, 'variance' : 1},
                           production_method :
                               Literal['normal', 'constant', 'user-supplied']
@@ -439,12 +442,21 @@ class ParametersInterface:
         energies : np.ndarray or None
             Resource 'energies' w_alpha. If None, sampled from Uniform(0, 1)
             with sample size = no_resources. If supplied, used directly.
+        network_method : str
+            Method used to generate the probability that a metabolic link
+            exists between a pair of resources alpha, beta (then used as the
+            Bernoulli probability for sampling q_{i, alpha, beta}). Options are:
+                'gamma' : probability given by a gamma distribution used as a
+                likelihood function f(x), evaluated at x = w_alpha - w_beta
+                and normalised by its value at the distribution's mode.
+                'step' : probability is p_s if w_alpha - w_beta > 0, and 0
+                otherwise.
         resource_conversions : dict
-            Mean and variance of the gamma distribution used as a likelihood
-            function f(x) for the probability that a metabolic link exists
-            between a pair of resources alpha, beta, evaluated at
-            x = w_alpha - w_beta.
+            Arguments for network_method.
+            If 'gamma', mean and variance of the gamma distribution,
             e.g. {'mean' : mean, 'variance' : variance}
+            If 'step', the link probability for w_alpha - w_beta > 0,
+            e.g. {'p_s' : p_s}
         production_method : str
             Method used to generate resource production rates, p_{i, beta}.
             Options are:
@@ -473,24 +485,40 @@ class ParametersInterface:
         # pairwise energy differences, w_alpha - w_beta
         energy_differences = self.w[:, np.newaxis] - self.w[np.newaxis, :]
 
-        # gamma distribution used as a likelihood function f(x), giving the
-        # probability of a metabolic link existing between resources alpha and beta
-        mean, variance = resource_conversions['mean'], resource_conversions['variance']
+        match network_method:
 
-        self.mean_q, self.variance_q = mean, variance
+            case 'gamma':
 
-        gamma_shape, gamma_scale = mean**2/variance, variance/mean
-        
-        if gamma_shape >= 1: 
-            
-            mode = (gamma_shape - 1) * gamma_scale 
-            
-        else: 
-            
-            mode = 0 
+                # gamma distribution used as a likelihood function f(x), giving
+                # the probability of a metabolic link existing between
+                # resources alpha and beta
+                mean, variance = resource_conversions['mean'], resource_conversions['variance']
 
-        link_probability = gamma.pdf(energy_differences, a = gamma_shape, scale = gamma_scale) / \
-                        gamma.pdf(mode, a=gamma_shape, scale=gamma_scale)
+                self.mean_q, self.variance_q = mean, variance
+
+                gamma_shape, gamma_scale = mean**2/variance, variance/mean
+
+                if gamma_shape >= 1:
+
+                    mode = (gamma_shape - 1) * gamma_scale
+
+                else:
+
+                    mode = 0
+
+                link_probability = gamma.pdf(energy_differences, a = gamma_shape, scale = gamma_scale) / \
+                                gamma.pdf(mode, a=gamma_shape, scale=gamma_scale)
+
+            case 'step':
+
+                # a metabolic link exists with probability p_s if resource
+                # alpha has higher energy than resource beta, and never
+                # otherwise
+                p_s = resource_conversions['p_s']
+
+                self.p_s = p_s
+
+                link_probability = np.where(energy_differences > 0, p_s, 0)
 
         # sample the metabolic network - an independent Bernoulli trial for
         # each consumer, for every ordered pair of resources (alpha, beta)
