@@ -458,7 +458,9 @@ class ParametersInterface:
             If 'step', the link probability for w_alpha - w_beta > 0,
             e.g. {'p_s' : p_s}
         production_method : str
-            Method used to generate resource production rates, p_{i, beta}.
+            Method used to generate resource production rates, p_{i, alpha},
+            where alpha is the byproduct/target resource being produced
+            (not the resource being consumed).
             Options are:
                 'normal' : normally distributed parameters
                 'constant' : production rates are fixed
@@ -526,7 +528,8 @@ class ParametersInterface:
                                     size = (self.no_species, self.no_resources,
                                             self.no_resources))
 
-        # generate resource production rates, p_{i, beta}
+        # generate resource production rates, p_{i, alpha} (alpha = the
+        # byproduct/target resource being produced)
         self.other_parameter_methods(production_method, production_args, 'p',
                                      (self.no_species, self.no_resources))
 

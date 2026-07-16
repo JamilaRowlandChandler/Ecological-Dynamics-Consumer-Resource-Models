@@ -103,7 +103,7 @@ MODEL_RATE_PARAMS = {
         [("death", "d", "d"), ("influx", "b", "b"), ("outflux", "o", "o"),
          ("resource_inhibition", "a", "a")],
     "Metabolic pathways":
-        [("death", "d", "d"), ("outflux", "o", "o"), ("resource_growth", "b", "b"),
+        [("death", "d", "d"), ("influx", "o", "o"), ("resource_growth", "b", "b"),
          ("resource_inhibition", "A", "A")],
 }
 

@@ -52,7 +52,8 @@ def M_effect_fixed_C(M_range,
                                model = model,
                                save_method = 'v3',
                                no_communities = 2,
-                               t_end = 1000)
+                               t_end = 7000,
+                               no_init_conds = 1)
 
 # %%
 
@@ -98,7 +99,7 @@ resource_pool_sizes = np.arange(50, 275, 25)
 # to beta exists with probability p_s whenever w_alpha > w_beta, and never
 # otherwise); gamma = M/S sets the species:resource ratio (gamma=1 -> S=M).
 fixed_parameters = dict(mu_y = 1, sigma_y = 0.13,
-                        d = 1, o = 1, b = 1, A = 1, p = 1,
+                        d = 1, o = 0, b = 1, A = 1, p = 1,
                         network_method = 'step', p_s = 1,
                         gamma = 1)
 
@@ -112,20 +113,18 @@ fixed_parameters = dict(mu_y = 1, sigma_y = 0.13,
 M_effect_fixed_C(resource_pool_sizes, (100, 250), 1.6,
                  11,
                  fixed_parameters,
-                 model = "Metabolic networks")
+                 model = "Metabolic pathways")
 
 # %%
 
 M_effect_fixed_C(np.array([100, 250]),
-                 np.array([100]),
+                 np.array([400]),
                  1.6,
                  1,
-                 dict(mu_y = 1, sigma_y = 0.1369,
-                      d = 1, b = 1,
+                 dict(mu_y = 1, sigma_y = 1,
+                      d = 1, b = 1, o = 1,
                       gamma = 1),
-                 model = "Self-limiting resource supply")
-
-# %%
+                 model = "Externally-supplied resources")
 
 full_location = "C:/Users/jamil/Documents/PhD/Data/" + \
     "resource_diversity_stability_crossfeeding/mu_c_vs_M"
@@ -134,4 +133,4 @@ df = pd.concat([pd.read_csv(full_location + "/" + file, index_col=False)
                for file in os.listdir(full_location)],
                axis = 0, ignore_index = True) 
 
-print(df[['M', 'Max. lyapunov exponent']])
+print(df[['M', 'Max. lyapunov exponent', 'Divergence measure']])

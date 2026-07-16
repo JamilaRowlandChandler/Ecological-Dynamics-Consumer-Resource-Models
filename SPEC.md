@@ -18,15 +18,15 @@
 
 
 
-% Firstly, create a new folder in "/Ecological-Dynamics-Consumer-Resource-Models" called "/resource\_diversity\_stability\_crossfeeding". 
+% Firstly, create a new folder in "/Ecological-Dynamics-Consumer-Resource-Models" called "/resource\_diversity\_stability\_crossfeeding".
 
 % Move "simulation\_functions\_unified.py" and "test\_simulation\_functions\_unified.py" from "/consumer\_resource\_modules" to this new folder.
 
 % Also make a copy of "self\_consistency\_equation\_functions.py" and add it to this folder.
 
-% Then, create a folder within "/resource\_diversity\_stability\_crossfeeding" called "stability\_transitions". 
+% Then, create a folder within "/resource\_diversity\_stability\_crossfeeding" called "stability\_transitions".
 
-% Within this folder, create a file called "mu\_c\_vs\_M.py". The structure of this file should look similar to "C:/Users/jamil/Documents/PhD/Code Repositories/CRM-Resource-diversity-vs-Stability/Simulation codes/mu\_c\_vs\_M.py" 
+% Within this folder, create a file called "mu\_c\_vs\_M.py". The structure of this file should look similar to "C:/Users/jamil/Documents/PhD/Code Repositories/CRM-Resource-diversity-vs-Stability/Simulation codes/mu\_c\_vs\_M.py"
 
 
 
@@ -59,6 +59,10 @@
 \# d = 1,
 
 \# b = 1,
+
+\# o = 0,
+
+\# a = 1,
 
 \# For the metabolic\_network method, please set network\_method = 'step' and p\_s = 1.
 

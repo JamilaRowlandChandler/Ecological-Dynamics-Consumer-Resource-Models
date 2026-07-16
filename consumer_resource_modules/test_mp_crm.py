@@ -40,9 +40,9 @@ community.growth_consumption_rates('coupled by rho',
 assert community.growth.shape == (S, M)
 assert community.consumption.shape == (M, S)
 
-# --- model-specific rates (death, outflux, resource decay, self-inhibition) ---
+# --- model-specific rates (death, influx, resource decay, self-inhibition) ---
 community.model_specific_rates(death_args={'d': 0.5},
-                                outflux_args={'o': 1},
+                                influx_args={'o': 1},
                                 resource_growth_args={'b': 0.1},
                                 resource_inhibition_args={'A': 0.05})
 

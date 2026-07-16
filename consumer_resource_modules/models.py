@@ -1367,10 +1367,10 @@ class MP_CRM(ParametersInterface,
                                                 TypedDict('constant', {'d' : float}),
                                                 TypedDict('user-supplied', {'d' : npt.NDArray})]
                              = {'d' : 1},
-                             outflux_method:
+                             influx_method:
                                  Literal['normal', 'constant', 'user-supplied']
                                  = 'constant',
-                             outflux_args : Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
+                             influx_args : Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
                                                 TypedDict('constant', {'o' : float}),
                                                 TypedDict('user-supplied', {'o' : npt.NDArray})]
                              = {'o' : 1},
@@ -1411,11 +1411,11 @@ class MP_CRM(ParametersInterface,
             e.g., {'d' : val}
             If 'used-supplied', argument is the array of death rates
             e.g., {'d' : array_of_vals}
-        outflux_method : str
+        influx_method : str
             Method used to generate intrinsic resource supply rates, o_alpha.
             Options are the same as death_method, but named 'o' rather than 'd'.
-        outflux_args : dict
-            Arguments for outflux_method. Options are the same as
+        influx_args : dict
+            Arguments for influx_method. Options are the same as
             death_method args.
         resource_growth_method : str
             Method used to generate resource self-decay rates, b_alpha.
@@ -1436,8 +1436,8 @@ class MP_CRM(ParametersInterface,
 
         '''
 
-        self.other_parameter_methods(outflux_method,
-                                     outflux_args,
+        self.other_parameter_methods(influx_method,
+                                     influx_args,
                                      'o',
                                      (self.no_resources, ))
 
@@ -1516,21 +1516,26 @@ class MP_CRM(ParametersInterface,
         # q_{i, beta, alpha} / out_degree_beta
         production_gate = Q / out_degree[:, :, np.newaxis]
 
+        # P (production rate) is indexed by the TARGET/produced resource
+        # alpha, not the source resource beta being consumed - so it weights
+        # production_gate's last axis, not the consumption rate matrix
+        production_gate_weighted = P[:, np.newaxis, :] * production_gate
+
         # fold the (now precomputed) network-dependent gating terms directly
         # into the growth/consumption rate matrices
         G_effective = G * metabolic_gain
         C_gated = C.T * consumption_gate
-        CP = C.T * P
 
-        # flatten production_gate's (species, source resource) axes together
-        # so the production term becomes a single BLAS matrix-vector product
-        # per step, rather than an np.einsum contraction (which doesn't
-        # reliably dispatch to BLAS for this index pattern)
-        production_gate_flat = production_gate.reshape(self.no_species * M, M)
+        # flatten production_gate_weighted's (species, source resource) axes
+        # together so the production term becomes a single BLAS
+        # matrix-vector product per step, rather than an np.einsum
+        # contraction (which doesn't reliably dispatch to BLAS for this
+        # index pattern)
+        production_gate_weighted_flat = production_gate_weighted.reshape(self.no_species * M, M)
 
-        # production_gate transposed to (source resource, species, target
-        # resource) - used by the analytic Jacobian's dR/dR block below
-        production_gate_T = production_gate.transpose(1, 0, 2)
+        # production_gate_weighted transposed to (source resource, species,
+        # target resource) - used by the analytic Jacobian's dR/dR block below
+        production_gate_weighted_T = production_gate_weighted.transpose(1, 0, 2)
 
         def model(t, y):
 
@@ -1564,11 +1569,14 @@ class MP_CRM(ParametersInterface,
 
             # resources produced as metabolic byproducts, summed over
             # consumers and source resources
-            production_weight = species[:, np.newaxis] * CP * resources[np.newaxis, :]
-            produced = production_weight.reshape(-1) @ production_gate_flat
+            production_weight = species[:, np.newaxis] * C.T * resources[np.newaxis, :]
+            produced = production_weight.reshape(-1) @ production_gate_weighted_flat
 
-            # change in resource abundances over time
-            dRdt = (O - B*resources - A*resources**2) - consumed + produced
+            # change in resource abundances over time - O is a constant supply
+            # (influx), B*resources is intrinsic (logistic-style) resource
+            # growth, and A*resources**2 is the self-limiting/carrying-capacity
+            # term
+            dRdt = (O + B*resources - A*resources**2) - consumed + produced
 
             return np.concatenate((dRdt, dNdt)) + 1e-8
 
@@ -1595,17 +1603,17 @@ class MP_CRM(ParametersInterface,
 
             # d(dRdt)/d(resources) - diagonal self-decay/inhibition/consumption
             # terms, plus a dense block from the production term
-            dRdR_diag = -(B + 2*A*resources + species @ C_gated)
-            production_weight_by_species = species[:, np.newaxis] * CP
+            dRdR_diag = B - 2*A*resources - species @ C_gated
+            production_weight_by_species = species[:, np.newaxis] * C.T
             dense_RR = np.matmul(production_weight_by_species.T[:, np.newaxis, :],
-                                 production_gate_T)[:, 0, :]
+                                 production_gate_weighted_T)[:, 0, :]
             dRdR = np.diag(dRdR_diag) + dense_RR.T
 
             # d(dRdt)/d(species) - consumption term + production term
             dRdN_consumption = -resources[:, np.newaxis] * C_gated.T
-            production_weight_by_resource = CP * resources[np.newaxis, :]
+            production_weight_by_resource = C.T * resources[np.newaxis, :]
             dense_RN = np.matmul(production_weight_by_resource[:, np.newaxis, :],
-                                 production_gate)[:, 0, :]
+                                 production_gate_weighted)[:, 0, :]
             dRdN = dRdN_consumption + dense_RN.T
 
             J = np.zeros((M + self.no_species, M + self.no_species))
