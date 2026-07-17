@@ -423,6 +423,8 @@ class ParametersInterface:
                                                        TypedDict('step',
                                                                  {'p_s' : float})]
                               = {'mean' : 1, 'variance' : 1},
+                          gated : bool = True,
+                          shared_network : bool = False,
                           production_method :
                               Literal['normal', 'constant', 'user-supplied']
                               = 'constant',
@@ -435,7 +437,16 @@ class ParametersInterface:
         '''
 
         Generate a structured metabolic network and resource production rates
-        for the metabolic pathway consumer-resource model.
+        for the metabolic pathway consumer-resource model, and precompute the
+        network-derived quantities (effective growth, gated consumption,
+        weighted production gating) used by MP_CRM.simulation(). These only
+        depend on the fixed metabolic network and rate parameters, never on
+        the dynamical state, so computing them once here (rather than on
+        every ODE function evaluation) is what makes simulation() fast.
+
+        Requires growth_consumption_rates() to have already been called,
+        since self.growth/self.consumption must exist to compute the
+        effective growth/consumption attributes below.
 
         Parameters
         ----------
@@ -450,13 +461,25 @@ class ParametersInterface:
                 likelihood function f(x), evaluated at x = w_alpha - w_beta
                 and normalised by its value at the distribution's mode.
                 'step' : probability is p_s if w_alpha - w_beta > 0, and 0
-                otherwise.
+                otherwise (or unconditionally p_s if gated = False).
         resource_conversions : dict
             Arguments for network_method.
             If 'gamma', mean and variance of the gamma distribution,
             e.g. {'mean' : mean, 'variance' : variance}
-            If 'step', the link probability for w_alpha - w_beta > 0,
-            e.g. {'p_s' : p_s}
+            If 'step', the link probability, e.g. {'p_s' : p_s}
+        gated : bool
+            Only affects network_method = 'step'. If True (default), a link
+            between alpha and beta exists with probability p_s only when
+            w_alpha - w_beta > 0 (energy-descending links only), and never
+            otherwise. If False, q_{i, alpha, beta} is instead sampled from
+            a Bernoulli(p_s) independently of the sign of w_alpha - w_beta -
+            i.e. an unstructured random network with a fixed link probability.
+        shared_network : bool
+            If True, a single (no_resources, no_resources) network is
+            sampled and shared by every consumer (self.q still has shape
+            (no_species, no_resources, no_resources), but is identical along
+            the species axis). If False (default), each consumer gets an
+            independently sampled network.
         production_method : str
             Method used to generate resource production rates, p_{i, alpha},
             where alpha is the byproduct/target resource being produced
@@ -474,6 +497,12 @@ class ParametersInterface:
         None.
 
         '''
+
+        if not hasattr(self, 'growth') or not hasattr(self, 'consumption'):
+
+            raise Exception('metabolic_network() requires growth_consumption_rates() '
+                            'to be called first (self.growth/self.consumption are '
+                            'not yet set).')
 
         # resource energies, w_alpha - either user-supplied or Uniform(0, 1)
         if energies is None:
@@ -515,23 +544,93 @@ class ParametersInterface:
 
                 # a metabolic link exists with probability p_s if resource
                 # alpha has higher energy than resource beta, and never
-                # otherwise
+                # otherwise - unless gated = False, in which case the link
+                # probability is p_s regardless of energy ordering
                 p_s = resource_conversions['p_s']
 
                 self.p_s = p_s
 
-                link_probability = np.where(energy_differences > 0, p_s, 0)
+                if gated:
+
+                    link_probability = np.where(energy_differences > 0, p_s, 0)
+
+                else:
+
+                    link_probability = np.full_like(energy_differences, p_s)
 
         # sample the metabolic network - an independent Bernoulli trial for
-        # each consumer, for every ordered pair of resources (alpha, beta)
-        self.q = np.random.binomial(1, link_probability,
-                                    size = (self.no_species, self.no_resources,
-                                            self.no_resources))
+        # each consumer, for every ordered pair of resources (alpha, beta) -
+        # or a single network shared by every consumer if shared_network = True
+        if shared_network:
+
+            shared_q = np.random.binomial(1, link_probability,
+                                          size = (self.no_resources, self.no_resources))
+
+            self.q = np.tile(shared_q, (self.no_species, 1, 1))
+
+        else:
+
+            self.q = np.random.binomial(1, link_probability,
+                                        size = (self.no_species, self.no_resources,
+                                                self.no_resources))
 
         # generate resource production rates, p_{i, alpha} (alpha = the
         # byproduct/target resource being produced)
         self.other_parameter_methods(production_method, production_args, 'p',
                                      (self.no_species, self.no_resources))
+
+        # --- precompute network-derived quantities used by
+        # MP_CRM.simulation() - these depend only on the fixed metabolic
+        # network (self.q, self.w) and rate parameters (self.growth,
+        # self.consumption, self.p), never on the dynamical state (N, R) or
+        # time, so computing them once here avoids redoing several
+        # O(S x M x M) array operations on every single ODE function
+        # evaluation ---
+
+        eps = 1e-8
+
+        # normalisation over outgoing metabolic links from each resource,
+        # for each consumer - sum_gamma q_{i, alpha, gamma} (+ eps)
+        out_degree_raw = np.sum(self.q, axis=2)
+        out_degree = out_degree_raw + eps
+
+        # metabolic energy gain per unit resource, for each consumer -
+        # sum_beta q_{i, alpha, beta}(w_alpha - w_beta) / out_degree
+        metabolic_gain = np.sum(self.q * energy_differences[np.newaxis, :, :],
+                                axis=2) / out_degree
+
+        # fraction of consumption of resource alpha channelled through the
+        # metabolic network, for each consumer -
+        # sum_beta q_{i, alpha, beta} / out_degree
+        consumption_gate = out_degree_raw / out_degree
+
+        # fraction of consumption of resource beta channelled into
+        # byproduct resource alpha, for each consumer -
+        # q_{i, beta, alpha} / out_degree_beta
+        production_gate = self.q / out_degree[:, :, np.newaxis]
+
+        # P (production rate) is indexed by the TARGET/produced resource
+        # alpha, not the source resource beta being consumed - so it weights
+        # production_gate's last axis, not the consumption rate matrix
+        self.production_gate_weighted = self.p[:, np.newaxis, :] * production_gate
+
+        # fold the (now precomputed) network-dependent gating terms directly
+        # into the growth/consumption rate matrices
+        self.G_effective = self.growth * metabolic_gain
+        self.C_gated = self.consumption.T * consumption_gate
+
+        # flatten production_gate_weighted's (species, source resource) axes
+        # together so the production term becomes a single BLAS
+        # matrix-vector product per step, rather than an np.einsum
+        # contraction (which doesn't reliably dispatch to BLAS for this
+        # index pattern)
+        self.production_gate_weighted_flat = \
+            self.production_gate_weighted.reshape(self.no_species * self.no_resources,
+                                                  self.no_resources)
+
+        # production_gate_weighted transposed to (source resource, species,
+        # target resource) - used by the analytic Jacobian's dR/dR block
+        self.production_gate_weighted_T = self.production_gate_weighted.transpose(1, 0, 2)
 
     def __normal_parameters(self, mu, sigma, dims):
         

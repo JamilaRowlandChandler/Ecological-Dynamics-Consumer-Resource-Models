@@ -1481,61 +1481,19 @@ class MP_CRM(ParametersInterface,
         '''
 
         M = self.no_resources
-        G, C, Q, W = self.growth, self.consumption, self.q, self.w
-        D, O, B, A, P = self.d, self.o, self.b, self.A, self.p
-        eps = 1e-8
+        C = self.consumption
+        D, O, B, A = self.d, self.o, self.b, self.A
 
-        # --- everything below depends only on the fixed metabolic network
-        # (Q, W) and rate parameters, never on the dynamical state (N, R) or
-        # time - so it's computed once here, rather than from scratch at
-        # every single ODE function evaluation (which is what made this model
-        # so expensive: several O(S x M x M) array operations were being
-        # redone on every LSODA step, including the same np.sum(Q, axis=2)
-        # computed twice over) ---
-
-        # pairwise energy differences, w_alpha - w_beta
-        energy_differences = W[:, np.newaxis] - W[np.newaxis, :]
-
-        # normalisation over outgoing metabolic links from each resource,
-        # for each consumer - sum_gamma q_{i, alpha, gamma} (+ eps)
-        out_degree_raw = np.sum(Q, axis=2)
-        out_degree = out_degree_raw + eps
-
-        # metabolic energy gain per unit resource, for each consumer -
-        # sum_beta q_{i, alpha, beta}(w_alpha - w_beta) / out_degree
-        metabolic_gain = np.sum(Q * energy_differences[np.newaxis, :, :],
-                                axis=2) / out_degree
-
-        # fraction of consumption of resource alpha channelled through the
-        # metabolic network, for each consumer -
-        # sum_beta q_{i, alpha, beta} / out_degree
-        consumption_gate = out_degree_raw / out_degree
-
-        # fraction of consumption of resource beta channelled into
-        # byproduct resource alpha, for each consumer -
-        # q_{i, beta, alpha} / out_degree_beta
-        production_gate = Q / out_degree[:, :, np.newaxis]
-
-        # P (production rate) is indexed by the TARGET/produced resource
-        # alpha, not the source resource beta being consumed - so it weights
-        # production_gate's last axis, not the consumption rate matrix
-        production_gate_weighted = P[:, np.newaxis, :] * production_gate
-
-        # fold the (now precomputed) network-dependent gating terms directly
-        # into the growth/consumption rate matrices
-        G_effective = G * metabolic_gain
-        C_gated = C.T * consumption_gate
-
-        # flatten production_gate_weighted's (species, source resource) axes
-        # together so the production term becomes a single BLAS
-        # matrix-vector product per step, rather than an np.einsum
-        # contraction (which doesn't reliably dispatch to BLAS for this
-        # index pattern)
-        production_gate_weighted_flat = production_gate_weighted.reshape(self.no_species * M, M)
-
-        # production_gate_weighted transposed to (source resource, species,
-        # target resource) - used by the analytic Jacobian's dR/dR block below
-        production_gate_weighted_T = production_gate_weighted.transpose(1, 0, 2)
+        # network-derived quantities (G_effective, C_gated,
+        # production_gate_weighted*) are precomputed once in
+        # metabolic_network() and stored as attributes, since they depend
+        # only on the fixed metabolic network and rate parameters, never on
+        # the dynamical state (N, R) or time
+        G_effective = self.G_effective
+        C_gated = self.C_gated
+        production_gate_weighted = self.production_gate_weighted
+        production_gate_weighted_flat = self.production_gate_weighted_flat
+        production_gate_weighted_T = self.production_gate_weighted_T
 
         def model(t, y):
 

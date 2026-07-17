@@ -162,6 +162,14 @@ def _metabolic_network_args(parm_set : dict):
             kwargs['resource_conversions'] = {'mean' : parm_set.get('mean_q', 1),
                                               'variance' : parm_set.get('variance_q', 1)}
 
+    if 'gated' in parm_set:
+
+        kwargs['gated'] = parm_set['gated']
+
+    if 'shared_network' in parm_set:
+
+        kwargs['shared_network'] = parm_set['shared_network']
+
     method, method_args = infer_rate_spec(parm_set, 'p')
     kwargs['production_method'] = method
     kwargs['production_args'] = method_args
