@@ -1597,7 +1597,7 @@ class MP_CRM(ParametersInterface,
         else:
 
             # log-corrected growth mode: growth on the edge alpha -> beta
-            # uses R_alpha*[w_alpha - w_beta - log(R_alpha/R_beta)] instead
+            # uses R_alpha*[w_alpha - w_beta - log(R_beta/R_alpha)] instead
             # of the original R_alpha*(w_alpha - w_beta). Consumption and
             # production are unchanged (still the precomputed C_gated /
             # production_gate_weighted* from metabolic_network()), so only
@@ -1639,13 +1639,13 @@ class MP_CRM(ParametersInterface,
                 resources, species = y[:M], y[M:]
 
                 # metabolic_gain_mod[i,alpha] = (1/out_degree[i,alpha]) *
-                # sum_beta q_{i,alpha,beta} * [w_alpha - w_beta - log(R_alpha/R_beta)]
-                # = metabolic_gain[i,alpha] - log(R_alpha)*consumption_gate[i,alpha]
-                #   + (1/out_degree[i,alpha]) * sum_beta q_{i,alpha,beta}*log(R_beta)
+                # sum_beta q_{i,alpha,beta} * [w_alpha - w_beta - log(R_beta/R_alpha)]
+                # = metabolic_gain[i,alpha] + log(R_alpha)*consumption_gate[i,alpha]
+                #   - (1/out_degree[i,alpha]) * sum_beta q_{i,alpha,beta}*log(R_beta)
                 logR = np.log(resources)
                 log_R_gate = np.matmul(Q, logR) / out_degree
-                metabolic_gain_mod = metabolic_gain - logR[np.newaxis, :]*consumption_gate \
-                    + log_R_gate
+                metabolic_gain_mod = metabolic_gain + logR[np.newaxis, :]*consumption_gate \
+                    - log_R_gate
 
                 dNdt = species * (np.sum(G * metabolic_gain_mod * resources, axis=1) - D)
 
@@ -1671,15 +1671,17 @@ class MP_CRM(ParametersInterface,
                 For growth, write dN_i/dt = N_i*(f_i(R) - d_i), with
                 f_i(R) = sum_a G[i,a]*R_a*MGM[i,a](R), where MGM is
                 metabolic_gain_mod above. Then
-                d(MGM[i,a])/dR_gamma = -consumption_gate[i,a]*delta(a,gamma)/R_a
-                                       + q_{i,a,gamma}/(out_degree[i,a]*R_gamma)
+                d(MGM[i,a])/dR_gamma = +consumption_gate[i,a]*delta(a,gamma)/R_a
+                                       - q_{i,a,gamma}/(out_degree[i,a]*R_gamma)
                 (the first term from d(log R_a)/dR_gamma, the second from
-                d(log R_beta)/dR_gamma inside the sum over beta). Substituting
+                d(log R_beta)/dR_gamma inside the sum over beta - both signs
+                flipped relative to the log(R_alpha/R_beta) version, since
+                log(R_beta/R_alpha) = -log(R_alpha/R_beta)). Substituting
                 into d(f_i)/dR_gamma = sum_a G[i,a]*[delta(a,gamma)*MGM[i,a] +
                 R_a*d(MGM[i,a])/dR_gamma] and simplifying (R_a and 1/R_a
                 cancel in the first piece) gives:
-                d(f_i)/dR_gamma = G[i,gamma]*(MGM[i,gamma] - consumption_gate[i,gamma])
-                                  + (1/R_gamma) * sum_a G[i,a]*R_a*q_{i,a,gamma}/out_degree[i,a]
+                d(f_i)/dR_gamma = G[i,gamma]*(MGM[i,gamma] + consumption_gate[i,gamma])
+                                  - (1/R_gamma) * sum_a G[i,a]*R_a*q_{i,a,gamma}/out_degree[i,a]
 
                 '''
 
@@ -1687,8 +1689,8 @@ class MP_CRM(ParametersInterface,
 
                 logR = np.log(resources)
                 log_R_gate = np.matmul(Q, logR) / out_degree
-                metabolic_gain_mod = metabolic_gain - logR[np.newaxis, :]*consumption_gate \
-                    + log_R_gate
+                metabolic_gain_mod = metabolic_gain + logR[np.newaxis, :]*consumption_gate \
+                    - log_R_gate
 
                 # --- d(dNdt)/d(species), d(dNdt)/d(resources) ---
 
@@ -1697,7 +1699,7 @@ class MP_CRM(ParametersInterface,
                 GR = G * resources[np.newaxis, :]
                 growth_flux_contracted = np.matmul(GR[:, np.newaxis, :], production_gate)[:, 0, :]
                 dNdR = species[:, np.newaxis] * \
-                    (G*(metabolic_gain_mod - consumption_gate) +
+                    (G*(metabolic_gain_mod + consumption_gate) -
                      growth_flux_contracted / resources[np.newaxis, :])
 
                 # --- d(dRdt)/d(resources), d(dRdt)/d(species) - identical to

@@ -170,6 +170,10 @@ def _metabolic_network_args(parm_set : dict):
 
         kwargs['shared_network'] = parm_set['shared_network']
 
+    if 'growth_saturation' in parm_set:
+
+        kwargs['growth_saturation'] = parm_set['growth_saturation']
+
     method, method_args = infer_rate_spec(parm_set, 'p')
     kwargs['production_method'] = method
     kwargs['production_args'] = method_args

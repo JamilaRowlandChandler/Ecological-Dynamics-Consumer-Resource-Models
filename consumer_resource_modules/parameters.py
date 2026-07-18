@@ -485,9 +485,9 @@ class ParametersInterface:
             If False (default), growth on resource alpha (via each byproduct
             edge alpha -> beta) uses the original (w_alpha - w_beta) energy
             term. If True, it instead uses
-            R_alpha * [w_alpha - w_beta - log(R_alpha/R_beta)] - i.e. the raw
-            energy difference is corrected by the log-ratio of the source and
-            byproduct resource concentrations. Consumption and production are
+            R_alpha * [w_alpha - w_beta - log(R_beta/R_alpha)] - i.e. the raw
+            energy difference is corrected by the log-ratio of the byproduct
+            and source resource concentrations. Consumption and production are
             unchanged in both cases (still the original linear-in-R form).
             Since the growth correction is state-dependent, it can't be fully
             precomputed - MP_CRM.simulation() adds a small state-dependent
