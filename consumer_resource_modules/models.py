@@ -1596,25 +1596,30 @@ class MP_CRM(ParametersInterface,
 
         else:
 
-            # saturating growth mode: growth/consumption/production on the
-            # edge alpha -> beta scale with
-            # R_alpha^saturation_m / (R_alpha^saturation_n + R_beta^saturation_n)
-            # instead of the bare R_alpha factor used above. This is
-            # state-dependent, so (unlike the precomputed gates above) it has
-            # to be recomputed at every ODE evaluation - the structural,
-            # state-independent pieces (self.q, self.w, self.out_degree) are
-            # still reused from metabolic_network() rather than rebuilt here.
-            Q, energy_differences = self.q, self.energy_differences
+            # log-corrected growth mode: growth on the edge alpha -> beta
+            # uses R_alpha*[w_alpha - w_beta - log(R_alpha/R_beta)] instead
+            # of the original R_alpha*(w_alpha - w_beta). Consumption and
+            # production are unchanged (still the precomputed C_gated /
+            # production_gate_weighted* from metabolic_network()), so only
+            # growth needs a state-dependent correction, computed fresh at
+            # every ODE evaluation.
+            Q = self.q
             out_degree = self.out_degree
-            G, P = self.growth, self.p
-            m, n = self.saturation_m, self.saturation_n
+            metabolic_gain = self.metabolic_gain
+            consumption_gate = self.consumption_gate
+            production_gate = self.production_gate
+            G = self.growth
+            C_gated = self.C_gated
+            production_gate_weighted = self.production_gate_weighted
+            production_gate_weighted_flat = self.production_gate_weighted_flat
+            production_gate_weighted_T = self.production_gate_weighted_T
 
             def model(t, y):
 
                 '''
 
-                ODE for the metabolic pathway CRM with saturating,
-                byproduct-concentration-dependent growth/consumption/production.
+                ODE for the metabolic pathway CRM with a log-corrected
+                growth term. Consumption/production are the original form.
 
                 Parameters
                 ----------
@@ -1633,35 +1638,21 @@ class MP_CRM(ParametersInterface,
 
                 resources, species = y[:M], y[M:]
 
-                # saturating_term[alpha, beta] = R_alpha^m / (R_alpha^n + R_beta^n) -
-                # species-independent, so computed once per call and reused
-                # for every consumer's copy of the metabolic network
-                R_pow_m = resources**m
-                R_pow_n = resources**n
-                saturating_term = R_pow_m[:, np.newaxis] / \
-                    (R_pow_n[:, np.newaxis] + R_pow_n[np.newaxis, :])
+                # metabolic_gain_mod[i,alpha] = (1/out_degree[i,alpha]) *
+                # sum_beta q_{i,alpha,beta} * [w_alpha - w_beta - log(R_alpha/R_beta)]
+                # = metabolic_gain[i,alpha] - log(R_alpha)*consumption_gate[i,alpha]
+                #   + (1/out_degree[i,alpha]) * sum_beta q_{i,alpha,beta}*log(R_beta)
+                logR = np.log(resources)
+                log_R_gate = np.matmul(Q, logR) / out_degree
+                metabolic_gain_mod = metabolic_gain - logR[np.newaxis, :]*consumption_gate \
+                    + log_R_gate
 
-                # per-edge, per-consumer saturating flux weight,
-                # q_{i, alpha, beta} * saturating_term[alpha, beta]
-                QS = Q * saturating_term[np.newaxis, :, :]
+                dNdt = species * (np.sum(G * metabolic_gain_mod * resources, axis=1) - D)
 
-                # change in consumer abundances over time - metabolic gain
-                # per unit resource now also depends on the saturating flux,
-                # not just the network structure
-                metabolic_gain = np.sum(QS * energy_differences[np.newaxis, :, :],
-                                        axis=2) / out_degree
-                dNdt = species * (np.sum(G * metabolic_gain, axis=1) - D)
-
-                # resources consumed - sum_beta of the saturating flux out of
-                # alpha, replacing the old (gate * R_alpha) term
-                consumption_flux = np.sum(QS, axis=2) / out_degree
-                consumed = np.sum(species[:, np.newaxis] * C.T * consumption_flux, axis=0)
-
-                # resources produced - sum_sigma c_{i,sigma} * (saturating
-                # flux from source sigma into target tau), weighted by P
-                weight = C.T / out_degree
-                production_flux = np.matmul(weight[:, np.newaxis, :], QS)[:, 0, :]
-                produced = np.sum(species[:, np.newaxis] * P * production_flux, axis=0)
+                # consumption/production unchanged from the original model
+                consumed = resources * np.sum(species[:, np.newaxis] * C_gated, axis=0)
+                production_weight = species[:, np.newaxis] * C.T * resources[np.newaxis, :]
+                produced = production_weight.reshape(-1) @ production_gate_weighted_flat
 
                 dRdt = (O + B*resources - A*resources**2) - consumed + produced
 
@@ -1671,93 +1662,58 @@ class MP_CRM(ParametersInterface,
 
                 '''
 
-                Analytic Jacobian for the saturating-growth variant.
+                Analytic Jacobian for the log-corrected growth variant.
 
-                Treats the saturating term as a genuine two-argument function
-                S(x, y) = x**m / (x**n + y**n), with S_{alpha,beta} = S(R_alpha,
-                R_beta). Its dependence on the resource vector R is then
-                S_{alpha,beta}(R_gamma) = Sx(R_alpha,R_beta)*delta(alpha,gamma)
-                + Sy(R_alpha,R_beta)*delta(beta,gamma), where Sx = dS/dx and
-                Sy = dS/dy - this correctly handles the alpha = beta
-                (self-loop) case via the chain rule, since both "slots" of S
-                depend on the same R_alpha there.
+                d(dRdt)/d(resources), d(dRdt)/d(species) are identical to the
+                original (growth_saturation=False) Jacobian, since
+                consumption/production are unchanged.
 
-                Every aggregate quantity below (metabolic_gain, consumption_flux,
-                production_flux) is a sum over one of S's two indices, so its
-                R-derivative splits the same way into a "diagonal" piece (from
-                the delta(alpha,gamma) term, differentiating through every term
-                in the sum at once) and a "dense" piece (from the
-                delta(beta,gamma) term, which only survives for the single
-                matching index).
+                For growth, write dN_i/dt = N_i*(f_i(R) - d_i), with
+                f_i(R) = sum_a G[i,a]*R_a*MGM[i,a](R), where MGM is
+                metabolic_gain_mod above. Then
+                d(MGM[i,a])/dR_gamma = -consumption_gate[i,a]*delta(a,gamma)/R_a
+                                       + q_{i,a,gamma}/(out_degree[i,a]*R_gamma)
+                (the first term from d(log R_a)/dR_gamma, the second from
+                d(log R_beta)/dR_gamma inside the sum over beta). Substituting
+                into d(f_i)/dR_gamma = sum_a G[i,a]*[delta(a,gamma)*MGM[i,a] +
+                R_a*d(MGM[i,a])/dR_gamma] and simplifying (R_a and 1/R_a
+                cancel in the first piece) gives:
+                d(f_i)/dR_gamma = G[i,gamma]*(MGM[i,gamma] - consumption_gate[i,gamma])
+                                  + (1/R_gamma) * sum_a G[i,a]*R_a*q_{i,a,gamma}/out_degree[i,a]
 
                 '''
 
                 resources, species = y[:M], y[M:]
 
-                R_pow_m = resources**m
-                R_pow_n = resources**n
-                denom = R_pow_n[:, np.newaxis] + R_pow_n[np.newaxis, :]
-                saturating_term = R_pow_m[:, np.newaxis] / denom
-
-                # Sx = dS/dx, Sy = dS/dy, evaluated at (x,y) = (R_alpha, R_beta)
-                Sx = resources[:, np.newaxis]**(m - 1) * \
-                    ((m - n)*R_pow_n[:, np.newaxis] + m*R_pow_n[np.newaxis, :]) / denom**2
-                Sy = -n * R_pow_m[:, np.newaxis] * resources[np.newaxis, :]**(n - 1) / denom**2
-
-                QS = Q * saturating_term[np.newaxis, :, :]
-                QSx = Q * Sx[np.newaxis, :, :]
-                QSy = Q * Sy[np.newaxis, :, :]
+                logR = np.log(resources)
+                log_R_gate = np.matmul(Q, logR) / out_degree
+                metabolic_gain_mod = metabolic_gain - logR[np.newaxis, :]*consumption_gate \
+                    + log_R_gate
 
                 # --- d(dNdt)/d(species), d(dNdt)/d(resources) ---
 
-                metabolic_gain = np.sum(QS * energy_differences[np.newaxis, :, :],
-                                        axis=2) / out_degree
-                dNdN_diag = np.sum(G * metabolic_gain, axis=1) - D
+                dNdN_diag = np.sum(G * metabolic_gain_mod * resources, axis=1) - D
 
-                # "diagonal" piece - differentiating every term in the
-                # metabolic_gain[i,alpha] sum w.r.t. its own R_alpha
-                metabolic_gain_dSx = np.sum(QSx * energy_differences[np.newaxis, :, :],
-                                            axis=2) / out_degree
-                # "dense" piece - differentiating a single term w.r.t. the
-                # byproduct resource R_gamma it's being converted into
-                metabolic_gain_dSy = QSy * energy_differences[np.newaxis, :, :] / \
-                    out_degree[:, :, np.newaxis]
-                metabolic_gain_dSy_contracted = \
-                    np.matmul(G[:, np.newaxis, :], metabolic_gain_dSy)[:, 0, :]
-
+                GR = G * resources[np.newaxis, :]
+                growth_flux_contracted = np.matmul(GR[:, np.newaxis, :], production_gate)[:, 0, :]
                 dNdR = species[:, np.newaxis] * \
-                    (G * metabolic_gain_dSx + metabolic_gain_dSy_contracted)
+                    (G*(metabolic_gain_mod - consumption_gate) +
+                     growth_flux_contracted / resources[np.newaxis, :])
 
-                # --- d(dRdt)/d(resources), d(dRdt)/d(species) ---
+                # --- d(dRdt)/d(resources), d(dRdt)/d(species) - identical to
+                # the original (growth_saturation=False) Jacobian ---
 
-                consumption_flux = np.sum(QS, axis=2) / out_degree
-                consumption_flux_dSx = np.sum(QSx, axis=2) / out_degree
-                consumption_flux_dSy = QSy / out_degree[:, :, np.newaxis]
+                dRdR_diag = B - 2*A*resources - species @ C_gated
+                production_weight_by_species = species[:, np.newaxis] * C.T
+                dense_RR = np.matmul(production_weight_by_species.T[:, np.newaxis, :],
+                                     production_gate_weighted_T)[:, 0, :]
+                dRdR = np.diag(dRdR_diag) + dense_RR.T
 
-                weight = C.T / out_degree
-                production_flux = np.matmul(weight[:, np.newaxis, :], QS)[:, 0, :]
-                production_flux_dSy = np.matmul(weight[:, np.newaxis, :], QSy)[:, 0, :]
-                production_flux_dSx_tensor = \
-                    weight[:, np.newaxis, :] * QSx.transpose(0, 2, 1)
-
-                consumed_dSx = np.sum(species[:, np.newaxis] * C.T * consumption_flux_dSx,
-                                      axis=0)
-                W1 = species[:, np.newaxis] * C.T
-                consumed_dense = np.matmul(W1.T[:, np.newaxis, :],
-                                           consumption_flux_dSy.transpose(1, 0, 2))[:, 0, :]
-
-                produced_dSy_diag = np.sum(species[:, np.newaxis] * P * production_flux_dSy,
-                                           axis=0)
-                W2 = species[:, np.newaxis] * P
-                produced_dense = np.matmul(W2.T[:, np.newaxis, :],
-                                           production_flux_dSx_tensor.transpose(1, 0, 2))[:, 0, :]
-
-                dRdR_diag = B - 2*A*resources - consumed_dSx + produced_dSy_diag
-                dRdR = np.diag(dRdR_diag) - consumed_dense + produced_dense
-
-                dRdN_consumption = -(C.T * consumption_flux).T
-                dRdN_production = (P * production_flux).T
-                dRdN = dRdN_consumption + dRdN_production
+                dRdN_consumption = -resources[:, np.newaxis] * C_gated.T
+                production_weight_by_resource = C.T * resources[np.newaxis, :]
+                dense_RN = np.matmul(production_weight_by_resource[:, np.newaxis, :],
+                                     production_gate_weighted)[:, 0, :]
+                dRdN = dRdN_consumption + dense_RN.T
 
                 J = np.zeros((M + self.no_species, M + self.no_species))
                 J[:M, :M] = dRdR
