@@ -482,17 +482,19 @@ class ParametersInterface:
             the species axis). If False (default), each consumer gets an
             independently sampled network.
         growth_saturation : bool
-            If False (default), growth on resource alpha (via each byproduct
-            edge alpha -> beta) uses the original (w_alpha - w_beta) energy
-            term. If True, it instead uses
-            R_alpha * [w_alpha - w_beta - log(R_beta/R_alpha)] - i.e. the raw
-            energy difference is corrected by the log-ratio of the byproduct
-            and source resource concentrations. Consumption and production are
-            unchanged in both cases (still the original linear-in-R form).
-            Since the growth correction is state-dependent, it can't be fully
-            precomputed - MP_CRM.simulation() adds a small state-dependent
-            term to the precomputed self.metabolic_gain at every ODE
-            evaluation instead of recomputing the whole network from scratch.
+            If False (default), growth/consumption/production on the edge
+            alpha -> beta use the bare R_alpha factor (original
+            (w_alpha - w_beta) energy term for growth, linear-in-R for
+            consumption/production). If True, R_alpha is instead replaced
+            everywhere (growth, consumption, and production alike) by the
+            saturating per-edge flux R_alpha**2 / (R_alpha + R_beta) - growth/
+            depletion from consuming alpha, and the resulting byproduct
+            production into beta, are all suppressed as the byproduct beta
+            accumulates relative to the source alpha. Since this flux is
+            state-dependent, it can't be precomputed here - MP_CRM.simulation()
+            recomputes it at every ODE evaluation instead, using the
+            structural (state-independent) network attributes stored below
+            (self.q, self.energy_differences, self.out_degree).
         production_method : str
             Method used to generate resource production rates, p_{i, alpha},
             where alpha is the byproduct/target resource being produced
@@ -594,15 +596,8 @@ class ParametersInterface:
 
         self.growth_saturation = growth_saturation
 
-        # --- precompute network-derived quantities used by
-        # MP_CRM.simulation() - these depend only on the fixed metabolic
-        # network (self.q, self.w) and rate parameters (self.growth,
-        # self.consumption, self.p), never on the dynamical state (N, R) or
-        # time, so computing them once here avoids redoing several
-        # O(S x M x M) array operations on every single ODE function
-        # evaluation. Consumption and production are the same linear-in-R
-        # form regardless of growth_saturation, so everything below is
-        # shared between both modes except self.G_effective. ---
+        # --- structural (state-independent) network quantities, needed by
+        # MP_CRM.simulation() in both growth_saturation modes ---
 
         eps = 1e-8
 
@@ -612,6 +607,25 @@ class ParametersInterface:
         # for each consumer - sum_gamma q_{i, alpha, gamma} (+ eps)
         self.out_degree_raw = np.sum(self.q, axis=2)
         self.out_degree = self.out_degree_raw + eps
+
+        if growth_saturation:
+
+            # growth/consumption/production now all depend on the dynamical
+            # state (via the saturating R_alpha**2/(R_alpha+R_beta) term), so
+            # the network-derived gating terms below can't be precomputed
+            # here - MP_CRM.simulation() recomputes them at every ODE
+            # evaluation instead, using self.q, self.energy_differences,
+            # self.out_degree, self.growth, self.consumption and self.p
+            # (all state-independent) plus the current resource abundances
+            return
+
+        # --- precompute network-derived quantities used by
+        # MP_CRM.simulation() when growth_saturation = False - these depend
+        # only on the fixed metabolic network (self.q, self.w) and rate
+        # parameters (self.growth, self.consumption, self.p), never on the
+        # dynamical state (N, R) or time, so computing them once here avoids
+        # redoing several O(S x M x M) array operations on every single ODE
+        # function evaluation ---
 
         # metabolic energy gain per unit resource, for each consumer -
         # sum_beta q_{i, alpha, beta}(w_alpha - w_beta) / out_degree
@@ -634,15 +648,9 @@ class ParametersInterface:
         self.production_gate_weighted = self.p[:, np.newaxis, :] * self.production_gate
 
         # fold the (now precomputed) network-dependent gating terms directly
-        # into the consumption rate matrix (used by both growth_saturation
-        # modes) - and into the growth rate matrix too, but only when
-        # growth_saturation = False (otherwise growth needs an extra
-        # state-dependent correction computed fresh in simulation())
+        # into the growth/consumption rate matrices
+        self.G_effective = self.growth * self.metabolic_gain
         self.C_gated = self.consumption.T * self.consumption_gate
-
-        if not growth_saturation:
-
-            self.G_effective = self.growth * self.metabolic_gain
 
         # flatten production_gate_weighted's (species, source resource) axes
         # together so the production term becomes a single BLAS
