@@ -416,6 +416,7 @@ class ParametersInterface:
 
     def metabolic_network(self,
                           energies : Union[None, npt.NDArray] = None,
+                          adjacency : Union[None, npt.NDArray] = None,
                           network_method : Literal['gamma', 'step'] = 'gamma',
                           resource_conversions : Union[TypedDict('gamma',
                                                                  {'mean' : float,
@@ -426,7 +427,9 @@ class ParametersInterface:
                           gated : bool = True,
                           shared_network : bool = False,
                           growth_saturation : bool = False,
+                          saturation_kinetics : Literal['flux', 'thermodynamic'] = 'flux',
                           K_m : float = 1e-8,
+                          log_eps : float = 1e-4,
                           production_method :
                               Literal['normal', 'constant', 'user-supplied']
                               = 'constant',
@@ -455,6 +458,18 @@ class ParametersInterface:
         energies : np.ndarray or None
             Resource 'energies' w_alpha. If None, sampled from Uniform(0, 1)
             with sample size = no_resources. If supplied, used directly.
+        adjacency : np.ndarray or None
+            A pre-sampled (no_resources, no_resources) 0/1 metabolic network,
+            q_{alpha, beta}, shared by every consumer (tiled along the
+            species axis, like shared_network = True). If supplied, this is
+            used directly and no Bernoulli sampling is performed - link_probability
+            is not computed/used, so network_method/resource_conversions/gated
+            are ignored for the network itself (though 'step' still needs
+            resource_conversions['p_s'] set for self.p_s bookkeeping if you
+            rely on it elsewhere). Lets a network be sampled once (e.g.
+            outside a loop over communities) and reused identically across
+            many communities, while growth/consumption rates are still
+            resampled per community.
         network_method : str
             Method used to generate the probability that a metabolic link
             exists between a pair of resources alpha, beta (then used as the
@@ -497,6 +512,44 @@ class ParametersInterface:
             instead, using the structural (state-independent) network
             attributes stored below (self.q, self.energy_differences,
             self.out_degree).
+        saturation_kinetics : str
+            Only used if growth_saturation = True - selects which saturating
+            flux formula replaces the bare R_alpha factor. Options are:
+                'flux' (default) - the R_alpha**2/(R_alpha+R_beta+K_m) flux
+                described under growth_saturation above.
+                'thermodynamic' - a reversible-Michaelis-Menten-style flux
+                that also depends on the consuming species' own abundance
+                N_i. Per edge alpha -> beta: writing the energy difference
+                Delta = w_alpha - w_beta and the log resource ratio
+                L = log(R_beta/R_alpha), the consumption/production flux is
+                R_alpha / (K_m + N_i / (1 - exp(-(Delta - L)))), and the
+                growth flux (replacing (w_alpha-w_beta)*R_alpha) is
+                (Delta + L) times that same saturating term. (Delta - L) is
+                a chemical-potential-like driving force for the alpha->beta
+                reaction (since Delta - L = (w_alpha + log R_alpha) -
+                (w_beta + log R_beta)); the 1-exp(-.) factor drives the flux
+                to zero as the reaction approaches equilibrium, and can go
+                negative (reversing the net flux) if the byproduct beta
+                has accumulated enough to overcome the energy gap. Because
+                the denominator depends on N_i / (1-exp(-.)) linearly, it can
+                cross zero at (Delta-L) = -log(1+N_i/K_m) - a genuine
+                singularity in this formula (not just a numerical
+                regularisation artefact), so this mode is more prone to
+                stiffness/blow-up than 'flux' and is worth testing carefully
+                at small scale before large sweeps.
+        log_eps : float
+            Only used if growth_saturation = True and saturation_kinetics =
+            'thermodynamic' - a floor applied to R before taking log(R) (used
+            to form L = log(R_beta/R_alpha) and its 1/R derivatives). Unlike
+            K_m, this isn't primarily a literal-zero guard (R = 0 exactly is
+            rare mid-trajectory) - its main job is capping how negative L can
+            get as a resource approaches extinction relative to others, which
+            otherwise drives Th = 1-exp(-(Delta-L)) to very large-magnitude
+            values and makes the ODE stiff. Larger log_eps (e.g. 1e-2 to
+            1e-1) smooths this at the cost of changing behaviour for
+            genuinely near-extinct resources; smaller log_eps (e.g. 1e-8) is
+            closer to "no regularisation" and more likely to reproduce the
+            stiffness seen with tiny K_m in the 'flux' variant.
         K_m : float
             Only used if growth_saturation = True - a Michaelis-Menten-style
             half-saturation constant added to the denominator of the
@@ -548,63 +601,76 @@ class ParametersInterface:
         # pairwise energy differences, w_alpha - w_beta
         energy_differences = self.w[:, np.newaxis] - self.w[np.newaxis, :]
 
-        match network_method:
+        if adjacency is not None:
 
-            case 'gamma':
+            # network supplied directly (e.g. sampled once and reused across
+            # many communities) - skip link-probability computation and
+            # Bernoulli sampling entirely, just tile it across consumers
+            if network_method == 'step' and 'p_s' in resource_conversions:
 
-                # gamma distribution used as a likelihood function f(x), giving
-                # the probability of a metabolic link existing between
-                # resources alpha and beta
-                mean, variance = resource_conversions['mean'], resource_conversions['variance']
+                self.p_s = resource_conversions['p_s']
 
-                self.mean_q, self.variance_q = mean, variance
-
-                gamma_shape, gamma_scale = mean**2/variance, variance/mean
-
-                if gamma_shape >= 1:
-
-                    mode = (gamma_shape - 1) * gamma_scale
-
-                else:
-
-                    mode = 0
-
-                link_probability = gamma.pdf(energy_differences, a = gamma_shape, scale = gamma_scale) / \
-                                gamma.pdf(mode, a=gamma_shape, scale=gamma_scale)
-
-            case 'step':
-
-                # a metabolic link exists with probability p_s if resource
-                # alpha has higher energy than resource beta, and never
-                # otherwise - unless gated = False, in which case the link
-                # probability is p_s regardless of energy ordering
-                p_s = resource_conversions['p_s']
-
-                self.p_s = p_s
-
-                if gated:
-
-                    link_probability = np.where(energy_differences > 0, p_s, 0)
-
-                else:
-
-                    link_probability = np.full_like(energy_differences, p_s)
-
-        # sample the metabolic network - an independent Bernoulli trial for
-        # each consumer, for every ordered pair of resources (alpha, beta) -
-        # or a single network shared by every consumer if shared_network = True
-        if shared_network:
-
-            shared_q = np.random.binomial(1, link_probability,
-                                          size = (self.no_resources, self.no_resources))
-
-            self.q = np.tile(shared_q, (self.no_species, 1, 1))
+            self.q = np.tile(adjacency, (self.no_species, 1, 1))
 
         else:
 
-            self.q = np.random.binomial(1, link_probability,
-                                        size = (self.no_species, self.no_resources,
-                                                self.no_resources))
+            match network_method:
+
+                case 'gamma':
+
+                    # gamma distribution used as a likelihood function f(x), giving
+                    # the probability of a metabolic link existing between
+                    # resources alpha and beta
+                    mean, variance = resource_conversions['mean'], resource_conversions['variance']
+
+                    self.mean_q, self.variance_q = mean, variance
+
+                    gamma_shape, gamma_scale = mean**2/variance, variance/mean
+
+                    if gamma_shape >= 1:
+
+                        mode = (gamma_shape - 1) * gamma_scale
+
+                    else:
+
+                        mode = 0
+
+                    link_probability = gamma.pdf(energy_differences, a = gamma_shape, scale = gamma_scale) / \
+                                    gamma.pdf(mode, a=gamma_shape, scale=gamma_scale)
+
+                case 'step':
+
+                    # a metabolic link exists with probability p_s if resource
+                    # alpha has higher energy than resource beta, and never
+                    # otherwise - unless gated = False, in which case the link
+                    # probability is p_s regardless of energy ordering
+                    p_s = resource_conversions['p_s']
+
+                    self.p_s = p_s
+
+                    if gated:
+
+                        link_probability = np.where(energy_differences > 0, p_s, 0)
+
+                    else:
+
+                        link_probability = np.full_like(energy_differences, p_s)
+
+            # sample the metabolic network - an independent Bernoulli trial for
+            # each consumer, for every ordered pair of resources (alpha, beta) -
+            # or a single network shared by every consumer if shared_network = True
+            if shared_network:
+
+                shared_q = np.random.binomial(1, link_probability,
+                                              size = (self.no_resources, self.no_resources))
+
+                self.q = np.tile(shared_q, (self.no_species, 1, 1))
+
+            else:
+
+                self.q = np.random.binomial(1, link_probability,
+                                            size = (self.no_species, self.no_resources,
+                                                    self.no_resources))
 
         # generate resource production rates, p_{i, alpha} (alpha = the
         # byproduct/target resource being produced)
@@ -612,7 +678,9 @@ class ParametersInterface:
                                      (self.no_species, self.no_resources))
 
         self.growth_saturation = growth_saturation
+        self.saturation_kinetics = saturation_kinetics
         self.K_m = K_m
+        self.log_eps = log_eps
 
         # --- structural (state-independent) network quantities, needed by
         # MP_CRM.simulation() in both growth_saturation modes ---

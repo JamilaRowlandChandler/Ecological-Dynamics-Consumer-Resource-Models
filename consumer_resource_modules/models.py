@@ -1594,7 +1594,7 @@ class MP_CRM(ParametersInterface,
                              t_eval = np.linspace(0, t_end, 200),
                              events = unbounded_growth)
 
-        else:
+        elif self.saturation_kinetics == 'flux':
 
             # saturating-flux growth mode: growth on the edge alpha -> beta,
             # and the corresponding depletion/production, all use the
@@ -1765,6 +1765,245 @@ class MP_CRM(ParametersInterface,
 
                 dRdN_consumption = -(C.T * consumption_flux).T
                 dRdN_production = (P * production_flux).T
+                dRdN = dRdN_consumption + dRdN_production
+
+                J = np.zeros((M + self.no_species, M + self.no_species))
+                J[:M, :M] = dRdR
+                J[:M, M:] = dRdN
+                J[M:, :M] = dNdR
+                J[M:, M:] = np.diag(dNdN_diag)
+
+                return J
+
+            return solve_ivp(model, [0, t_end], initial_abundance,
+                             method = 'LSODA', jac = jacobian,
+                             rtol = 1e-7, atol = 1e-9,
+                             t_eval = np.linspace(0, t_end, 200),
+                             events = unbounded_growth)
+
+        else:
+
+            # thermodynamic saturating-flux growth mode ('thermodynamic'):
+            # like the 'flux' variant above, R_alpha is replaced by a
+            # saturating per-edge flux in growth/consumption/production, but
+            # this one is a reversible-Michaelis-Menten-style flux that also
+            # depends on the consuming species' own abundance N_i (see the
+            # saturation_kinetics docstring in metabolic_network() for the
+            # formula and its interpretation). Because the flux now also
+            # depends on N_i (not just R), and the (w_alpha-w_beta) energy
+            # term used in growth is replaced by a resource-dependent
+            # Delta_plus = (w_alpha-w_beta) + log(R_beta/R_alpha) (rather
+            # than being a fixed per-edge constant), differentiating this
+            # variant needs an extra product rule and an extra N_i partial
+            # derivative that the 'flux' variant's Jacobian didn't need.
+            Q = self.q
+            energy_differences = self.energy_differences
+            out_degree = self.out_degree
+            G, P = self.growth, self.p
+            Ct = C.T
+            K_m = self.K_m
+
+            # numerical safety floors - log_eps is a tunable parameter (see
+            # metabolic_network()'s docstring - it materially affects
+            # stiffness, not just a literal-zero guard); th_eps/den_eps are
+            # pure regularisation, guarding a literal Th = 0 (which would
+            # make N_i/Th a division by zero) and the genuine Th = -N_i/K_m
+            # singularity (den_eps only guards the exact singular point
+            # itself, not the large-but-finite excursions near it)
+            log_eps = self.log_eps
+            th_eps = getattr(self, 'th_eps', 1e-8)
+            den_eps = 1e-10
+
+            def model(t, y):
+
+                '''
+
+                ODE for the metabolic pathway CRM with a reversible-
+                Michaelis-Menten-style saturating flux that also depends on
+                the consuming species' own abundance.
+
+                '''
+
+                resources, species = y[:M], y[M:]
+
+                R_safe = np.maximum(resources, log_eps)
+                invR = 1.0 / R_safe
+                logR = np.log(R_safe)
+
+                # L[alpha, beta] = log(R_beta) - log(R_alpha) = log(R_beta/R_alpha)
+                L = logR[np.newaxis, :] - logR[:, np.newaxis]
+                Delta_plus = energy_differences + L
+                Delta_minus = energy_differences - L
+
+                # E = exp(-Delta_minus), Th = 1 - E is the thermodynamic
+                # driving-force factor - Th -> 0 (flux -> 0) as the edge
+                # approaches equilibrium (Delta_minus -> 0), and can go
+                # negative (reversing the flux) if Delta_minus < 0
+                E = np.exp(-Delta_minus)
+                Th = 1.0 - E
+                Th_reg = np.where(Th >= 0, Th + th_eps, Th - th_eps)
+
+                N_b = species[:, np.newaxis, np.newaxis]
+                Den = K_m + N_b / Th_reg[np.newaxis, :, :]
+                Den_reg = np.where(np.abs(Den) < den_eps,
+                                   np.where(Den >= 0, den_eps, -den_eps), Den)
+
+                # Sat[i, alpha, beta] = R_alpha / Den[i, alpha, beta] - the
+                # saturating flux replacing the bare R_alpha factor
+                Sat = resources[np.newaxis, :, np.newaxis] / Den_reg
+                QS = Q * Sat
+
+                # growth numerator per edge is Delta_plus * Sat, not Delta * R_alpha
+                QG = Q * (Sat * Delta_plus[np.newaxis, :, :])
+
+                metabolic_gain = np.sum(QG, axis=2) / out_degree
+                dNdt = species * (np.sum(G * metabolic_gain, axis=1) - D)
+
+                consumption_flux = np.sum(QS, axis=2) / out_degree
+                consumed = np.sum(species[:, np.newaxis] * Ct * consumption_flux, axis=0)
+
+                weight = Ct / out_degree
+                production_flux = np.matmul(weight[:, np.newaxis, :], QS)[:, 0, :]
+                produced = np.sum(species[:, np.newaxis] * P * production_flux, axis=0)
+
+                dRdt = (O + B*resources - A*resources**2) - consumed + produced
+
+                return np.concatenate((dRdt, dNdt)) + 1e-8
+
+            def jacobian(t, y):
+
+                '''
+
+                Analytic Jacobian for the 'thermodynamic' saturating-flux
+                variant.
+
+                Writes the saturating term as Sat[i,alpha,beta] =
+                R_alpha / Den[i,alpha,beta], Den = K_m + N_i/Th[alpha,beta],
+                Th[alpha,beta] = 1 - exp(-(Delta[alpha,beta] - L[alpha,beta])),
+                L[alpha,beta] = log(R_beta) - log(R_alpha). Unlike the 'flux'
+                variant's S(x,y), Sat depends on THREE variables - R_alpha
+                (Sx), R_beta (Sy), and N_i (Sn) - since the denominator
+                itself depends on the consuming species' abundance. The
+                growth numerator Delta_plus*Sat (Delta_plus = Delta+L, also
+                R-dependent via L) needs an extra product-rule term (Gx, Gy,
+                Gn) on top of Sat's own partials, since both factors vary
+                with R.
+
+                Every aggregate quantity (metabolic_gain, consumption_flux,
+                production_flux) is a sum over one of Sat's two resource
+                indices, so - exactly as in the 'flux' Jacobian - its
+                R-derivative splits into a "diagonal" piece (alpha matches
+                the differentiation variable, differentiating every term in
+                the sum at once) and a "dense" piece (beta matches, only the
+                single matching term survives). The new N_i-derivatives
+                (Sn, Gn) only ever produce diagonal-in-species terms, since
+                Sat[i,alpha,beta] depends on N_i only through the consuming
+                species' own abundance, never another species' N_j.
+
+                '''
+
+                resources, species = y[:M], y[M:]
+
+                R_safe = np.maximum(resources, log_eps)
+                invR = 1.0 / R_safe
+                logR = np.log(R_safe)
+
+                L = logR[np.newaxis, :] - logR[:, np.newaxis]
+                Delta_plus = energy_differences + L
+                Delta_minus = energy_differences - L
+
+                E = np.exp(-Delta_minus)
+                Th = 1.0 - E
+                Th_reg = np.where(Th >= 0, Th + th_eps, Th - th_eps)
+                Th2 = Th_reg**2
+
+                N_b = species[:, np.newaxis, np.newaxis]
+                Den = K_m + N_b / Th_reg[np.newaxis, :, :]
+                Den_reg = np.where(np.abs(Den) < den_eps,
+                                   np.where(Den >= 0, den_eps, -den_eps), Den)
+                Den2 = Den_reg**2
+
+                Sat = resources[np.newaxis, :, np.newaxis] / Den_reg
+
+                # partial derivatives of Sat w.r.t R_alpha (Sx), R_beta (Sy),
+                # N_i (Sn) - see saturation_kinetics docstring for the
+                # underlying chain-rule derivation
+                Sx = 1.0/Den_reg + N_b*E[np.newaxis, :, :] / (Th2[np.newaxis, :, :]*Den2)
+                Sy = -(resources[np.newaxis, :, np.newaxis] * N_b * E[np.newaxis, :, :]
+                      * invR[np.newaxis, np.newaxis, :]) / (Th2[np.newaxis, :, :]*Den2)
+                Sn = -resources[np.newaxis, :, np.newaxis] / (Th_reg[np.newaxis, :, :]*Den2)
+
+                # d(Delta_plus[alpha,beta])/dR_alpha = -1/R_alpha,
+                # d(Delta_plus[alpha,beta])/dR_beta = 1/R_beta
+                dDp_dRa = -invR[:, np.newaxis]
+                dDp_dRb = invR[np.newaxis, :]
+
+                # Gx, Gy, Gn = partials of the growth numerator Delta_plus*Sat
+                # (product rule - Sat's own partial times Delta_plus, plus
+                # Sat times Delta_plus's own partial; Delta_plus doesn't
+                # depend on N, so Gn has no extra term)
+                Gx = Sx*Delta_plus[np.newaxis, :, :] + Sat*dDp_dRa[np.newaxis, :, :]
+                Gy = Sy*Delta_plus[np.newaxis, :, :] + Sat*dDp_dRb[np.newaxis, :, :]
+                Gn = Sn*Delta_plus[np.newaxis, :, :]
+
+                QS, QSx, QSy, QSn = Q*Sat, Q*Sx, Q*Sy, Q*Sn
+                QGx, QGy = Q*Gx, Q*Gy
+                QG = Q * (Sat * Delta_plus[np.newaxis, :, :])
+
+                # --- d(dNdt)/d(species), d(dNdt)/d(resources) ---
+
+                metabolic_gain = np.sum(QG, axis=2) / out_degree
+                dNdN_diag = np.sum(G * metabolic_gain, axis=1) - D
+
+                # extra diagonal term from Sat's own N_i-dependence (absent
+                # in the 'flux' variant, where the saturating term didn't
+                # depend on N)
+                metabolic_gain_dN = np.sum(Q*Gn, axis=2) / out_degree
+                dNdN_diag = dNdN_diag + species * np.sum(G * metabolic_gain_dN, axis=1)
+
+                metabolic_gain_dGx = np.sum(QGx, axis=2) / out_degree
+                metabolic_gain_dGy = QGy / out_degree[:, :, np.newaxis]
+                metabolic_gain_dGy_contracted = \
+                    np.matmul(G[:, np.newaxis, :], metabolic_gain_dGy)[:, 0, :]
+
+                dNdR = species[:, np.newaxis] * \
+                    (G * metabolic_gain_dGx + metabolic_gain_dGy_contracted)
+
+                # --- d(dRdt)/d(resources), d(dRdt)/d(species) ---
+
+                consumption_flux = np.sum(QS, axis=2) / out_degree
+                consumption_flux_dSx = np.sum(QSx, axis=2) / out_degree
+                consumption_flux_dSy = QSy / out_degree[:, :, np.newaxis]
+                consumption_flux_dN = np.sum(QSn, axis=2) / out_degree
+
+                weight = Ct / out_degree
+                production_flux = np.matmul(weight[:, np.newaxis, :], QS)[:, 0, :]
+                production_flux_dSy = np.matmul(weight[:, np.newaxis, :], QSy)[:, 0, :]
+                production_flux_dSx_tensor = \
+                    weight[:, np.newaxis, :] * QSx.transpose(0, 2, 1)
+                production_flux_dN = np.matmul(weight[:, np.newaxis, :], QSn)[:, 0, :]
+
+                consumed_dSx = np.sum(species[:, np.newaxis] * Ct * consumption_flux_dSx,
+                                      axis=0)
+                W1 = species[:, np.newaxis] * Ct
+                consumed_dense = np.matmul(W1.T[:, np.newaxis, :],
+                                           consumption_flux_dSy.transpose(1, 0, 2))[:, 0, :]
+
+                produced_dSy_diag = np.sum(species[:, np.newaxis] * P * production_flux_dSy,
+                                           axis=0)
+                W2 = species[:, np.newaxis] * P
+                produced_dense = np.matmul(W2.T[:, np.newaxis, :],
+                                           production_flux_dSx_tensor.transpose(1, 0, 2))[:, 0, :]
+
+                dRdR_diag = B - 2*A*resources - consumed_dSx + produced_dSy_diag
+                dRdR = np.diag(dRdR_diag) - consumed_dense + produced_dense
+
+                # extra N_i-dependent term (absent in the 'flux' variant,
+                # where consumption_flux/production_flux didn't depend on N)
+                dRdN_consumption = -(Ct*consumption_flux +
+                                     species[:, np.newaxis]*Ct*consumption_flux_dN).T
+                dRdN_production = (P*production_flux +
+                                   species[:, np.newaxis]*P*production_flux_dN).T
                 dRdN = dRdN_consumption + dRdN_production
 
                 J = np.zeros((M + self.no_species, M + self.no_species))

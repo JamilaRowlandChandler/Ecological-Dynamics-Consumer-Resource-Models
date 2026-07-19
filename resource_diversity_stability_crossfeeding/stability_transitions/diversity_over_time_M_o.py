@@ -6,21 +6,24 @@ Created on Sat Jul 18 2026
 
 Analyse how M and influx o affect consumer diversity OVER TIME, for
 single-resource vs all-resources-supplied injection, using the
-growth_saturation=True (R_alpha**2/(R_alpha+R_beta) saturating flux) MP_CRM
+growth_saturation=True (R_alpha**2/(R_alpha+R_beta+K_m) saturating flux) MP_CRM
 variant. p_s = min(5/M, 1) throughout, so the dominant resource's out-degree
 stays roughly constant across M. d=0.1, mu_C=40 (mu_c=mu_C/M), S=50,
 sigma_C=1.6 - all matching the earlier coexistence investigations.
 
+K_m=1e-4: with K_m at its old default (1e-8, intended purely as protection
+against a literal 0/0), some (M, o, community) combinations were found to
+grind through genuinely stiff dynamics near R_alpha=R_beta=0 for minutes at
+a time, where the same case completes in ~5s at K_m=1e-4 (a properly-scaled
+Michaelis-Menten-style constant smooths the saturating flux enough for LSODA
+to handle it well) - see the K_m docstring in metabolic_network() for detail.
+
 Run as `python diversity_over_time_M_o.py <M>` to run just one M value's
 worth of simulations (80 runs) and save to diversity_over_time_M_o_M<M>.pkl.
-This is deliberately split into one process per M - running the full
-4*80=320-simulation sweep in a single long-lived Python process was found to
-hang after ~240 accumulated solve_ivp() calls (a case that runs in ~3s in
-isolation stalls for minutes+ when it's the 242nd call in the same process -
-likely memory fragmentation or internal LSODA/NumPy state buildup, not a
-model bug). Splitting by M keeps each process to 80 calls, safely under that
-threshold. merge_diversity_over_time_M_o.py combines the per-M pickles
-afterwards.
+Split by M as a precaution (found separately that very long sequences of
+solve_ivp() calls in one process could also slow down, independent of the
+K_m stiffness issue above) - keeps each process to 80 calls.
+merge_diversity_over_time_M_o.py combines the per-M pickles afterwards.
 """
 
 import numpy as np
@@ -84,7 +87,7 @@ for condition in ['single', 'all']:
                                            resource_inhibition_args={'A': 0})
             community.metabolic_network(energies=w, network_method='step',
                                         resource_conversions={'p_s': p_s},
-                                        growth_saturation=True,
+                                        growth_saturation=True, K_m=1e-4,
                                         production_method='constant', production_args={'p': 1})
 
             community.simulate_community(t_end=t_end, no_init_cond=1)
