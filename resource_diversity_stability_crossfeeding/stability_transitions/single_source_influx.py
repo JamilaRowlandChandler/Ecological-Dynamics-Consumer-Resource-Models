@@ -34,6 +34,8 @@ abspath = os.path.abspath(__file__)
 file_directory_name = os.path.dirname(abspath)
 os.chdir(file_directory_name)
 
+DATA_DIR = "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability_crossfeeding/influx_species_diversity"
+
 sys.path.insert(0, 'C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/consumer_resource_modules')
 from models import Consumer_Resource_Model
 
@@ -97,7 +99,8 @@ for o_val in o_values:
         print(f"o={o_val} community={c}: t_final={sol.t[-1]:.1f}, "
               f"final survival fraction={survival_frac_t[-1]:.3f}")
 
-with open('single_source_influx_results.pkl', 'wb') as f:
+out_path = os.path.join(DATA_DIR, 'single_source_influx_results.pkl')
+with open(out_path, 'wb') as f:
     pickle.dump(results, f)
 
-print("Saved results to single_source_influx_results.pkl")
+print(f"Saved results to {out_path}")

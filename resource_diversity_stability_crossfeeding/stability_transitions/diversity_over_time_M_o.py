@@ -37,6 +37,8 @@ abspath = os.path.abspath(__file__)
 file_directory_name = os.path.dirname(abspath)
 os.chdir(file_directory_name)
 
+DATA_DIR = "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability_crossfeeding/influx_species_diversity"
+
 sys.path.insert(0, 'C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/consumer_resource_modules')
 from models import Consumer_Resource_Model
 
@@ -102,7 +104,8 @@ for condition in ['single', 'all']:
         print(f"M={M}, {condition}, o={o_val}: mean final survival fraction = "
               f"{np.mean(final_fracs):.3f} (n_species = {np.mean(final_fracs)*S:.1f})", flush=True)
 
-with open(f'diversity_over_time_M_o_M{M}.pkl', 'wb') as f:
+out_path = os.path.join(DATA_DIR, f'diversity_over_time_M_o_M{M}.pkl')
+with open(out_path, 'wb') as f:
     pickle.dump(results, f)
 
-print(f"Saved results to diversity_over_time_M_o_M{M}.pkl")
+print(f"Saved results to {out_path}")

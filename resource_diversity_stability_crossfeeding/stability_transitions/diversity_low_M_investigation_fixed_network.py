@@ -28,6 +28,8 @@ abspath = os.path.abspath(__file__)
 file_directory_name = os.path.dirname(abspath)
 os.chdir(file_directory_name)
 
+DATA_DIR = "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability_crossfeeding/influx_species_diversity"
+
 sys.path.insert(0, file_directory_name)
 from timeout_utils import simulate_with_timeout, sample_shared_network
 
@@ -94,7 +96,8 @@ if __name__ == '__main__':
                     print(f"M={M}, {condition}, o={o_val}: ALL {no_communities} RUNS TIMED OUT",
                           flush=True)
 
-    with open('diversity_low_M_investigation_fixed_network_results.pkl', 'wb') as f:
+    out_path = os.path.join(DATA_DIR, 'diversity_low_M_investigation_fixed_network_results.pkl')
+    with open(out_path, 'wb') as f:
         pickle.dump(results, f)
 
-    print("Saved results to diversity_low_M_investigation_fixed_network_results.pkl")
+    print(f"Saved results to {out_path}")
