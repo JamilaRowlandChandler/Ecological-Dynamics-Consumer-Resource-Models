@@ -426,6 +426,7 @@ class ParametersInterface:
                           gated : bool = True,
                           shared_network : bool = False,
                           growth_saturation : bool = False,
+                          K_m : float = 1e-8,
                           production_method :
                               Literal['normal', 'constant', 'user-supplied']
                               = 'constant',
@@ -487,14 +488,30 @@ class ParametersInterface:
             (w_alpha - w_beta) energy term for growth, linear-in-R for
             consumption/production). If True, R_alpha is instead replaced
             everywhere (growth, consumption, and production alike) by the
-            saturating per-edge flux R_alpha**2 / (R_alpha + R_beta) - growth/
-            depletion from consuming alpha, and the resulting byproduct
-            production into beta, are all suppressed as the byproduct beta
-            accumulates relative to the source alpha. Since this flux is
-            state-dependent, it can't be precomputed here - MP_CRM.simulation()
-            recomputes it at every ODE evaluation instead, using the
-            structural (state-independent) network attributes stored below
-            (self.q, self.energy_differences, self.out_degree).
+            saturating per-edge flux R_alpha**2 / (R_alpha + R_beta + K_m) -
+            growth/depletion from consuming alpha, and the resulting
+            byproduct production into beta, are all suppressed as the
+            byproduct beta accumulates relative to the source alpha. Since
+            this flux is state-dependent, it can't be precomputed here -
+            MP_CRM.simulation() recomputes it at every ODE evaluation
+            instead, using the structural (state-independent) network
+            attributes stored below (self.q, self.energy_differences,
+            self.out_degree).
+        K_m : float
+            Only used if growth_saturation = True - a Michaelis-Menten-style
+            half-saturation constant added to the denominator of the
+            saturating flux (see growth_saturation above). Only meaningful
+            relative to the typical scale of resource abundances: a value
+            much smaller than that scale (e.g. the default 1e-8, intended
+            purely as protection against a literal 0/0 when both R_alpha and
+            R_beta hit numerical zero) leaves the flux extremely steep near
+            R_alpha=R_beta=0, which can make the ODE very stiff there and
+            slow to integrate; a value comparable to or larger than the
+            typical resource scale (e.g. 1e-4 to 1) smooths the flux over a
+            wider range and is much better-conditioned for the solver, while
+            also changing the model's behaviour (not just a numerical
+            regularisation) by setting the concentration scale at which
+            saturation kicks in.
         production_method : str
             Method used to generate resource production rates, p_{i, alpha},
             where alpha is the byproduct/target resource being produced
@@ -595,6 +612,7 @@ class ParametersInterface:
                                      (self.no_species, self.no_resources))
 
         self.growth_saturation = growth_saturation
+        self.K_m = K_m
 
         # --- structural (state-independent) network quantities, needed by
         # MP_CRM.simulation() in both growth_saturation modes ---

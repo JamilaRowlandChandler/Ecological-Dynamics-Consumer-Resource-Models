@@ -1611,6 +1611,7 @@ class MP_CRM(ParametersInterface,
             energy_differences = self.energy_differences
             out_degree = self.out_degree
             G, P = self.growth, self.p
+            sat_eps = self.K_m
 
             def model(t, y):
 
@@ -1636,10 +1637,16 @@ class MP_CRM(ParametersInterface,
 
                 resources, species = y[:M], y[M:]
 
-                # saturating_term[alpha, beta] = R_alpha**2 / (R_alpha + R_beta) -
+                # saturating_term[alpha, beta] = R_alpha**2 / (R_alpha + R_beta + K_m) -
                 # species-independent, so computed once per call and reused
-                # for every consumer's copy of the metabolic network
-                denom = resources[:, np.newaxis] + resources[np.newaxis, :]
+                # for every consumer's copy of the metabolic network. sat_eps
+                # (= self.K_m) is a Michaelis-Menten-style half-saturation
+                # constant - besides keeping this well-defined if both
+                # R_alpha and R_beta hit zero simultaneously, its scale
+                # relative to typical resource abundances also determines how
+                # steep/stiff the flux is near zero (see metabolic_network()'s
+                # K_m docstring)
+                denom = resources[:, np.newaxis] + resources[np.newaxis, :] + sat_eps
                 saturating_term = resources[:, np.newaxis]**2 / denom
 
                 # per-edge, per-consumer saturating flux weight,
@@ -1675,14 +1682,15 @@ class MP_CRM(ParametersInterface,
                 Analytic Jacobian for the saturating-flux growth variant.
 
                 Treats the saturating term as a two-argument function
-                S(x, y) = x**2 / (x + y), with S_{alpha,beta} = S(R_alpha,
-                R_beta). Its dependence on the resource vector R is then
+                S(x, y) = x**2 / (x + y + sat_eps), with S_{alpha,beta} =
+                S(R_alpha, R_beta) (sat_eps floors the denominator against
+                x = y = 0). Its dependence on the resource vector R is then
                 S_{alpha,beta}(R_gamma) = Sx(R_alpha,R_beta)*delta(alpha,gamma)
-                + Sy(R_alpha,R_beta)*delta(beta,gamma), where
-                Sx = dS/dx = x*(x+2y)/(x+y)**2 and Sy = dS/dy = -x**2/(x+y)**2
-                - this correctly handles the alpha = beta (self-loop) case via
-                the chain rule, since both "slots" of S depend on the same
-                R_alpha there.
+                + Sy(R_alpha,R_beta)*delta(beta,gamma), where, writing
+                D = x+y+sat_eps, Sx = dS/dx = x*(x+2y+2*sat_eps)/D**2 and
+                Sy = dS/dy = -x**2/D**2 - this correctly handles the
+                alpha = beta (self-loop) case via the chain rule, since both
+                "slots" of S depend on the same R_alpha there.
 
                 Every aggregate quantity below (metabolic_gain, consumption_flux,
                 production_flux) is a sum over one of S's two indices, so its
@@ -1696,12 +1704,12 @@ class MP_CRM(ParametersInterface,
 
                 resources, species = y[:M], y[M:]
 
-                denom = resources[:, np.newaxis] + resources[np.newaxis, :]
+                denom = resources[:, np.newaxis] + resources[np.newaxis, :] + sat_eps
                 saturating_term = resources[:, np.newaxis]**2 / denom
 
                 # Sx = dS/dx, Sy = dS/dy, evaluated at (x,y) = (R_alpha, R_beta)
                 Sx = resources[:, np.newaxis] * \
-                    (resources[:, np.newaxis] + 2*resources[np.newaxis, :]) / denom**2
+                    (resources[:, np.newaxis] + 2*resources[np.newaxis, :] + 2*sat_eps) / denom**2
                 Sy = -resources[:, np.newaxis]**2 / denom**2
 
                 QS = Q * saturating_term[np.newaxis, :, :]
