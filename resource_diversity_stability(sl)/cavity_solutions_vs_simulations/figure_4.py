@@ -147,7 +147,7 @@ def Stability_Plot(df_simulation_c, globally_solved_sces_c, solved_boundary_c,
         sns.lineplot(x = boundary_x, y = boundary_y, ax = ax, color = 'black',
                      linewidth = 3)
         
-    def sigma_vs_stability(ax, variable, pivot, sigmas, xlabel,
+    def sigma_vs_stability(ax, variable, pivot, sigmas, mu, xlabel,
                            example_M = 225):
         
         stability = pivot.loc[:, example_M].to_frame()
@@ -169,7 +169,9 @@ def Stability_Plot(df_simulation_c, globally_solved_sces_c, solved_boundary_c,
                                  ecolor = 'black',
                                  linewidth = 2) 
 
-        ax.set_xticks(sigmas[::2], labels = sigmas[::2], fontsize = 10, 
+        ax.set_xticks(sigmas[::2],
+                      labels = [r'$\frac{sigma^2}{mu^2}$'.replace('sigma', str(sigma)).replace('mu', str(mu)) #+ '^2$' 
+                                for sigma in sigmas[::2]], 
                       rotation = 0)
         
         ax.yaxis.set_tick_params(labelsize = 10)
@@ -181,7 +183,7 @@ def Stability_Plot(df_simulation_c, globally_solved_sces_c, solved_boundary_c,
         
     ############################################
     
-    def stability_condition(ax, variable, sigmas, sces, boundary, boundary_method,
+    def stability_condition(ax, variable, sigmas, mu, sces, boundary, boundary_method,
                             xlabel, example_M = 225):
 
         df_plot = sces.loc[sces['M'] == example_M, :]
@@ -210,7 +212,7 @@ def Stability_Plot(df_simulation_c, globally_solved_sces_c, solved_boundary_c,
             ax.add_patch(Rectangle((np.min(sigmas) - 0.1, np.min(dfl['value']) - 0.1),
                                    fitted_boundary - np.min(sigmas) + 0.1,
                                    np.max(dfl['value']) - np.min(dfl['value']) + 0.12,
-                                   fill = True, color = '#6950a3ff', zorder = 0))
+                                   fill = True, color = '#8f8cc0ff', zorder = 0))
             
             ax.set_xlim([np.min(sigmas) - 0.1, np.max(sigmas) + 0.1])
             
@@ -219,7 +221,7 @@ def Stability_Plot(df_simulation_c, globally_solved_sces_c, solved_boundary_c,
             ax.add_patch(Rectangle((fitted_boundary, np.min(dfl['value']) - 0.1),
                                    np.max(sigmas) + 0.1 - fitted_boundary,
                                    np.max(dfl['value']) + 0.12 - np.min(dfl['value']),
-                                   fill = True, color = '#6950a3ff', zorder = 0))
+                                   fill = True, color = '#8f8cc0ff', zorder = 0))
             
             ax.set_xlim([np.min(sigmas) - 0.01, np.max(sigmas) + 0.01])
         
@@ -239,13 +241,12 @@ def Stability_Plot(df_simulation_c, globally_solved_sces_c, solved_boundary_c,
                                zorder = 10, markeredgewidth = 0.4, markeredgecolor = 'black')
         
         ax.set_ylim([np.min(dfl['value']) - 0.02, np.max(dfl['value']) + 0.02])
-        
         ax.set_xlabel(xlabel, fontsize = 10, weight = 'bold')
         ax.set_ylabel('')
         ax.tick_params(axis='both', which='major', labelsize=10)
-        ax.set_xticks(sigmas[::2], labels = [str(sigma) #+ '^2$' 
-                                             for sigma in sigmas[::2]])
-        
+        ax.set_xticks(sigmas[::2],
+                      labels = [r'$\frac{sigma^2}{mu^2}$'.replace('sigma', str(sigma)).replace('mu', str(mu)) #+ '^2$' 
+                                for sigma in sigmas[::2]])
         ax.legend_.remove()
         
 
@@ -260,6 +261,8 @@ def Stability_Plot(df_simulation_c, globally_solved_sces_c, solved_boundary_c,
     solved_boundary_y = solved_boundary_y.loc[solved_boundary_y['sigma_y'] < 0.225, :]
     
     resource_pool_sizes = np.unique(df_simulation_c['M'])
+    mu_c = np.int64(np.unique(df_simulation_c['mu_c'])[0])
+    mu_y = np.int64(np.unique(df_simulation_y['mu_y'])[0])
     sigma_cs = np.unique(df_simulation_c['sigma_c'])
     sigma_ys = np.unique(df_simulation_y['sigma_y'])
     
@@ -298,10 +301,18 @@ def Stability_Plot(df_simulation_c, globally_solved_sces_c, solved_boundary_c,
     #                  'variance in yield conversion,\n' + r'$\sigma_y^2$',
     #                  solved_boundary_y, "quadratic") 
     
-    sigma_vs_stability(axs["P_c"], 'sigma_c', stability_pivot_c, sigma_cs,
+    sigma_vs_stability(axs["P_c"],
+                       'sigma_c',
+                       stability_pivot_c,
+                       sigma_cs,
+                       mu_c,
                        'std. deviation in total\nconsumption rate, ' + r'$\sigma_c$')
     
-    sigma_vs_stability(axs["P_y"], 'sigma_y', stability_pivot_y, sigma_ys,
+    sigma_vs_stability(axs["P_y"],
+                       'sigma_y',
+                       stability_pivot_y,
+                       sigma_ys,
+                       mu_y,
                        'std. deviation in yield\nconversion, ' + r'$\sigma_y$')
     
     #axs["P_c"].set_title("Different sources of interaction heterogeneity" + \
@@ -312,12 +323,22 @@ def Stability_Plot(df_simulation_c, globally_solved_sces_c, solved_boundary_c,
         
     #################### Instability condition vs M #####################
     
-    stability_condition(axs["I_C_c"], 'sigma_c', sigma_cs, globally_solved_sces_c,
-                        solved_boundary_c, "hyperbolic",
+    stability_condition(axs["I_C_c"],
+                        'sigma_c',
+                        sigma_cs,
+                        mu_c,
+                        globally_solved_sces_c,
+                        solved_boundary_c,
+                        "hyperbolic",
                         'std. deviation in total\nconsumption rate, ' + r'$\sigma_c$')
     
-    stability_condition(axs["I_C_y"], 'sigma_y', sigma_ys, globally_solved_sces_y,
-                        solved_boundary_y, "quadratic",
+    stability_condition(axs["I_C_y"],
+                        'sigma_y',
+                        sigma_ys,
+                        mu_y,
+                        globally_solved_sces_y,
+                        solved_boundary_y,
+                        "quadratic",
                         'std. deviation in yield\nconversion, ' + r'$\sigma_y$')
     
     #axs["I_C_c"].set_title("by having opposing " + \

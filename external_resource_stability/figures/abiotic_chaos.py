@@ -77,7 +77,7 @@ sigma_d = 0
 mu_b = 10**-5
 sigma_b = 0.0
 o = 10**-5
-rho = 0.8
+rho = 0.4
 
 t_end = 7000
 no_init_conds = 1

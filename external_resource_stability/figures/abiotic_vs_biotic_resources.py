@@ -39,10 +39,12 @@ def load_clean_simulations(data_location):
         
     df = df.apply(pd.to_numeric, errors="coerce")
     
-    df.rename(columns = {"maxLe" : "Max. lyapunov exponent"}, inplace = True)
+    #df.rename(columns = {"maxLe" : "Max. lyapunov exponent"}, inplace = True)
     df = np.round(df, 7)
     
-    df.loc[df["EndTime"] < np.round(np.max(df["EndTime"]), 5),
+    #df.loc[df["EndTime"] < np.round(np.max(df["EndTime"]), 5),
+    #       "Max. lyapunov exponent"] = np.nan
+    df.loc[df["Divergence measure"] < np.round(np.max(df["Divergence measure"]), 5),
            "Max. lyapunov exponent"] = np.nan
 
     stability_pivot = le_pivot_r(df, index = "rho", columns = "sigma_c")[0]
@@ -65,13 +67,16 @@ def load_clean_sces(filename):
 def feasible_region(df, index = 'rho', columns = 'sigma_c'):
     
     def prop_feasible(x,
-                      feasibility_threshold = 400.0):
+                      feasibility_threshold = 1000.0):
         
         return np.count_nonzero(x == feasibility_threshold)/len(x)
 
         
-    return pd.pivot_table(df, index = index, columns = columns,
-                          values = 'EndTime', aggfunc = prop_feasible)
+    return pd.pivot_table(df,
+                          index = index,
+                          columns = columns,
+                          values = "Divergence measure", #'EndTime',
+                          aggfunc = prop_feasible)
 
 # %%
 
@@ -100,7 +105,7 @@ def compare_abiotic_biotic(stability_ab,
         subfig = sns.heatmap(stability_pivot,
                              ax = ax,
                              vmin = 0, vmax = 1,
-                             cbar = True,
+                             cbar = False,
                              cmap = cmap_stable)
     
         sns.heatmap(feasibility_pivot,
@@ -130,11 +135,11 @@ def compare_abiotic_biotic(stability_ab,
         
         ax.set_title(title, fontsize = 10, weight = 'bold')
              
-        cbar = ax.collections[0].colorbar
-        cbar.set_label(label = 'Prob. (stability)',
-                       size = '10', horizontalalignment = 'center', 
-                       verticalalignment = 'top', weight = 'bold')
-        cbar.ax.tick_params(labelsize = 10)
+        #cbar = ax.collections[0].colorbar
+        #cbar.set_label(label = 'Prob. (stability)',
+        #               size = '10', horizontalalignment = 'center', 
+        #               verticalalignment = 'top', weight = 'bold')
+        #cbar.ax.tick_params(labelsize = 10)
         
     def example_dynamics(df, sub_axs):
     
@@ -168,14 +173,21 @@ def compare_abiotic_biotic(stability_ab,
                 #ax.set_xticklabels([])
                 #ax.set_yticklabels([])
                 
-                ax.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
+            ax.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
+            ax.tick_params(axis='both', which='major', labelsize=8)
+            ax.tick_params(axis='both', which='minor', labelsize=8)
             
             return ax
         
-        times = df['t'].to_numpy()
+        times = df.ODE_sols[0].t
         
-        resource_dynamics = df.filter(regex='resource').to_numpy().T
-        consumer_dynamics = df.filter(regex='resource').to_numpy().T
+        resource_dynamics = df.ODE_sols[0].y[df.no_resources:]
+        consumer_dynamics = df.ODE_sols[0].y[:df.no_resources]
+        
+        #times = df['t'].to_numpy()
+        
+        #resource_dynamics = df.filter(regex='resource').to_numpy().T
+        #consumer_dynamics = df.filter(regex='resource').to_numpy().T
         
         i_c_rp = [indices_and_cmaps(M) for M in [resource_dynamics.shape[0], 
                                                  consumer_dynamics.shape[0]]]
@@ -199,16 +211,27 @@ def compare_abiotic_biotic(stability_ab,
     
     sns.set_style('ticks')
     
-    mosaic = [["PA", ".", "DA_SR", ".", "DA_UR"],
-              ["PA", ".", "DA_SC", ".", "DA_UC"],
+    #mosaic = [["PA", ".", "DA_SR", ".", "DA_UR"],
+    #          ["PA", ".", "DA_SC", ".", "DA_UC"],
+    #          [".", ".", ".", ".", "."],
+    #          ["PB", ".", "DB_SR", ".", "DB_UR"],
+    #          ["PB", ".", "DB_SC", ".", "DB_UC"]]
+    
+    #mosaic = [["PA", "PA", "PA", ".", ".", "PB", "PB", "PB", "."],
+    #          [".", ".", ".", ".", ".", ".", ".", ".", "."],
+    #          ["DA_SR", ".", "DA_UR",  ".", "DB_SR", "DB_SR", "DB_CR", "DB_UR", "DB_UR"],
+    #          ["DA_SC", ".", "DA_UC", ".",  "DB_SC", "DB_SC", "DB_CC", "DB_UC", "DB_UC"]]
+    
+    mosaic = [["PA", "PA", ".", "PB", "PB"],
               [".", ".", ".", ".", "."],
-              ["PB", ".", "DB_SR", ".", "DB_UR"],
-              ["PB", ".", "DB_SC", ".", "DB_UC"]]
+              ["DA_SR", "DA_SC",  ".", "DB_SR", "DB_SC"],
+              [".", ".",  ".", "DB_CR", "DB_CC"],
+              ["DA_UR", "DA_UC",  ".", "DB_UR", "DB_UC"]]
        
-    fig, axs = plt.subplot_mosaic(mosaic, figsize = (8, 5),
-                                  width_ratios = [5, 0.5, 2, 0.5, 2],
-                                  height_ratios = [2, 2, 2, 2, 2],
-                                  gridspec_kw = {'hspace' : 0.0, 'wspace' : 0})
+    fig, axs = plt.subplot_mosaic(mosaic, figsize = (6, 5), #(8, 5),
+                                  width_ratios = [1, 1, 0.5, 1, 1], #[1, 0.4, 1, 0.5, 0.3, 0.7, 1, 0.7, 0.3], #,
+                                  height_ratios = [2, 1, 1, 1, 1], #[2, 0.7, 0.7, 0.7],  #,
+                                  gridspec_kw = {'hspace' : 0.0, 'wspace' : 0.2})
     
     stability_plot(stability_ab,
                    feasibility_ab,
@@ -226,16 +249,11 @@ def compare_abiotic_biotic(stability_ab,
     ####################### Example population dynamics ######################
     
     for dynamics, axR, axC in zip(example_simulations, 
-                                  ["DA_SR", "DA_UR", "DB_SR", "DB_UR"],
-                                  ["DA_SC", "DA_UC", "DB_SC", "DB_UC"]):
+                                  ["DA_SR", "DA_UR", "DB_SR", "DB_CR", "DB_UR"],
+                                  ["DA_SC", "DA_UC", "DB_SC", "DB_CC", "DB_UC"]):
         
-        example_dynamics(dynamics, [axs[axR], axs[axC]])
+        example_dynamics(dynamics[0], [axs[axR], axs[axC]])
 
-    #example_dynamics(stable_es, [axs["DA_SR"], axs["DA_SC"]])
-    #example_dynamics(unstable_es, [axs["DA_UR"], axs["DA_UC"]])
-    #example_dynamics(stable_sl, [axs["DB_SR"], axs["DB_SC"]])
-    #example_dynamics(unstable_sl, [axs["DB_UR"], axs["DB_UC"]])
-    
     plt.savefig("C:/Users/jamil/Documents/PhD/Figures/externally_supplied_resources/simulations_rho_sigma_large_mu.png",
                 bbox_inches='tight')
     plt.savefig("C:/Users/jamil/Documents/PhD/Figures/externally_supplied_resources/simulations_rho_sigma_large_mu.svg",
@@ -245,17 +263,18 @@ def compare_abiotic_biotic(stability_ab,
 
 # %%
 
-simulations_abiotic, stability_abiotic  = load_clean_simulations("rho_vs_sigma_abiotic.csv")
-simulations_biotic, stability_biotic = load_clean_simulations("rho_vs_sigma_biotic")
+simulations_abiotic, stability_abiotic  = load_clean_simulations("rho_sigma_mu50_es")
+simulations_biotic, stability_biotic = load_clean_simulations("rho_sigma_mu50_sl")
 
 sces_abiotic = load_clean_sces("rho_sigma_newprotocol_upd4")
 sces_abiotic = np.round(sces_abiotic, 7)
 
-stable_es = pd.read_csv("C:/Users/jamil/Documents/PhD/Data/external_resource_stability/simulations/rho_vs_sigma_abiotic_stable2.csv")
-unstable_es = pd.read_csv("C:/Users/jamil/Documents/PhD/Data/external_resource_stability/simulations/rho_vs_sigma_abiotic_unstable2.csv")
+stable_es = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/external_resource_stability/simulations/rho_sigma_mu50_es_examplesim/simulations_1.0_6.0.pkl")
+infeasible_es = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/external_resource_stability/simulations/rho_sigma_mu50_es_examplesim/simulations_0.2_6.0.pkl")
 
-stable_sl = pd.read_csv("C:/Users/jamil/Documents/PhD/Data/external_resource_stability/simulations/rho_vs_sigma_biotic_stable2.csv")
-unstable_sl = pd.read_csv("C:/Users/jamil/Documents/PhD/Data/external_resource_stability/simulations/rho_vs_sigma_biotic_unstable2.csv")
+stable_sl = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/external_resource_stability/simulations/rho_sigma_mu50_sl_examplesim/simulations_1.0_6.0.pkl")
+chaotic_sl = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/external_resource_stability/simulations/rho_sigma_mu50_sl_examplesim/simulations_0.8_6.0.pkl")
+infeasible_sl = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/external_resource_stability/simulations/rho_sigma_mu50_sl_examplesim/simulations_0.2_6.0.pkl")
 
 feasibility_abiotic = feasible_region(simulations_abiotic)
 feasibility_biotic = feasible_region(simulations_biotic)
@@ -266,7 +285,8 @@ compare_abiotic_biotic(stability_abiotic,
                        feasibility_abiotic,
                        stability_biotic,
                        feasibility_biotic,
-                       [stable_es, unstable_es, stable_sl, unstable_sl],
+                       [stable_es, infeasible_es,
+                        stable_sl, chaotic_sl, infeasible_sl],
                        sces_abiotic)
 
 # %%
