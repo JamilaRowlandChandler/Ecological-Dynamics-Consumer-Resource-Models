@@ -353,6 +353,9 @@ class ParametersInterface:
         parameter_method : str
             Options are:
                 'normal' - parameters are normally distributed
+                'uniform' - parameters are uniformly distributed (use for
+                anything that must stay strictly positive, e.g. K_m/V_max -
+                unlike 'normal', this can't sample a negative value)
                 'constant' - parameters are fixed
         parameter_args : dict
             parameter method arguments.
@@ -386,9 +389,29 @@ class ParametersInterface:
                     setattr(self, p_label, parameters)
                     
                 except KeyError as e:
-                    
+
                     print("You need to supply a value for 'mu' and 'sigma' in your dictionary argument.")
-                
+
+            case 'uniform':
+
+                try:
+
+                    low, high = parameter_args['low'], parameter_args['high']
+
+                    # assign statistical properties to object
+                    setattr(self, 'low_' + p_label[0], low)
+                    setattr(self, 'high_' + p_label[0], high)
+
+                    # generate parameters
+                    parameters = np.random.uniform(low, high, dims)
+
+                    # assign parameters to class attributes
+                    setattr(self, p_label, parameters)
+
+                except KeyError as e:
+
+                    print("You need to supply a value for 'low' and 'high' in your dictionary argument.")
+
             case 'constant':
                 
                 try:
@@ -427,8 +450,21 @@ class ParametersInterface:
                           gated : bool = True,
                           shared_network : bool = False,
                           growth_saturation : bool = False,
-                          saturation_kinetics : Literal['flux', 'thermodynamic'] = 'flux',
+                          saturation_kinetics : Literal['flux', 'thermodynamic', 'reversible'] = 'flux',
                           K_m : float = 1e-8,
+                          K_m_method : Literal['constant', 'normal', 'uniform', 'user-supplied'] = 'constant',
+                          K_m_args : Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
+                                           TypedDict('uniform', {'low' : float, 'high' : float}),
+                                           TypedDict('constant', {'K_m_tensor' : float}),
+                                           TypedDict('user-supplied', {'K_m_tensor' : npt.NDArray}),
+                                           None]
+                              = None,
+                          v_max_method : Literal['constant', 'normal', 'uniform', 'user-supplied'] = 'constant',
+                          v_max_args : Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
+                                             TypedDict('uniform', {'low' : float, 'high' : float}),
+                                             TypedDict('constant', {'v_max_tensor' : float}),
+                                             TypedDict('user-supplied', {'v_max_tensor' : npt.NDArray})]
+                              = {'v_max_tensor' : 1},
                           log_eps : float = 1e-4,
                           production_method :
                               Literal['normal', 'constant', 'user-supplied']
@@ -537,6 +573,65 @@ class ParametersInterface:
                 regularisation artefact), so this mode is more prone to
                 stiffness/blow-up than 'flux' and is worth testing carefully
                 at small scale before large sweeps.
+                'reversible' - a Haldane-style reversible saturating flux
+                that, unlike 'thermodynamic', depends only on R_alpha and
+                R_beta (not on N_i), so doesn't share that variant's
+                species-count-driven stiffness. Per edge alpha -> beta:
+                f = (R_alpha - R_beta*exp(-(w_alpha-w_beta))) /
+                (K_m + R_alpha + R_beta). The denominator is always
+                >= K_m > 0 (no poles). f -> R_alpha/(K_m+R_alpha) (forward
+                only) as R_beta -> 0, and can go negative (net flux
+                reverses, from beta to alpha) if the byproduct beta has
+                built up enough relative to alpha to overcome the
+                exp(-(w_alpha-w_beta)) equilibrium factor. Growth uses
+                g_{i,alpha}*f directly (f already encodes the energy
+                asymmetry via its exp(.) term, so - unlike 'flux' - no
+                separate (w_alpha-w_beta) weighting is added on top);
+                consumption/production also use f directly in place of the
+                bare R_alpha factor, so growth and consumption share the
+                same per-edge aggregate quantity in this variant.
+        K_m_method, K_m_args : str, dict
+            Only used if saturation_kinetics = 'reversible'. Controls
+            self.K_m_tensor, a (no_species, no_resources, no_resources)
+            array giving each CONSUMER its own K_m for each metabolic
+            REACTION (edge alpha -> beta) - i.e. K_m_{i,alpha,beta}, sampled
+            independently per (species, resource-pair) rather than a single
+            shared scalar. Options for K_m_method are the same as
+            growth_consumption_rates' rate-generating methods:
+                'constant' (default) - every entry equals K_m_args['K_m_tensor'];
+                if K_m_args is left as None, this defaults to the scalar K_m
+                argument above, reproducing the original uniform-K_m
+                behaviour exactly.
+                'normal' - K_m_{i,alpha,beta} ~ Normal(K_m_args['mu'], K_m_args['sigma']),
+                independently per (species, resource-pair) - can sample
+                negative values if sigma is large relative to mu (see the
+                floor note below).
+                'uniform' - K_m_{i,alpha,beta} ~ Uniform(K_m_args['low'],
+                K_m_args['high']), independently per (species,
+                resource-pair) - the recommended choice when K_m must stay
+                strictly positive, since (unlike 'normal') it can't sample a
+                negative value as long as low > 0.
+                'user-supplied' - supply your own (no_species, no_resources,
+                no_resources) array as K_m_args['K_m_tensor'].
+            Sampled/supplied values are floored at 1e-8 regardless of method
+            (a sampled K_m crossing zero or negative would flip the
+            reversible flux's denominator sign unpredictably, or divide by
+            zero at exactly 0) - with 'uniform' and low > 0 this floor is
+            never actually triggered.
+        v_max_method, v_max_args : str, dict
+            Only used if saturation_kinetics = 'reversible'. Same idea as
+            K_m_method/K_m_args, but for self.v_max_tensor, a multiplicative
+            ceiling scaling the reversible flux per (species, resource-pair):
+            f_{i,alpha,beta} = v_max_tensor_{i,alpha,beta} * (R_alpha -
+            R_beta*exp(-(w_alpha-w_beta))) / (K_m_tensor_{i,alpha,beta} +
+            R_alpha + R_beta). Defaults to 1 everywhere (no scaling, matching
+            the original 'reversible' formula). Sampling K_m and/or v_max
+            per (species, resource-pair) - rather than sharing one global
+            scalar - introduces the same kind of fixed, structural
+            heterogeneity across consumers that 'flux' gets "for free" from
+            its (w_alpha-w_beta) energy weighting, which 'reversible'
+            otherwise lacks (its sign/magnitude is driven by the current
+            resource state, not by any fixed per-consumer quantity).
         log_eps : float
             Only used if growth_saturation = True and saturation_kinetics =
             'thermodynamic' - a floor applied to R before taking log(R) (used
@@ -681,6 +776,31 @@ class ParametersInterface:
         self.saturation_kinetics = saturation_kinetics
         self.K_m = K_m
         self.log_eps = log_eps
+
+        # consumer- and reaction-specific K_m/V_max, only used by
+        # saturation_kinetics = 'reversible' (self.K_m above stays a scalar,
+        # unused by 'reversible', so 'flux'/'thermodynamic' are unaffected).
+        # Defaults reproduce a uniform scalar K_m (from the K_m argument
+        # above) and V_max = 1 (no scaling) everywhere, matching the
+        # previous behaviour when K_m_method/v_max_method are left at
+        # 'constant' - so this is backward compatible unless you explicitly
+        # ask for 'normal' (or 'user-supplied') sampling.
+        if K_m_args is None:
+
+            K_m_args = {'K_m_tensor': K_m}
+
+        self.other_parameter_methods(K_m_method, K_m_args, 'K_m_tensor',
+                                     (self.no_species, self.no_resources, self.no_resources))
+        self.other_parameter_methods(v_max_method, v_max_args, 'v_max_tensor',
+                                     (self.no_species, self.no_resources, self.no_resources))
+
+        # safety floor - a sampled K_m or v_max that goes negative (or hits
+        # exactly 0) would either flip signs unpredictably or risk a
+        # division-by-zero in the 'reversible' flux; clip both to stay
+        # strictly positive rather than silently letting that happen
+        floor = 1e-8
+        self.K_m_tensor = np.maximum(self.K_m_tensor, floor)
+        self.v_max_tensor = np.maximum(self.v_max_tensor, floor)
 
         # --- structural (state-independent) network quantities, needed by
         # MP_CRM.simulation() in both growth_saturation modes ---

@@ -1781,7 +1781,7 @@ class MP_CRM(ParametersInterface,
                              t_eval = np.linspace(0, t_end, 200),
                              events = unbounded_growth)
 
-        else:
+        elif self.saturation_kinetics == 'thermodynamic':
 
             # thermodynamic saturating-flux growth mode ('thermodynamic'):
             # like the 'flux' variant above, R_alpha is replaced by a
@@ -2004,6 +2004,167 @@ class MP_CRM(ParametersInterface,
                                      species[:, np.newaxis]*Ct*consumption_flux_dN).T
                 dRdN_production = (P*production_flux +
                                    species[:, np.newaxis]*P*production_flux_dN).T
+                dRdN = dRdN_consumption + dRdN_production
+
+                J = np.zeros((M + self.no_species, M + self.no_species))
+                J[:M, :M] = dRdR
+                J[:M, M:] = dRdN
+                J[M:, :M] = dNdR
+                J[M:, M:] = np.diag(dNdN_diag)
+
+                return J
+
+            return solve_ivp(model, [0, t_end], initial_abundance,
+                             method = 'LSODA', jac = jacobian,
+                             rtol = 1e-7, atol = 1e-9,
+                             t_eval = np.linspace(0, t_end, 200),
+                             events = unbounded_growth)
+
+        else:
+
+            # reversible (Haldane-style) saturating-flux growth mode
+            # ('reversible'): like the other growth_saturation=True modes,
+            # R_alpha is replaced by a saturating per-edge flux in
+            # growth/consumption/production, but this one depends only on
+            # R_alpha and R_beta (not on N_i, unlike 'thermodynamic') - see
+            # the saturation_kinetics docstring in metabolic_network() for
+            # the formula and its interpretation. Since f already encodes
+            # the energy asymmetry via its exp(-(w_alpha-w_beta)) term,
+            # growth uses g_{i,alpha}*f directly - no extra (w_alpha-w_beta)
+            # weighting on top (unlike 'flux', where the saturating term was
+            # energy-independent and needed that weighting added
+            # separately) - so growth and consumption share the exact same
+            # per-edge aggregate quantity (flux_sum below) in this variant,
+            # simplifying both the model and its Jacobian.
+            #
+            # K_m and V_max are (no_species, no_resources, no_resources)
+            # tensors (self.K_m_tensor/self.v_max_tensor from
+            # metabolic_network(), constant per (species, resource-pair) by
+            # default but optionally sampled - see that docstring), not
+            # scalars - this is what lets 'reversible' carry the same kind
+            # of fixed, per-consumer structural heterogeneity that 'flux'
+            # gets from its (w_alpha-w_beta) weighting.
+            Q = self.q
+            E = np.exp(-self.energy_differences)
+            out_degree = self.out_degree
+            G, P = self.growth, self.p
+            Ct = C.T
+            K_m = self.K_m_tensor
+            V_max = self.v_max_tensor
+
+            def model(t, y):
+
+                '''
+
+                ODE for the metabolic pathway CRM with a reversible
+                (Haldane-style) saturating flux depending only on R_alpha,
+                R_beta (and the consumer- and reaction-specific K_m, V_max).
+
+                '''
+
+                resources, species = y[:M], y[M:]
+
+                num = resources[:, np.newaxis] - resources[np.newaxis, :] * E
+                R_pairsum = resources[:, np.newaxis] + resources[np.newaxis, :]
+                den = K_m + R_pairsum[np.newaxis, :, :]
+                f = V_max * num[np.newaxis, :, :] / den
+
+                QF = Q * f
+
+                # flux_sum is used for BOTH growth (metabolic gain) and
+                # consumption, since growth has no extra energy weighting here
+                flux_sum = np.sum(QF, axis=2) / out_degree
+
+                dNdt = species * (np.sum(G * flux_sum, axis=1) - D)
+
+                consumed = np.sum(species[:, np.newaxis] * Ct * flux_sum, axis=0)
+
+                weight = Ct / out_degree
+                production_flux = np.matmul(weight[:, np.newaxis, :], QF)[:, 0, :]
+                produced = np.sum(species[:, np.newaxis] * P * production_flux, axis=0)
+
+                dRdt = (O + B*resources - A*resources**2) - consumed + produced
+
+                return np.concatenate((dRdt, dNdt)) + 1e-8
+
+            def jacobian(t, y):
+
+                '''
+
+                Analytic Jacobian for the 'reversible' saturating-flux
+                variant.
+
+                f_{i,alpha,beta} = V_max_{i,alpha,beta} * (R_alpha -
+                R_beta*E[alpha,beta]) / (K_m_{i,alpha,beta} + R_alpha + R_beta),
+                E[alpha,beta] = exp(-(w_alpha-w_beta)) (structural,
+                precomputed). Fx = df/dR_alpha, Fy = df/dR_beta - now
+                (species, resource, resource)-shaped throughout, since K_m
+                and V_max carry a species index, but otherwise the exact
+                same product/quotient-rule derivation as the scalar-K_m
+                version. Since growth and consumption both use
+                flux_sum = sum_beta q_{i,alpha,beta}*f/out_degree directly
+                (no extra weighting), the same "diagonal + dense"
+                decomposition (differentiating every term in the sum at once
+                for alpha, vs. only the single matching term for beta)
+                applies identically to both, unlike the 'flux'/'thermodynamic'
+                variants which needed separate Gx/Gy (growth) and Sx/Sy
+                (consumption) pieces.
+
+                '''
+
+                resources, species = y[:M], y[M:]
+
+                num = resources[:, np.newaxis] - resources[np.newaxis, :] * E
+                R_pairsum = resources[:, np.newaxis] + resources[np.newaxis, :]
+                den = K_m + R_pairsum[np.newaxis, :, :]
+                num_b = num[np.newaxis, :, :]
+                f = V_max * num_b / den
+
+                Fx = V_max * (den - num_b) / den**2
+                Fy = -V_max * (E[np.newaxis, :, :]*den + num_b) / den**2
+
+                QF = Q * f
+                QFx = Q * Fx
+                QFy = Q * Fy
+
+                flux_sum = np.sum(QF, axis=2) / out_degree
+
+                # --- d(dNdt)/d(species), d(dNdt)/d(resources) ---
+
+                dNdN_diag = np.sum(G * flux_sum, axis=1) - D
+
+                flux_sum_dFx = np.sum(QFx, axis=2) / out_degree
+                flux_sum_dFy = QFy / out_degree[:, :, np.newaxis]
+                flux_sum_dFy_contracted = \
+                    np.matmul(G[:, np.newaxis, :], flux_sum_dFy)[:, 0, :]
+
+                dNdR = species[:, np.newaxis] * \
+                    (G * flux_sum_dFx + flux_sum_dFy_contracted)
+
+                # --- d(dRdt)/d(resources), d(dRdt)/d(species) ---
+
+                weight = Ct / out_degree
+                production_flux = np.matmul(weight[:, np.newaxis, :], QF)[:, 0, :]
+                production_flux_dFy = np.matmul(weight[:, np.newaxis, :], QFy)[:, 0, :]
+                production_flux_dFx_tensor = \
+                    weight[:, np.newaxis, :] * QFx.transpose(0, 2, 1)
+
+                consumed_dFx = np.sum(species[:, np.newaxis] * Ct * flux_sum_dFx, axis=0)
+                W1 = species[:, np.newaxis] * Ct
+                consumed_dense = np.matmul(W1.T[:, np.newaxis, :],
+                                           flux_sum_dFy.transpose(1, 0, 2))[:, 0, :]
+
+                produced_dFy_diag = np.sum(species[:, np.newaxis] * P * production_flux_dFy,
+                                           axis=0)
+                W2 = species[:, np.newaxis] * P
+                produced_dense = np.matmul(W2.T[:, np.newaxis, :],
+                                           production_flux_dFx_tensor.transpose(1, 0, 2))[:, 0, :]
+
+                dRdR_diag = B - 2*A*resources - consumed_dFx + produced_dFy_diag
+                dRdR = np.diag(dRdR_diag) - consumed_dense + produced_dense
+
+                dRdN_consumption = -(Ct*flux_sum).T
+                dRdN_production = (P*production_flux).T
                 dRdN = dRdN_consumption + dRdN_production
 
                 J = np.zeros((M + self.no_species, M + self.no_species))
