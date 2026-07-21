@@ -513,12 +513,22 @@ class ParametersInterface:
                 'gamma' : probability given by a gamma distribution used as a
                 likelihood function f(x), evaluated at x = w_alpha - w_beta
                 and normalised by its value at the distribution's mode.
+                Requires mean**2/variance >= 1 (see resource_conversions
+                below) - raises ValueError otherwise.
                 'step' : probability is p_s if w_alpha - w_beta > 0, and 0
                 otherwise (or unconditionally p_s if gated = False).
         resource_conversions : dict
             Arguments for network_method.
             If 'gamma', mean and variance of the gamma distribution,
-            e.g. {'mean' : mean, 'variance' : variance}
+            e.g. {'mean' : mean, 'variance' : variance}. The gamma shape
+            parameter mean**2/variance must be >= 1 (i.e. variance <=
+            mean**2) - below 1 the gamma density has no finite maximum (it
+            diverges as x -> 0), so the mode-normalisation used here would
+            silently divide by infinity and zero every link probability;
+            metabolic_network() raises ValueError instead of allowing that.
+            A shape just above 1 (variance just below mean**2) still puts
+            the mode near zero, i.e. links between close-in-energy resources
+            strongly preferred, without hitting the degenerate case.
             If 'step', the link probability, e.g. {'p_s' : p_s}
         gated : bool
             Only affects network_method = 'step'. If True (default), a link
@@ -722,13 +732,24 @@ class ParametersInterface:
 
                     gamma_shape, gamma_scale = mean**2/variance, variance/mean
 
-                    if gamma_shape >= 1:
+                    if gamma_shape < 1:
 
-                        mode = (gamma_shape - 1) * gamma_scale
+                        raise ValueError(
+                            "metabolic_network(network_method='gamma') requires "
+                            f"mean**2/variance >= 1 (got shape={gamma_shape:.4g} "
+                            f"from mean={mean}, variance={variance}). For "
+                            "shape < 1 the gamma density has no finite maximum "
+                            "(it diverges as x -> 0), so normalising "
+                            "link_probability by its value at the mode divides "
+                            "by infinity and silently zeroes every link "
+                            "probability instead of raising an error. Choose "
+                            "mean/variance so that variance <= mean**2 (e.g. "
+                            "variance just below mean**2) to keep the mode near "
+                            "zero - i.e. links between close-in-energy resources "
+                            "strongly preferred - without hitting this degenerate "
+                            "case.")
 
-                    else:
-
-                        mode = 0
+                    mode = (gamma_shape - 1) * gamma_scale
 
                     link_probability = gamma.pdf(energy_differences, a = gamma_shape, scale = gamma_scale) / \
                                     gamma.pdf(mode, a=gamma_shape, scale=gamma_scale)

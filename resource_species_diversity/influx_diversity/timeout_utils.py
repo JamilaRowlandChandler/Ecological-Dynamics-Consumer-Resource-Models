@@ -19,6 +19,7 @@ earlier - every call starts a clean process.
 
 import multiprocessing as mp
 import numpy as np
+from scipy.stats import gamma as gamma_dist
 
 
 def sample_shared_network(M, p_s, seed, gated=True):
@@ -52,6 +53,66 @@ def sample_shared_network(M, p_s, seed, gated=True):
     else:
 
         link_probability = np.full((M, M), p_s)
+
+    adjacency = rng.binomial(1, link_probability, size=(M, M))
+
+    return w, adjacency
+
+
+def sample_shared_network_gamma(M, mean, variance, seed):
+
+    '''
+
+    Sample a single (w, adjacency) metabolic network using the 'gamma'
+    network_method (see metabolic_network()'s docstring) instead of 'step' -
+    link probability between alpha, beta is a gamma-distribution likelihood
+    evaluated at x = w_alpha - w_beta and normalised by its value at the
+    distribution's mode, so links between resources close in energy are most
+    likely and the probability decays (in a direction set by mean/variance)
+    for resources further apart in energy. Since scipy.stats.gamma.pdf(x) is
+    0 for x <= 0, this is automatically gated (only w_alpha > w_beta edges
+    are ever possible) with no separate gated flag needed - mirrors
+    metabolic_network(network_method='gamma')'s behaviour exactly, but
+    pre-sampled here so the same network can be reused across many
+    communities/subprocess workers.
+
+    mean, variance : float
+        Mean and variance of the gamma distribution used as the likelihood
+        f(x) for the energy gap x = w_alpha - w_beta. A small mean
+        concentrates link probability on small energy gaps (near-neighbour-
+        in-energy links only), giving a sparse, chain-like/branching
+        structure; variance controls how sharply probability falls off
+        away from that preferred gap. Requires mean**2/variance >= 1 (see
+        metabolic_network()'s docstring) - raises ValueError otherwise,
+        since shape < 1 makes the gamma density's mode-normalisation divide
+        by infinity and silently zero every link probability.
+
+    '''
+
+    rng = np.random.RandomState(seed)
+    w = rng.uniform(0, 1, M)
+
+    energy_differences = w[:, np.newaxis] - w[np.newaxis, :]
+
+    gamma_shape, gamma_scale = mean**2 / variance, variance / mean
+
+    if gamma_shape < 1:
+
+        raise ValueError(
+            "sample_shared_network_gamma requires mean**2/variance >= 1 "
+            f"(got shape={gamma_shape:.4g} from mean={mean}, "
+            f"variance={variance}). For shape < 1 the gamma density has no "
+            "finite maximum (it diverges as x -> 0), so normalising "
+            "link_probability by its value at the mode divides by infinity "
+            "and silently zeroes every link probability instead of raising "
+            "an error. Choose mean/variance so that variance <= mean**2 "
+            "(e.g. variance just below mean**2) to keep the mode near zero "
+            "without hitting this degenerate case.")
+
+    mode = (gamma_shape - 1) * gamma_scale
+
+    link_probability = gamma_dist.pdf(energy_differences, a=gamma_shape, scale=gamma_scale) / \
+        gamma_dist.pdf(mode, a=gamma_shape, scale=gamma_scale)
 
     adjacency = rng.binomial(1, link_probability, size=(M, M))
 
@@ -101,7 +162,7 @@ def _simulate_worker(params, queue):
     growth_saturation = params.get('growth_saturation', True)
     metabolic_network_kwargs = dict(
         energies=w, adjacency=adjacency, network_method='step',
-        resource_conversions={'p_s': params['p_s']},
+        resource_conversions={'p_s': params.get('p_s', 1)},
         growth_saturation=growth_saturation,
         K_m=params['K_m'], log_eps=params.get('log_eps', 1e-4),
         production_method='constant', production_args={'p': params.get('p', 1)})
