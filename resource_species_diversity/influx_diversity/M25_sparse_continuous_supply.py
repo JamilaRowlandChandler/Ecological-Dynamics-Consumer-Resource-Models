@@ -15,27 +15,34 @@ consumers that 'flux' already has "for free" via its energy weighting.
 support), so the comparison stays apples-to-apples on everything except the
 deliberate K_m-sampling difference under test.
 
-Network: gamma network_method with mean=0.04, variance=0.0014 (shape=1.14,
-so passes the shape>=1 validation added to metabolic_network()/
-sample_shared_network_gamma() - see the gamma-method bug fix). Retuned from
-the M=10 script's (mean=0.1, variance=0.009) because that combination gives
-~63 edges at M=25 (found via grid search) - far denser than the intended
-near-spanning-tree/chain structure; (0.04, 0.0014) instead gives ~25-40
-edges (close to the M=25(M-1)/... target of "about M edges"), verified via 5
-seeds with dominant-resource out-degree >= 1.
+Network: sample_connected_gamma_network() (network_diagnostics.py) with
+mean=0.04, variance=0.0014 - RETROFITTED from the original
+sample_shared_network_gamma() (see network_diagnostics.py's docstring/the
+gamma-method bug fix): that independent-Bernoulli-per-edge method left
+resources disconnected from the dominant (externally-supplied) resource far
+more often than expected - a verification sweep found 10/10 tested seeds
+had the dominant resource isolated in a small component, cut off from most
+of the other M-1 resources, REGARDLESS of species dynamics. This affected
+every M25_sparse_*.py script and the parameter sweep - all of this
+investigation's earlier "most byproducts never accumulate" findings were
+compounded by (not purely explained by) that structural bug. The new
+sampler builds a spanning tree rooted at the dominant resource first
+(guaranteeing every resource is reachable from it), then layers a few extra
+edges on top (extra_edge_scale=0.3 default) - same mean/variance semantics,
+same target sparsity (~25-40 edges for M=25), but now ALWAYS fully
+connected. check_connectivity() (also network_diagnostics.py) is called
+right after sampling to confirm this on every run.
 
-Death rate: d=0.01, down from the M=10 scripts' d=0.1. Found by pilot-testing
-d in {0.1, 0.05, 0.02, 0.01, 0.005, 0.003} against mean survivor count at
-o=1.1 - d=0.1 (unscaled) gave near-total collapse (1/50 survivors) at M=25,
-because growth is diluted across a longer/more-branched cascade than at
-M=10 (mu_c=mu_C/M is already smaller at M=25, and metabolic mass must now
-pass through more intermediate steps - each with its own consumption and
-out-degree-based splitting losses - before reaching most of the resource
-pool). d=0.01 gives a meaningful spread of outcomes (mean ~16/50 survivors,
-range 3-31 across networks/communities) without saturating at "everyone
-survives" (d=0.005 was already close to that, 21-50/50).
+Death rate: d=0.05, up from the (disconnected-network) d=0.01. With every
+resource actually reachable, communities support far more species than
+before at the same d (a d=0.01 spot check on a connected network gave
+44-50/50 survivors - saturated, uninformative). Re-tuned by pilot-testing
+d in {0.01, 0.03, 0.05, 0.08, 0.1} against mean survivor count across the
+full o range - d=0.05 gives a meaningful spread (mean ~10-12/50, range
+4-15) with a visible (if modest) increasing trend across o, without
+saturating.
 
-M=25, S=50, mu_C=40 (mu_c=mu_C/M), sigma_C=1.6, b=-0.001, p=1, d=0.01,
+M=25, S=50, mu_C=40 (mu_c=mu_C/M), sigma_C=1.6, b=-0.001, p=1, d=0.05,
 o=[0.1,0.3,0.5,0.7,0.9,1.1], t_end=7000, condition='single', 5 networks x 8
 communities x 2 kinetics.
 """
@@ -55,14 +62,14 @@ DATA_DIR = "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability_cross
 sys.path.insert(0, file_directory_name)
 sys.path.insert(0, 'C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/consumer_resource_modules')
 
-from timeout_utils import sample_shared_network_gamma
+from network_diagnostics import sample_connected_gamma_network, check_connectivity
 from models import Consumer_Resource_Model
 
 # %%
 
 mu_C = 40
 sigma_C = 1.6
-d = 0.01
+d = 0.05
 S = 50
 t_end = 7000
 K_m = 1e-2
@@ -143,7 +150,8 @@ if __name__ == '__main__':
 
     networks = []
     for seed in GAMMA_SEEDS:
-        w, adjacency = sample_shared_network_gamma(M, GAMMA_MEAN, GAMMA_VARIANCE, seed)
+        w, adjacency = sample_connected_gamma_network(M, GAMMA_MEAN, GAMMA_VARIANCE, seed)
+        check_connectivity(w, adjacency, verbose=True)
         networks.append((w, adjacency))
 
     for net_idx, (w, adjacency) in enumerate(networks):
@@ -187,7 +195,7 @@ if __name__ == '__main__':
 
     print(f"All done: {n_done}/{len(combos)} ({n_failed} failed)", flush=True)
 
-    out_path = os.path.join(DATA_DIR, 'M25_sparse_continuous_supply_results.pkl')
+    out_path = os.path.join(DATA_DIR, 'M25_sparse_continuous_supply_connected_results.pkl')
     with open(out_path, 'wb') as f:
         pickle.dump({'results': results, 'networks': networks,
                     'o_values': o_values, 'kinetics_values': kinetics_values,

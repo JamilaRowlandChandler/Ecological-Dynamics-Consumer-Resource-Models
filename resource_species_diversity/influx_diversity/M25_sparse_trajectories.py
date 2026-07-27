@@ -13,9 +13,14 @@ survival_fraction(t)) trajectory from each run, for plotting mean surviving
 species over time (with across-community/network variability) comparing
 'flux' vs 'reversible'.
 
-Same networks/parameters as the two parent scripts (5 gamma networks, mean=
-0.04/variance=0.0014, seeds 900201/202/204/206/207; d=0.01 continuous
-supply, d=0.03 pulse; K_m~Uniform(0.001,0.1) tensor for 'reversible' only).
+Same networks/parameters as the two parent scripts (RETROFITTED to
+sample_connected_gamma_network(), mean=0.04/variance=0.0014, seeds
+900201/202/204/206/207 - see M25_sparse_continuous_supply.py's docstring
+for why: the old sampler left the dominant resource disconnected from most
+of the network in 10/10 tested seeds; d=0.05 continuous supply, d=0.04
+pulse - both re-tuned for the connected network, see
+M25_sparse_continuous_supply.py/M25_sparse_pulse.py's docstrings;
+K_m~Uniform(0.001,0.1) tensor for 'reversible' only).
 """
 
 import numpy as np
@@ -33,7 +38,7 @@ DATA_DIR = "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability_cross
 sys.path.insert(0, file_directory_name)
 sys.path.insert(0, 'C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/consumer_resource_modules')
 
-from timeout_utils import sample_shared_network_gamma
+from network_diagnostics import sample_connected_gamma_network, check_connectivity
 from models import Consumer_Resource_Model
 
 # %%
@@ -49,8 +54,8 @@ GAMMA_SEEDS = [900201, 900202, 900204, 900206, 900207]
 GAMMA_MEAN, GAMMA_VARIANCE = 0.04, 0.0014
 K_m_method, K_m_args = 'uniform', {'low': 0.001, 'high': 0.1}
 
-d_continuous = 0.01
-d_pulse = 0.03
+d_continuous = 0.05
+d_pulse = 0.04
 t_end_continuous = 7000
 t_end_pulse = 300
 o_val = 1.1
@@ -126,7 +131,9 @@ def _run_pulse(combo):
 
 if __name__ == '__main__':
 
-    networks = [sample_shared_network_gamma(M, GAMMA_MEAN, GAMMA_VARIANCE, s) for s in GAMMA_SEEDS]
+    networks = [sample_connected_gamma_network(M, GAMMA_MEAN, GAMMA_VARIANCE, s) for s in GAMMA_SEEDS]
+    for w, adjacency in networks:
+        check_connectivity(w, adjacency, verbose=True)
 
     cont_combos = []
     pulse_combos = []
@@ -158,7 +165,7 @@ if __name__ == '__main__':
 
     print(f"Pulse done: {len(pulse_results)}", flush=True)
 
-    out_path = os.path.join(DATA_DIR, 'M25_sparse_trajectories.pkl')
+    out_path = os.path.join(DATA_DIR, 'M25_sparse_trajectories_connected.pkl')
     with open(out_path, 'wb') as f:
         pickle.dump({'continuous': cont_results, 'pulse': pulse_results,
                     'o_val': o_val, 'R_star_values': R_star_values,

@@ -440,17 +440,21 @@ class ParametersInterface:
     def metabolic_network(self,
                           energies : Union[None, npt.NDArray] = None,
                           adjacency : Union[None, npt.NDArray] = None,
-                          network_method : Literal['gamma', 'step'] = 'gamma',
+                          network_method : Literal['gamma', 'step', 'connected_gamma'] = 'gamma',
                           resource_conversions : Union[TypedDict('gamma',
                                                                  {'mean' : float,
                                                                   'variance' : float}),
                                                        TypedDict('step',
-                                                                 {'p_s' : float})]
+                                                                 {'p_s' : float}),
+                                                       TypedDict('connected_gamma',
+                                                                 {'mean' : float,
+                                                                  'variance' : float,
+                                                                  'extra_edge_scale' : float})]
                               = {'mean' : 1, 'variance' : 1},
                           gated : bool = True,
                           shared_network : bool = False,
                           growth_saturation : bool = False,
-                          saturation_kinetics : Literal['flux', 'thermodynamic', 'reversible'] = 'flux',
+                          saturation_kinetics : Literal['flux', 'thermodynamic', 'reversible', 'boltzmann'] = 'flux',
                           K_m : float = 1e-8,
                           K_m_method : Literal['constant', 'normal', 'uniform', 'user-supplied'] = 'constant',
                           K_m_args : Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
@@ -517,6 +521,26 @@ class ParametersInterface:
                 below) - raises ValueError otherwise.
                 'step' : probability is p_s if w_alpha - w_beta > 0, and 0
                 otherwise (or unconditionally p_s if gated = False).
+                'connected_gamma' : like 'gamma', but GUARANTEES every
+                resource is reachable from the dominant (highest-energy)
+                resource via directed edges, instead of independently
+                Bernoulli-sampling every edge and risking a disconnected
+                network (found empirically: with 'gamma' on a sparse,
+                low-mean setting, ~10/10 tested seeds left most resources
+                unreachable from the dominant one - see
+                resource_species_diversity/influx_diversity/
+                network_diagnostics.py). Builds a random spanning tree
+                rooted at the dominant resource first (every other resource
+                picks exactly one higher-energy parent, weighted toward
+                small energy gaps via the same gamma-density preference as
+                'gamma'), then layers a few extra edges on top using the
+                'gamma' method's own Bernoulli sampling (scaled down by
+                resource_conversions['extra_edge_scale']) for branching -
+                the extra-edge step can only ever ADD edges on top of the
+                guaranteed-connected tree, never remove one, so
+                connectivity survives regardless of how many extra edges
+                land. Always gated (like 'gamma') since it only ever
+                creates w_alpha > w_beta edges.
         resource_conversions : dict
             Arguments for network_method.
             If 'gamma', mean and variance of the gamma distribution,
@@ -530,6 +554,13 @@ class ParametersInterface:
             the mode near zero, i.e. links between close-in-energy resources
             strongly preferred, without hitting the degenerate case.
             If 'step', the link probability, e.g. {'p_s' : p_s}
+            If 'connected_gamma', mean and variance (same constraints and
+            meaning as 'gamma') plus 'extra_edge_scale' (float in [0, 1],
+            default 0.3 if omitted) - the Bernoulli probability multiplier
+            for the extra (non-tree) edges layered on top of the guaranteed
+            spanning tree. 0 gives the bare spanning tree (sparsest possible
+            connected network, no_resources - 1 edges); larger values add
+            progressively more redundant edges.
         gated : bool
             Only affects network_method = 'step'. If True (default), a link
             between alpha and beta exists with probability p_s only when
@@ -600,6 +631,24 @@ class ParametersInterface:
                 consumption/production also use f directly in place of the
                 bare R_alpha factor, so growth and consumption share the
                 same per-edge aggregate quantity in this variant.
+                'boltzmann' - a Boltzmann-weighted LINEAR flux (not a
+                saturating ratio - no denominator, so unlike every other
+                growth_saturation=True mode this is unbounded in R_alpha,
+                R_beta). Per edge alpha -> beta: f = exp(w_alpha/K_m)*R_alpha
+                - exp(w_beta/K_m)*R_beta. K_m here is a thermal/temperature-
+                like scale in a Boltzmann factor, NOT a Michaelis-Menten
+                half-saturation constant - it must NOT be set small (see the
+                K_m argument's docstring below for why a small K_m is
+                actively dangerous for this variant specifically). f is
+                positive (net forward flux, alpha -> beta) whenever
+                exp(w_alpha/K_m)*R_alpha > exp(w_beta/K_m)*R_beta, and can go
+                negative (net flux reverses) otherwise - like 'reversible',
+                but via a linear rather than saturating comparison. Growth
+                uses g_{i,alpha}*f directly (f already encodes the full
+                energy weighting, so no separate (w_alpha-w_beta) factor is
+                added on top, exactly as in 'reversible'); consumption/
+                production also use f directly, so growth, consumption, and
+                production all share the same per-edge aggregate quantity.
         K_m_method, K_m_args : str, dict
             Only used if saturation_kinetics = 'reversible'. Controls
             self.K_m_tensor, a (no_species, no_resources, no_resources)
@@ -670,6 +719,15 @@ class ParametersInterface:
             also changing the model's behaviour (not just a numerical
             regularisation) by setting the concentration scale at which
             saturation kicks in.
+            For saturation_kinetics = 'boltzmann', K_m plays a completely
+            different role - it is NOT a half-saturation constant but a
+            thermal/temperature-like scale inside exp(w_alpha/K_m), and
+            MUST NOT be set small: since w is typically in [0, 1], a small
+            K_m (e.g. the 1e-8 default, or the 1e-2 typically used for
+            'flux') makes exp(w/K_m) astronomically large (e.g.
+            exp(1/0.01) = exp(100) ~ 2.7e43), causing immediate numerical
+            overflow. Choose K_m on the order of the typical energy range
+            (e.g. K_m ~ 0.1-10) for 'boltzmann' instead.
         production_method : str
             Method used to generate resource production rates, p_{i, alpha},
             where alpha is the byproduct/target resource being produced
@@ -772,21 +830,97 @@ class ParametersInterface:
 
                         link_probability = np.full_like(energy_differences, p_s)
 
+                case 'connected_gamma':
+
+                    # spanning tree rooted at the dominant (highest-energy)
+                    # resource, guaranteeing every resource is reachable from
+                    # it, plus a few extra edges on top - see this method's
+                    # docstring and network_diagnostics.py for the full
+                    # rationale/derivation. Sets self.q directly (both
+                    # shared_network cases) since the construction doesn't
+                    # fit the shared "sample q from a precomputed
+                    # link_probability" path used by 'gamma'/'step' below.
+                    mean, variance = resource_conversions['mean'], resource_conversions['variance']
+                    extra_edge_scale = resource_conversions.get('extra_edge_scale', 0.3)
+
+                    self.mean_q, self.variance_q = mean, variance
+
+                    if not (0 <= extra_edge_scale <= 1):
+                        raise ValueError(
+                            f"extra_edge_scale must be in [0, 1], got {extra_edge_scale}")
+
+                    gamma_shape, gamma_scale = mean**2/variance, variance/mean
+
+                    if gamma_shape < 1:
+
+                        raise ValueError(
+                            "metabolic_network(network_method='connected_gamma') "
+                            f"requires mean**2/variance >= 1 (got shape="
+                            f"{gamma_shape:.4g} from mean={mean}, variance={variance}) "
+                            "- see the 'gamma' ValueError message above for why "
+                            "shape < 1 is degenerate.")
+
+                    mode = (gamma_shape - 1) * gamma_scale
+                    pdf_mode = gamma.pdf(mode, a=gamma_shape, scale=gamma_scale)
+
+                    order = np.argsort(-self.w)
+                    n_networks = 1 if shared_network else self.no_species
+
+                    tree_adjacency = np.zeros(
+                        (n_networks, self.no_resources, self.no_resources), dtype=int)
+
+                    # every non-root resource picks exactly one higher-energy
+                    # parent, weighted toward small energy gaps - vectorised
+                    # across n_networks per rank (all networks share the same
+                    # w, hence the same per-rank candidate/weight set, but
+                    # each draws its own independent parent)
+                    for k in range(1, self.no_resources):
+
+                        node = order[k]
+                        parent_candidates = order[:k]
+                        gaps = self.w[parent_candidates] - self.w[node]
+                        weights = gamma.pdf(gaps, a=gamma_shape, scale=gamma_scale) / pdf_mode
+                        weights = weights / weights.sum()
+                        parents = np.random.choice(parent_candidates, size=n_networks, p=weights)
+                        tree_adjacency[np.arange(n_networks), parents, node] = 1
+
+                    # extra edges on top, same 'gamma' Bernoulli approach,
+                    # scaled down - can only add to the tree (np.maximum),
+                    # never remove from it, so connectivity is preserved
+                    link_probability = gamma.pdf(energy_differences, a=gamma_shape, scale=gamma_scale) / \
+                        pdf_mode
+                    link_probability = link_probability * extra_edge_scale
+                    extra = np.random.binomial(1, link_probability,
+                                               size=(n_networks, self.no_resources, self.no_resources))
+                    network_adjacency = np.maximum(tree_adjacency, extra)
+
+                    if shared_network:
+
+                        self.q = np.tile(network_adjacency[0], (self.no_species, 1, 1))
+
+                    else:
+
+                        self.q = network_adjacency
+
             # sample the metabolic network - an independent Bernoulli trial for
             # each consumer, for every ordered pair of resources (alpha, beta) -
-            # or a single network shared by every consumer if shared_network = True
-            if shared_network:
+            # or a single network shared by every consumer if shared_network = True.
+            # 'connected_gamma' already set self.q directly above (its
+            # construction doesn't fit this precomputed-link_probability path).
+            if network_method != 'connected_gamma':
 
-                shared_q = np.random.binomial(1, link_probability,
-                                              size = (self.no_resources, self.no_resources))
+                if shared_network:
 
-                self.q = np.tile(shared_q, (self.no_species, 1, 1))
+                    shared_q = np.random.binomial(1, link_probability,
+                                                  size = (self.no_resources, self.no_resources))
 
-            else:
+                    self.q = np.tile(shared_q, (self.no_species, 1, 1))
 
-                self.q = np.random.binomial(1, link_probability,
-                                            size = (self.no_species, self.no_resources,
-                                                    self.no_resources))
+                else:
+
+                    self.q = np.random.binomial(1, link_probability,
+                                                size = (self.no_species, self.no_resources,
+                                                        self.no_resources))
 
         # generate resource production rates, p_{i, alpha} (alpha = the
         # byproduct/target resource being produced)

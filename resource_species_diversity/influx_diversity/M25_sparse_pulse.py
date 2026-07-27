@@ -11,23 +11,27 @@ sparse (gamma network_method, chain/branching) topology, with K_m ~
 Uniform(0.001, 0.1) sampled per (species, resource-pair) for 'reversible'
 (see M25_sparse_continuous_supply.py for the same K_m-sampling rationale).
 
-Same 5 networks as M25_sparse_continuous_supply.py (gamma network_method,
-mean=0.04, variance=0.0014, seeds filtered for dominant-resource
-out-degree >= 1).
+Same 5 network seeds as M25_sparse_continuous_supply.py, RETROFITTED to use
+sample_connected_gamma_network() (network_diagnostics.py) instead of
+sample_shared_network_gamma() - see that script's docstring for why: the
+old sampler left the dominant resource disconnected from most of the
+network in 10/10 tested seeds, regardless of species dynamics.
+check_connectivity() is called right after sampling to confirm full
+connectivity on every run.
 
-Death rate: d=0.03 - NOT the same d=0.01 used for the continuous-supply
-script. Pilot-testing found d=0.01 (tuned for continuous supply) gives
-essentially no selection under a pulse (48-50/50 survivors at every R*,
-t_end=300) - a pulse's death-driven extinction needs several 1/d
-timescales to play out within t_end, so a d this small barely registers
-in 300 time units even though it was appropriately small for balancing
-against continuous dilution over t_end=7000. d=0.1 (unscaled from the M=10
-pulse scripts) gave the opposite problem - total collapse (0 survivors) at
-every R_star up to 1000. d=0.03 gives a genuine R*-dependent transition:
-0 survivors at R*=2/10, rising smoothly to ~12 at R*=50, ~25 at R*=100,
-~38 at R*=300, ~44 at R*=1000 (3-community pilot, net_idx=0).
+Death rate: d=0.04 - re-tuned for the connected network (NOT the old
+disconnected-network d=0.03, and still not the continuous-supply script's
+d=0.05 - a pulse's death-driven extinction needs several 1/d timescales to
+play out within the short t_end=300, unlike continuous supply's t_end=7000,
+so the two scenarios need separately-tuned d regardless of network).
+Pilot-tested d in {0.03, 0.035, 0.04, 0.05, 0.08} against the R*-dependent
+survivor trend on a connected network - d=0.03 saturates too early (34-50
+survivors already by R*=10), d=0.05 barely responds until R*=1000 (0
+survivors from R*=2 to R*=500). d=0.04 gives a smooth monotonic transition:
+0 at R*=2/10, ~5 at R*=50, ~21 at R*=100, ~37 at R*=300, ~41 at R*=500, ~45
+at R*=1000 (3-community pilot, net_idx=0, kinetics='reversible').
 
-M=25, S=50, mu_C=40 (mu_c=mu_C/M), sigma_C=1.6, b=-0.001, p=1, d=0.03,
+M=25, S=50, mu_C=40 (mu_c=mu_C/M), sigma_C=1.6, b=-0.001, p=1, d=0.04,
 R_star=[2,10,50,100,300,500,1000], t_end=300, 5 networks x 8 communities x
 2 kinetics.
 """
@@ -47,14 +51,14 @@ DATA_DIR = "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability_cross
 sys.path.insert(0, file_directory_name)
 sys.path.insert(0, 'C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/consumer_resource_modules')
 
-from timeout_utils import sample_shared_network_gamma
+from network_diagnostics import sample_connected_gamma_network, check_connectivity
 from models import Consumer_Resource_Model
 
 # %%
 
 mu_C = 40
 sigma_C = 1.6
-d = 0.03
+d = 0.04
 S = 50
 t_end = 300
 K_m = 1e-2
@@ -141,7 +145,8 @@ if __name__ == '__main__':
 
     networks = []
     for seed in GAMMA_SEEDS:
-        w, adjacency = sample_shared_network_gamma(M, GAMMA_MEAN, GAMMA_VARIANCE, seed)
+        w, adjacency = sample_connected_gamma_network(M, GAMMA_MEAN, GAMMA_VARIANCE, seed)
+        check_connectivity(w, adjacency, verbose=True)
         networks.append((w, adjacency))
 
     combos = []
@@ -180,7 +185,7 @@ if __name__ == '__main__':
 
     print(f"All done: {n_done}/{len(combos)} ({n_failed} failed)", flush=True)
 
-    out_path = os.path.join(DATA_DIR, 'M25_sparse_pulse_results.pkl')
+    out_path = os.path.join(DATA_DIR, 'M25_sparse_pulse_connected_results.pkl')
     with open(out_path, 'wb') as f:
         pickle.dump({'results': results, 'networks': networks,
                     'R_star_values': R_star_values, 'kinetics_values': kinetics_values,

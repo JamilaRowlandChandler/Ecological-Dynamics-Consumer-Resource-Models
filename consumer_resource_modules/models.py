@@ -9,6 +9,7 @@ import numpy as np
 import numpy.typing as npt
 from typing import Literal, Union, TypedDict
 from scipy.integrate import solve_ivp
+from scipy import sparse
 
 from parameters import ParametersInterface
 from differential_equations import DifferentialEquationsInterface, unbounded_growth #, ReloadedODEs
@@ -22,7 +23,8 @@ def Consumer_Resource_Model(model : Literal["Self-limiting resource supply",
                                             "Self-limiting resource supply, multi-trophic level"
                                             "Externally-supplied resources",
                                             "Hybrid resource supply",
-                                            "Metabolic pathways"],
+                                            "Metabolic pathways",
+                                            "Metabolic pathways, lagged"],
                             pool_sizes : Union[list[int], tuple[int], dict[str, int],
                                                npt.NDArray] = None):
 
@@ -41,6 +43,13 @@ def Consumer_Resource_Model(model : Literal["Self-limiting resource supply",
             (constant influx + dilution)
             "Metabolic pathways" - consumer-resource dynamics with a structured
             metabolic network determining consumer growth and resource byproducts
+            "Metabolic pathways, lagged" - same as "Metabolic pathways", but
+            growth and production respond to a first-order-relaxation-lagged
+            ("linear chain trick", n=1) version of the per-edge flux instead
+            of its instantaneous value - see MP_CRM_Lagged's docstring.
+            Currently only implemented for saturation_kinetics='reversible'.
+            Requires calling set_lag(tau_growth, tau_production) after
+            metabolic_network() and before simulate_community().
     pool_sizes : list, tuple, dict, or np.ndarray
         Size of each pool. If given as a list/tuple/array, the 1st entry is
         the resource pool size, the 2nd entry is the species pool size (and,
@@ -89,6 +98,10 @@ def Consumer_Resource_Model(model : Literal["Self-limiting resource supply",
         case "Metabolic pathways":
 
             instance = MP_CRM(pool_sizes)
+
+        case "Metabolic pathways, lagged":
+
+            instance = MP_CRM_Lagged(pool_sizes)
 
         case _:
 
@@ -2020,7 +2033,7 @@ class MP_CRM(ParametersInterface,
                              t_eval = np.linspace(0, t_end, 200),
                              events = unbounded_growth)
 
-        else:
+        elif self.saturation_kinetics == 'reversible':
 
             # reversible (Haldane-style) saturating-flux growth mode
             # ('reversible'): like the other growth_saturation=True modes,
@@ -2180,4 +2193,454 @@ class MP_CRM(ParametersInterface,
                              rtol = 1e-7, atol = 1e-9,
                              t_eval = np.linspace(0, t_end, 200),
                              events = unbounded_growth)
+
+        elif self.saturation_kinetics == 'boltzmann':
+
+            # Boltzmann-weighted linear flux growth mode ('boltzmann'): per
+            # edge alpha -> beta, f = E_alpha*R_alpha - E_beta*R_beta, where
+            # E_gamma = exp(w_gamma/K_m) is a per-resource Boltzmann-style
+            # weight (structural, precomputed - K_m plays the role of a
+            # thermal/temperature scale here, NOT a Michaelis-Menten
+            # half-saturation constant as in 'flux'/'reversible', and must
+            # NOT be set small - see metabolic_network()'s K_m docstring).
+            # Unlike 'flux'/'reversible', this flux is LINEAR (unbounded) in
+            # R_alpha, R_beta, not a saturating ratio - there is no
+            # denominator to bound it. Growth uses g_{i,alpha}*f directly
+            # (like 'reversible', f already encodes the full energy
+            # weighting, so no separate (w_alpha-w_beta) factor is added on
+            # top), so growth, consumption, and production all share the
+            # same per-edge aggregate quantity (flux_sum below).
+            #
+            # Because f is linear in R, its partial derivatives Fx = df/dR_alpha
+            # = E_alpha and Fy = df/dR_beta = -E_beta are themselves
+            # state-independent constants - precomputed once here (along with
+            # everything downstream of them that doesn't depend on R) rather
+            # than recomputed on every model()/jacobian() call, unlike the
+            # 'flux'/'reversible' variants where Fx/Fy depend on R.
+            Q = self.q
+            out_degree = self.out_degree
+            G, P = self.growth, self.p
+            Ct = C.T
+            K_m = self.K_m
+
+            E = np.exp(self.w / K_m)
+
+            Fx = np.broadcast_to(E[:, np.newaxis], (M, M))
+            Fy = -np.broadcast_to(E[np.newaxis, :], (M, M))
+            QFx = Q * Fx[np.newaxis, :, :]
+            QFy = Q * Fy[np.newaxis, :, :]
+            flux_sum_dFx = np.sum(QFx, axis=2) / out_degree
+            flux_sum_dFy = QFy / out_degree[:, :, np.newaxis]
+            flux_sum_dFy_contracted = \
+                np.matmul(G[:, np.newaxis, :], flux_sum_dFy)[:, 0, :]
+
+            weight = Ct / out_degree
+            production_flux_dFy = np.matmul(weight[:, np.newaxis, :], QFy)[:, 0, :]
+            production_flux_dFx_tensor = weight[:, np.newaxis, :] * QFx.transpose(0, 2, 1)
+
+            def model(t, y):
+
+                '''
+
+                ODE for the metabolic pathway CRM with a Boltzmann-weighted
+                linear (non-saturating) flux depending only on R_alpha, R_beta.
+
+                '''
+
+                resources, species = y[:M], y[M:]
+
+                f = E[:, np.newaxis]*resources[:, np.newaxis] - \
+                    E[np.newaxis, :]*resources[np.newaxis, :]
+                QF = Q * f[np.newaxis, :, :]
+
+                # flux_sum is used for BOTH growth (metabolic gain) and
+                # consumption, since growth has no extra energy weighting here
+                flux_sum = np.sum(QF, axis=2) / out_degree
+
+                dNdt = species * (np.sum(G * flux_sum, axis=1) - D)
+
+                consumed = np.sum(species[:, np.newaxis] * Ct * flux_sum, axis=0)
+
+                production_flux = np.matmul(weight[:, np.newaxis, :], QF)[:, 0, :]
+                produced = np.sum(species[:, np.newaxis] * P * production_flux, axis=0)
+
+                dRdt = (O + B*resources - A*resources**2) - consumed + produced
+
+                return np.concatenate((dRdt, dNdt)) + 1e-8
+
+            def jacobian(t, y):
+
+                '''
+
+                Analytic Jacobian for the 'boltzmann' linear-flux variant.
+
+                f_{alpha,beta} = E_alpha*R_alpha - E_beta*R_beta is linear in
+                R, so Fx = E_alpha, Fy = -E_beta are constants (precomputed
+                above, along with flux_sum_dFx/flux_sum_dFy/etc., none of
+                which depend on the current state) - otherwise this follows
+                the exact same "diagonal + dense" aggregation as the
+                'reversible' Jacobian, since growth and consumption again
+                share flux_sum directly.
+
+                '''
+
+                resources, species = y[:M], y[M:]
+
+                f = E[:, np.newaxis]*resources[:, np.newaxis] - \
+                    E[np.newaxis, :]*resources[np.newaxis, :]
+                QF = Q * f[np.newaxis, :, :]
+                flux_sum = np.sum(QF, axis=2) / out_degree
+
+                # --- d(dNdt)/d(species), d(dNdt)/d(resources) ---
+
+                dNdN_diag = np.sum(G * flux_sum, axis=1) - D
+
+                dNdR = species[:, np.newaxis] * \
+                    (G * flux_sum_dFx + flux_sum_dFy_contracted)
+
+                # --- d(dRdt)/d(resources), d(dRdt)/d(species) ---
+
+                production_flux = np.matmul(weight[:, np.newaxis, :], QF)[:, 0, :]
+
+                consumed_dFx = np.sum(species[:, np.newaxis] * Ct * flux_sum_dFx, axis=0)
+                W1 = species[:, np.newaxis] * Ct
+                consumed_dense = np.matmul(W1.T[:, np.newaxis, :],
+                                           flux_sum_dFy.transpose(1, 0, 2))[:, 0, :]
+
+                produced_dFy_diag = np.sum(species[:, np.newaxis] * P * production_flux_dFy,
+                                           axis=0)
+                W2 = species[:, np.newaxis] * P
+                produced_dense = np.matmul(W2.T[:, np.newaxis, :],
+                                           production_flux_dFx_tensor.transpose(1, 0, 2))[:, 0, :]
+
+                dRdR_diag = B - 2*A*resources - consumed_dFx + produced_dFy_diag
+                dRdR = np.diag(dRdR_diag) - consumed_dense + produced_dense
+
+                dRdN_consumption = -(Ct*flux_sum).T
+                dRdN_production = (P*production_flux).T
+                dRdN = dRdN_consumption + dRdN_production
+
+                J = np.zeros((M + self.no_species, M + self.no_species))
+                J[:M, :M] = dRdR
+                J[:M, M:] = dRdN
+                J[M:, :M] = dNdR
+                J[M:, M:] = np.diag(dNdN_diag)
+
+                return J
+
+            return solve_ivp(model, [0, t_end], initial_abundance,
+                             method = 'LSODA', jac = jacobian,
+                             rtol = 1e-7, atol = 1e-9,
+                             t_eval = np.linspace(0, t_end, 200),
+                             events = unbounded_growth)
+
+        else:
+
+            raise ValueError(
+                f"Unrecognized saturation_kinetics: {self.saturation_kinetics!r}. "
+                "Expected one of 'flux', 'thermodynamic', 'reversible', 'boltzmann'.")
+
+# %%
+
+class MP_CRM_Lagged(MP_CRM):
+
+    '''
+
+    Metabolic pathway CRM (see MP_CRM) with a delay on growth and
+    production, implemented as two finite, mass-conserving intermediate
+    POOLS rather than a lagged copy of the flux RATE (see this class's
+    revision history below for why the rate-lag version was abandoned).
+    CONSUMPTION IS NOT LAGGED. Currently only implemented for
+    saturation_kinetics = 'reversible' (raises NotImplementedError for any
+    other choice).
+
+    A growth pool G_pool_i (one per species) and a production pool
+    P_pool_a (one per resource) sit between the instantaneous metabolic
+    flux and the actual change in N/R:
+
+        dG_pool_i/dt = N_i * sum_a g_{i,a}*G_flux_{i,a}(R) - G_pool_i/tau_growth
+        dN_i/dt      = G_pool_i/tau_growth - d_i*N_i
+
+        dP_pool_a/dt = sum_i N_i*p_{i,a}*P_flux_{i,a}(R) - P_pool_a/tau_production
+        produced_a   = P_pool_a/tau_production   (added to dR_a/dt, replacing
+                                                   the unlagged MP_CRM term)
+
+    where G_flux_{i,a}(R) = sum_b q_{i,a,b}*f_i(a,b)/out_degree_{i,a} and
+    P_flux_{i,a}(R) = sum_b c_{i,b}*q_{i,b,a}*f_i(b,a)/out_degree_{i,b} are
+    the same instantaneous per-edge-aggregated fluxes MP_CRM's 'reversible'
+    branch uses directly - consumed_a (the resource-depletion term) still
+    uses G_flux_{i,a}(R) directly, unchanged from MP_CRM; only growth and
+    production route through their pool first.
+
+    WHY THE POOL FORMULATION, NOT A LAGGED RATE: an earlier version of this
+    class lagged the flux RATE itself (dY/dt = (G_flux-Y)/tau, growth using
+    Y in place of G_flux directly - the "obvious" n=1 linear-chain-trick
+    reading). That version is UNSTABLE for any tau large enough to produce
+    a visible delay: growth is multiplicative in N_i, and Y is a smoothed
+    RATE with no finite capacity - it doesn't "run out" as resources
+    deplete, it just decays slowly. So when R crashes, the (unlagged)
+    consumption term correctly collapses toward zero, but Y stays elevated
+    for another ~tau time units, and growth keeps compounding N against
+    that stale, still-positive rate the whole time - nothing physically
+    bounds this, and R gets driven negative / N diverges (confirmed
+    directly: stable for tau<=0.5, integration failure for tau>=1.0, at
+    this class's usual M=25/S=50/d=0.5 test parameters). The pool
+    formulation fixes this by making the delay a genuinely FINITE,
+    depletable quantity: G_pool_i is filled by the actual current
+    assimilation rate and drains at a fixed rate into realized growth, so
+    if the inflow stops, the pool itself decays and growth tapers off
+    naturally - the same structural fix used in maturation-delay /ally
+    stage-structured population models (e.g. Nicholson's blowflies-type
+    juvenile-to-adult pipelines), which are known to support genuine delay-
+    induced OSCILLATIONS at large tau without this kind of unbounded blow-up.
+
+    State vector: [R (no_resources), N (no_species), G_pool (no_species),
+    P_pool (no_resources)] - size 2*no_resources + 2*no_species, MUCH
+    smaller than the abandoned rate-lag version's no_resources+no_species+
+    2*no_species*no_resources (e.g. 150 vs. 2575 at M=25, S=50), since each
+    pool is a single aggregate scalar per species/resource rather than a
+    per-(species,resource-pair) quantity - dense Jacobian and LSODA are
+    fine again at this size, no sparse/BDF machinery needed. G_pool and
+    P_pool both start at 0 (same rationale as before - "no assimilation/
+    production has had time to start yet" at t=0), so dN_i/dt(0) =
+    -d_i*N_i (pure death) until G_pool ramps up, and no byproducts appear
+    until P_pool does. simulation() appends these 2*no_species+2*no_resources
+    minus (no_resources+no_species) = no_species+no_resources zeros itself,
+    so generate_initial_conditions()/simulate_community() need no changes.
+
+    '''
+
+    def set_lag(self, tau_growth : float, tau_production : Union[float, None] = None):
+
+        '''
+
+        Set the growth/production pool residence times. Must be called
+        after metabolic_network() (with saturation_kinetics='reversible')
+        and before simulate_community().
+
+        Parameters
+        ----------
+        tau_growth : float
+            Residence time of the growth pool (G_pool) - how long, on
+            average, newly-assimilated growth potential sits in the pool
+            before becoming realised population growth. Small tau_growth
+            recovers MP_CRM's unlagged 'reversible' behaviour almost
+            immediately; large tau_growth introduces a genuine delay (and,
+            per this class's docstring, can produce delay-induced
+            oscillations rather than smooth convergence).
+        tau_production : float or None
+            Residence time of the production pool (P_pool). If None
+            (default), set equal to tau_growth.
+
+        Returns
+        -------
+        None.
+
+        '''
+
+        if getattr(self, 'saturation_kinetics', None) != 'reversible':
+
+            raise NotImplementedError(
+                "MP_CRM_Lagged currently only implements the growth/production "
+                f"lag for saturation_kinetics='reversible' (got "
+                f"{getattr(self, 'saturation_kinetics', None)!r}). Call "
+                "metabolic_network(saturation_kinetics='reversible', ...) first.")
+
+        self.tau_growth = tau_growth
+        self.tau_production = tau_production if tau_production is not None else tau_growth
+
+    def simulation(self,
+                   t_end : float,
+                   initial_abundance : npt.NDArray):
+
+        '''
+
+        Simulate community dynamics with growth/production routed through
+        finite pools (see this class's docstring). Requires set_lag() to
+        have been called first.
+
+        Parameters
+        ----------
+        t_end : float
+            Simulation end time.
+        initial_abundance : np.ndarray
+            Initial resource and species abundances (length no_resources +
+            no_species, exactly as generate_initial_conditions() produces -
+            the extra pool state is appended internally, both starting at 0).
+
+        Returns
+        -------
+        Bunch object produced by scipy.integrate.solve_ivp
+            Simulation.
+
+        '''
+
+        if not hasattr(self, 'tau_growth'):
+
+            raise Exception('MP_CRM_Lagged.simulation() requires set_lag() '
+                            'to be called first.')
+
+        M = self.no_resources
+        S = self.no_species
+        C = self.consumption
+        D, O, B, A = self.d, self.o, self.b, self.A
+
+        unbounded_growth.terminal = True
+
+        Q = self.q
+        E = np.exp(-self.energy_differences)
+        out_degree = self.out_degree
+        G, P = self.growth, self.p
+        Ct = C.T
+        K_m = self.K_m_tensor
+        V_max = self.v_max_tensor
+        tau_growth, tau_production = self.tau_growth, self.tau_production
+
+        full_initial = np.concatenate((initial_abundance, np.zeros(S + M)))
+
+        def model(t, y):
+
+            '''
+
+            ODE for the metabolic pathway CRM with growth/production routed
+            through finite pools (consumption stays unlagged, direct).
+
+            '''
+
+            R = y[:M]
+            N = y[M:M + S]
+            G_pool = y[M + S:M + 2 * S]
+            P_pool = y[M + 2 * S:]
+
+            num = R[:, np.newaxis] - R[np.newaxis, :] * E
+            R_pairsum = R[:, np.newaxis] + R[np.newaxis, :]
+            den = K_m + R_pairsum[np.newaxis, :, :]
+            f = V_max * num[np.newaxis, :, :] / den
+
+            QF = Q * f
+
+            flux_sum = np.sum(QF, axis=2) / out_degree
+
+            weight = Ct / out_degree
+            production_flux = np.matmul(weight[:, np.newaxis, :], QF)[:, 0, :]
+
+            Ggain = np.sum(G * flux_sum, axis=1)
+            Pgain = np.sum(N[:, np.newaxis] * P * production_flux, axis=0)
+
+            dGpooldt = N * Ggain - G_pool / tau_growth
+            dNdt = G_pool / tau_growth - D * N
+            dPpooldt = Pgain - P_pool / tau_production
+
+            consumed = np.sum(N[:, np.newaxis] * Ct * flux_sum, axis=0)
+            dRdt = (O + B * R - A * R**2) - consumed + P_pool / tau_production
+
+            return np.concatenate((dRdt, dNdt, dGpooldt, dPpooldt)) + 1e-8
+
+        def jacobian(t, y):
+
+            '''
+
+            Analytic Jacobian for the pool-lagged 'reversible' variant.
+
+            Reuses exactly the same Fx/Fy (df/dR_alpha, df/dR_beta) pieces
+            as MP_CRM's 'reversible' Jacobian - growth/production no longer
+            depend on R directly (only through G_pool/P_pool), which
+            simplifies those blocks to zero; the R-dependence instead shows
+            up in the new dG_pool/dR, dP_pool/dR blocks.
+
+            State order: [R, N, G_pool, P_pool].
+
+            '''
+
+            R = y[:M]
+            N = y[M:M + S]
+
+            num = R[:, np.newaxis] - R[np.newaxis, :] * E
+            R_pairsum = R[:, np.newaxis] + R[np.newaxis, :]
+            den = K_m + R_pairsum[np.newaxis, :, :]
+            num_b = num[np.newaxis, :, :]
+            f = V_max * num_b / den
+            Fx = V_max * (den - num_b) / den**2
+            Fy = -V_max * (E[np.newaxis, :, :] * den + num_b) / den**2
+
+            QF = Q * f
+            QFx = Q * Fx
+            QFy = Q * Fy
+
+            flux_sum = np.sum(QF, axis=2) / out_degree
+            flux_sum_dFx = np.sum(QFx, axis=2) / out_degree
+            flux_sum_dFy = QFy / out_degree[:, :, np.newaxis]
+
+            weight = Ct / out_degree
+            production_flux = np.matmul(weight[:, np.newaxis, :], QF)[:, 0, :]
+            production_flux_dFy = np.matmul(weight[:, np.newaxis, :], QFy)[:, 0, :]
+            production_flux_dFx_tensor = weight[:, np.newaxis, :] * QFx.transpose(0, 2, 1)
+
+            Ggain = np.sum(G * flux_sum, axis=1)
+
+            # d(flux_sum_{i,alpha})/dR_gamma, shape (S, M, M)
+            dFluxSum_dR = flux_sum_dFy.copy()
+            dFluxSum_dR[:, np.arange(M), np.arange(M)] += flux_sum_dFx
+
+            # d(production_flux_{i,beta})/dR_gamma, shape (S, M, M)
+            dProdFlux_dR = production_flux_dFx_tensor.copy()
+            dProdFlux_dR[:, np.arange(M), np.arange(M)] += production_flux_dFy
+
+            # d(Ggain_i)/dR_gamma = sum_a G_{i,a}*dFluxSum_dR[i,a,gamma] -> (S,M)
+            Ggain_dR = np.matmul(G[:, np.newaxis, :], dFluxSum_dR)[:, 0, :]
+
+            # d(Pgain_a)/dR_gamma = sum_i N_i*P_{i,a}*dProdFlux_dR[i,a,gamma] -> (M,M)
+            weight_NP = N[:, np.newaxis] * P
+            Pgain_dR = np.einsum('ia,iag->ag', weight_NP, dProdFlux_dR)
+
+            n = 2 * M + 2 * S
+            J = np.zeros((n, n))
+
+            R_sl = slice(0, M)
+            N_sl = slice(M, M + S)
+            Gp_sl = slice(M + S, M + 2 * S)
+            Pp_sl = slice(M + 2 * S, 2 * M + 2 * S)
+
+            # --- dR/dR: only the (unlagged) consumption term depends on R directly ---
+            weight_NC = N[:, np.newaxis] * Ct
+            consumed_dR = np.einsum('ia,iag->ag', weight_NC, dFluxSum_dR)
+            J[R_sl, R_sl] = np.diag(B - 2 * A * R) - consumed_dR
+
+            # --- dR/dN: consumption only (production now flows via P_pool) ---
+            J[R_sl, N_sl] = -(Ct * flux_sum).T
+
+            # --- dR/dP_pool: produced_a = P_pool_a/tau_production ---
+            J[R_sl, Pp_sl] = np.eye(M) / tau_production
+
+            # --- dN/dG_pool: dN_i/dt = G_pool_i/tau_growth - d_i*N_i ---
+            J[N_sl, Gp_sl] = np.eye(S) / tau_growth
+
+            # --- dN/dN ---
+            J[N_sl, N_sl] = np.diag(-D)
+
+            # --- dG_pool/dR ---
+            J[Gp_sl, R_sl] = N[:, np.newaxis] * Ggain_dR
+
+            # --- dG_pool/dN: dG_pool_i/dt = N_i*Ggain_i - G_pool_i/tau_growth ---
+            J[Gp_sl, N_sl] = np.diag(Ggain)
+
+            # --- dG_pool/dG_pool ---
+            J[Gp_sl, Gp_sl] = -np.eye(S) / tau_growth
+
+            # --- dP_pool/dR ---
+            J[Pp_sl, R_sl] = Pgain_dR
+
+            # --- dP_pool/dN: dP_pool_a/dt = sum_i N_i*P_{i,a}*P_flux_{i,a} - ... ---
+            J[Pp_sl, N_sl] = (P * production_flux).T
+
+            # --- dP_pool/dP_pool ---
+            J[Pp_sl, Pp_sl] = -np.eye(M) / tau_production
+
+            return J
+
+        return solve_ivp(model, [0, t_end], full_initial,
+                         method = 'LSODA', jac = jacobian,
+                         rtol = 1e-7, atol = 1e-9,
+                         t_eval = np.linspace(0, t_end, 200),
+                         events = unbounded_growth)
 
