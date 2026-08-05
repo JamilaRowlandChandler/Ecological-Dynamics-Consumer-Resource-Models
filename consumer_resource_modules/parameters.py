@@ -8,6 +8,7 @@ Created on Thu Sep 12 18:10:06 2024
 # %%
 import numpy as np
 import numpy.typing as npt
+from scipy import stats
 from typing import Literal, Union
 
 # %%
@@ -28,7 +29,8 @@ class ParametersInterface:
                                  rho : Union[float, None] = None,
                                  user_consumption : Union[npt.NDArray, None] = None,
                                  user_growth : Union[npt.NDArray, None] = None,
-                                 trophic_level : Union[int, None] = None):
+                                 trophic_level : Union[int, None] = None,
+                                 all_positive : bool = False):
         
         '''
         
@@ -84,7 +86,8 @@ class ParametersInterface:
                     consumption, growth = self.__gc_rho_coupled(X_c, X_g,
                                                                 mu_c, sigma_c,
                                                                 mu_g, sigma_g,
-                                                                rho)
+                                                                rho,
+                                                                all_positive)
                 
                 else:
                     
@@ -161,11 +164,28 @@ class ParametersInterface:
         return X_c, X_g
     
     def __gc_rho_coupled(self, X_c, X_g,
-                         mu_c, sigma_c, mu_g, sigma_g, rho):
-        
-        consumption = mu_c + sigma_c*X_c
-        growth = mu_g + sigma_g*(rho*X_c.T + np.sqrt(1 - rho**2)*X_g)
-        
+                         mu_c, sigma_c, mu_g, sigma_g, rho,
+                         all_positive : bool = False):
+
+        if all_positive is False:
+
+            consumption = mu_c + sigma_c*X_c
+            growth = mu_g + sigma_g*(rho*X_c.T + np.sqrt(1 - rho**2)*X_g)
+
+        else:
+
+            Z_c = X_c
+            Z_g = rho*X_c.T + np.sqrt(1 - rho**2)*X_g
+
+            U_c = stats.norm.cdf(Z_c)
+            U_g = stats.norm.cdf(Z_g)
+
+            shape_c, scale_c = mu_c**2/sigma_c**2, sigma_c**2/mu_c
+            shape_g, scale_g = mu_g**2/sigma_g**2, sigma_g**2/mu_g
+
+            consumption = stats.gamma.ppf(U_c, a=shape_c, scale=scale_c)
+            growth = stats.gamma.ppf(U_g, a=shape_g, scale=scale_g)
+
         return consumption, growth
     
     def __gc_rue_coupled(self, X_base, X_rue,
