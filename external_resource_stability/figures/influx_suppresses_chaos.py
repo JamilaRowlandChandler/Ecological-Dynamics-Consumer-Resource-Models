@@ -154,14 +154,17 @@ def influx_figure(stability_sli,
                      marker="o",
                      markersize=5,
                      ax=ax)
-
+        
         ax.set_xlabel('')
         ax.set_ylabel('')
         ax.tick_params(axis='both', which='major', labelsize=8)
         ax.tick_params(axis='both', which='minor', labelsize=8)
-        ax.set(yscale='log', xscale='log')
+        ax.set(xscale='log', yscale='log')
+        #ax.set_ylim([10**(-10), np.ceil(np.nanmax(df['max peak']) + 150)])
+        ax.set_ylim([10**(-3), np.ceil(np.nanmax(df['max peak']))])
         
-    def example_sensitivities_plot(example_sensitivity, 
+    def example_sensitivities_plot(df,
+                                   example_sensitivity, 
                                    ax):
         
         sns.lineplot(x = example_sensitivity['x'],
@@ -182,7 +185,13 @@ def influx_figure(stability_sli,
                       rotation = 0)
         ax.tick_params(axis='y', which='major', labelsize=8)
         ax.tick_params(axis='y', which='minor', labelsize=8)
-        ax.set_ylim([-100, np.ceil(np.max(example_sensitivity['dRdx2']) + 150)])
+        
+        ax.ticklabel_format(axis='y', style='scientific', scilimits=(0,0))
+        
+        #ax.set(yscale='log')
+        #ax.sharey(axs['S'])
+        ax.set_xlim([0.88, 1.1])
+        #ax.set_ylim([10**(-5), np.ceil(np.nanmax(df['max peak']))])
         
     mosaic = [["P_ll", "P_lh", "P_lh", "P_hl", "P_hl", "P_hh", "P_hh"],
               #[".", ".", ".", ".", ".", ".", "."],
@@ -215,7 +224,8 @@ def influx_figure(stability_sli,
     sensitivities_plot(example_sensitivities_df,
                        axs["S"])
     
-    example_sensitivities_plot(example_sensitivity,
+    example_sensitivities_plot(example_sensitivities_df,
+                               example_sensitivity,
                                axs["Temp"])
     
     plt.savefig("C:/Users/jamil/Documents/PhD/Figures/externally_supplied_resources/simulations_influx.png",
@@ -288,8 +298,10 @@ example_sensitivities = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/extern
 example_df = pd.DataFrame([{key : sensitivities_dict[key] 
                             for key in ['b', 'rho', 'max peak', 'max. le']}
                            for sensitivities_dict in example_sensitivities])
-example_df['max peak'] += 1e-8
-example_df.dropna(inplace=True)
+#example_df['max peak'] += np.nanmin(np.concatenate([es['dRdx2']
+#                                                    for es in example_sensitivities]))
+
+example_df.loc[example_df['max peak'] == 0, 'max peak']  = 0.01
 
 # %%
 
@@ -300,13 +312,13 @@ influx_figure(stability_sli,
               stability_ir,
               feasibility_ir,
               example_df,
-              example_sensitivities[15])
+              example_sensitivities[19])
 
 # %%
 
 for i, es in enumerate(example_sensitivities):
     
-    if np.max(es['dRdx2']) > 10**3:
+    if np.nanmax(es['dRdx2']) > 10**5.5:
         
         print(i)
         
