@@ -262,18 +262,47 @@ class SL_CRM(ParametersInterface,
                 (resources * np.sum(C * species, axis=1))
                 
             return np.concatenate((dNdt, dRdt)) + 1e-8
-        
+
+        def jacobian(t, y,
+                    S, G, C, D, B):
+
+            '''
+
+            Analytical Jacobian for the CRM with self-limiting resource supply.
+
+            J[:S, :S]  = diag(G.R - D)
+            J[:S, S:]  = G * N        (d(dN/dt)/dR)
+            J[S:, :S]  = -C * R       (d(dR/dt)/dN)
+            J[S:, S:]  = diag(B - 2R - C.N)
+
+            '''
+
+            species, resources = y[:S], y[S:]
+
+            growth_term = np.sum(G * resources, axis = 1) - D
+            consumption_term = np.sum(C * species, axis = 1)
+
+            J = np.zeros((y.size, y.size))
+
+            J[:S, :S] = np.diag(growth_term)
+            J[:S, S:] = G * species[:, np.newaxis]
+            J[S:, :S] = -C * resources[:, np.newaxis]
+            J[S:, S:] = np.diag(B - 2*resources - consumption_term)
+
+            return J
+
         unbounded_growth.terminal = True
-        
+
         # call the ODE solver with the unbounded growth event function
-        # the ode solver stops when the event function is true (returns 0)           
-        return solve_ivp(model, [0, t_end], initial_abundance, 
-                         args = (self.no_species, self.growth, self.consumption, 
+        # the ode solver stops when the event function is true (returns 0)
+        return solve_ivp(model, [0, t_end], initial_abundance,
+                         args = (self.no_species, self.growth, self.consumption,
                                  self.d, self.b),
                          method = 'LSODA', rtol = 1e-7, atol = 1e-9,
                          t_eval = np.linspace(0, t_end, 200),
+                         jac = jacobian,
                          events = unbounded_growth)
-    
+
 # %%
 
 class SL_CRPM(ParametersInterface,
@@ -1059,19 +1088,49 @@ class ES_CRM(ParametersInterface, DifferentialEquationsInterface,
                 (resources * np.sum(C * species, axis=1))
                 
             return np.concatenate((dNdt, dRdt)) + 1e-8
-        
+
+        def jacobian(t, y,
+                    S, G, C, D, B, O):
+
+            '''
+
+            Analytical Jacobian for the CRM with externally-supplied resources.
+
+            J[:S, :S]  = diag(G.R - D)
+            J[:S, S:]  = G * N        (d(dN/dt)/dR)
+            J[S:, :S]  = -C * R       (d(dR/dt)/dN)
+            J[S:, S:]  = diag(-O - C.N)
+
+            '''
+
+            species, resources = y[:S], y[S:]
+
+            growth_term = np.sum(G * resources, axis = 1) - D
+            consumption_term = np.sum(C * species, axis = 1)
+
+            J = np.zeros((y.size, y.size))
+
+            J[:S, :S] = np.diag(growth_term)
+            J[:S, S:] = G * species[:, np.newaxis]
+            J[S:, :S] = -C * resources[:, np.newaxis]
+            J[S:, S:] = np.diag(-O - consumption_term)
+
+            return J
+
         unbounded_growth.terminal = True
-        
+
         # call the ODE solver with the unbounded growth event function
-        # the ode solver stops when the event function is true (returns 0)           
-        return solve_ivp(model, [0, t_end], initial_abundance, 
-                         args = (self.no_species, self.growth, self.consumption, 
+        # the ode solver stops when the event function is true (returns 0)
+        return solve_ivp(model, [0, t_end], initial_abundance,
+                         args = (self.no_species, self.growth, self.consumption,
                                  self.d, self.b, self.o),
                          method = 'LSODA', rtol = 1e-7, atol = 1e-9,
-                         t_eval = np.linspace(0, t_end, 200), events = unbounded_growth)
-    
+                         t_eval = np.linspace(0, t_end, 200),
+                         jac = jacobian,
+                         events = unbounded_growth)
+
 # %%
-    
+
 class Hybrid_CRM(ParametersInterface, DifferentialEquationsInterface,
                  CommunityPropertiesInterface):
     
