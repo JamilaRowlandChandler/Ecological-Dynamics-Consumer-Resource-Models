@@ -215,13 +215,15 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
     def growth_consumption_rates(parameter_sets, model):
         
         def rho_coupled(parameter_sets):
-            
+
             return [dict(method = 'coupled by rho',
                          mu_c = parm_set['mu_c'],
                          sigma_c = parm_set['sigma_c'],
                          mu_g = parm_set['mu_g'],
                          sigma_g = parm_set['sigma_g'],
-                         rho = parm_set['rho']) 
+                         rho = parm_set['rho'],
+                         **({'all_positive' : parm_set['all_positive']}
+                            if 'all_positive' in parm_set else {}))
                     for parm_set in parameter_sets]
         
         def rue_coupled(parameter_sets):
