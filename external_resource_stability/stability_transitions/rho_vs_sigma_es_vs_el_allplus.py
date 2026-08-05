@@ -99,6 +99,8 @@ rho_sigma("Externally-supplied resources",
           t_end = 1000,
           no_init_conds = 1)
 
+# %%
+
 rho_sigma("Self-limiting resource supply",
           rhos,
           sigmas,
