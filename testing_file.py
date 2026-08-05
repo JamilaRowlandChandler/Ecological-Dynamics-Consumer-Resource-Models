@@ -15,9 +15,86 @@ from models import Consumer_Resource_Model
 from community_level_properties import max_le
 
 sys.path.insert(0, 'C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/resource_diversity_stability(sl)')
-from simulation_functions import simulation_df_from_communities
+#from simulation_functions import simulation_df_from_communities
 from matplotlib import pyplot as plt
 import numpy as np
+
+# %%
+
+M = 150
+mu = 50
+sigma = 50
+d = 1
+b = 1
+#rho = 0.001
+rhos = [1.0, 0.8, 0.6, 0.4, 0.2, 0.001] #[1.0, 0.9, 0.8, 0.7, 0.6]#[1.0, 0.8, 0.6, 0.4, 0.2, 0.001]
+cvs = []
+stability = []
+
+for rho in rhos:
+    
+    rho = 0.89
+
+    community = Consumer_Resource_Model("Self-limiting resource supply",
+                                        M,
+                                        M)
+    
+    community.growth_consumption_rates('coupled by rho',
+                                       mu_c = mu/M,
+                                       sigma_c = sigma/np.sqrt(M),
+                                       mu_g = mu/M,
+                                       sigma_g = sigma/np.sqrt(M) + 0.01,
+                                       rho = rho)
+    community.model_specific_rates(death_method = "constant",
+                                   death_args = {'d' : d},
+                                   resource_growth_method = "constant",
+                                   resource_growth_args = {'b' : b})
+    
+    #print(len(np.where((community.consumption.flatten() < 0) & \
+    #                   (community.growth.T.flatten() > 0))[0]))
+    
+    #community.consumption = np.abs(community.consumption)
+    #community.growth = np.abs(community.growth)
+        
+    simulation_rawparam = community.simulate_community(4000, 1, assign=False)[0]
+    
+    plt.plot(simulation_rawparam.t,
+             simulation_rawparam.y[:M, :].T)
+    plt.show()
+    
+    #community.calculate_community_properties() 
+    
+    community.lyapunov_exponent = max_le(community,
+                                         simulation_rawparam.y[:, -1],
+                                         T = 1000,
+                                         perturbation = 1e-6)
+    stability.append(community.lyapunov_exponent)
+    
+    
+    #community.consumption = np.abs(community.consumption)
+    #community.growth = np.abs(community.growth)
+    
+    #simulation_absparam = community.simulate_community(4000, 1, assign=False)[0]
+    
+    #fig, (ax1, ax2) = plt.subplots(1, 2, sharex = True)
+           
+    #ax1.plot(simulation_rawparam.t,
+    #         simulation_rawparam.y[:M, :].T)
+    #ax2.plot(simulation_absparam.t,
+    #         simulation_absparam.y[:M, :].T)
+    #plt.show()s
+    
+    end_survivors = np.apply_along_axis(lambda x : np.any(x > 1e-4),
+                                        1,
+                                        simulation_rawparam.y[:, -50:]) 
+    
+    survivor_y = simulation_rawparam.y[end_survivors, -50:]
+    
+    cvs.append(np.mean(np.std(survivor_y)/ np.mean(survivor_y)))
+    
+print(np.array(cvs),
+      "\n",
+      np.array(stability))
 
 # %%
 

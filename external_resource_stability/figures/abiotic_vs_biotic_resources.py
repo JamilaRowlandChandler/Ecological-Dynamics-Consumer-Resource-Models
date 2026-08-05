@@ -263,7 +263,7 @@ def compare_abiotic_biotic(stability_ab,
 
 # %%
 
-simulations_abiotic, stability_abiotic  = load_clean_simulations("rho_sigma_mu50_es")
+simulations_abiotic, stability_abiotic = load_clean_simulations("rho_sigma_mu50_es")
 simulations_biotic, stability_biotic = load_clean_simulations("rho_sigma_mu50_sl")
 
 sces_abiotic = load_clean_sces("rho_sigma_newprotocol_upd4")
