@@ -454,7 +454,7 @@ class ParametersInterface:
                           gated : bool = True,
                           shared_network : bool = False,
                           growth_saturation : bool = False,
-                          saturation_kinetics : Literal['flux', 'thermodynamic', 'reversible', 'boltzmann'] = 'flux',
+                          saturation_kinetics : Literal['flux', 'reversible', 'boltzmann'] = 'flux',
                           K_m : float = 1e-8,
                           K_m_method : Literal['constant', 'normal', 'uniform', 'user-supplied'] = 'constant',
                           K_m_args : Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
@@ -469,7 +469,6 @@ class ParametersInterface:
                                              TypedDict('constant', {'v_max_tensor' : float}),
                                              TypedDict('user-supplied', {'v_max_tensor' : npt.NDArray})]
                               = {'v_max_tensor' : 1},
-                          log_eps : float = 1e-4,
                           production_method :
                               Literal['normal', 'constant', 'user-supplied']
                               = 'constant',
@@ -594,30 +593,9 @@ class ParametersInterface:
             flux formula replaces the bare R_alpha factor. Options are:
                 'flux' (default) - the R_alpha**2/(R_alpha+R_beta+K_m) flux
                 described under growth_saturation above.
-                'thermodynamic' - a reversible-Michaelis-Menten-style flux
-                that also depends on the consuming species' own abundance
-                N_i. Per edge alpha -> beta: writing the energy difference
-                Delta = w_alpha - w_beta and the log resource ratio
-                L = log(R_beta/R_alpha), the consumption/production flux is
-                R_alpha / (K_m + N_i / (1 - exp(-(Delta - L)))), and the
-                growth flux (replacing (w_alpha-w_beta)*R_alpha) is
-                (Delta + L) times that same saturating term. (Delta - L) is
-                a chemical-potential-like driving force for the alpha->beta
-                reaction (since Delta - L = (w_alpha + log R_alpha) -
-                (w_beta + log R_beta)); the 1-exp(-.) factor drives the flux
-                to zero as the reaction approaches equilibrium, and can go
-                negative (reversing the net flux) if the byproduct beta
-                has accumulated enough to overcome the energy gap. Because
-                the denominator depends on N_i / (1-exp(-.)) linearly, it can
-                cross zero at (Delta-L) = -log(1+N_i/K_m) - a genuine
-                singularity in this formula (not just a numerical
-                regularisation artefact), so this mode is more prone to
-                stiffness/blow-up than 'flux' and is worth testing carefully
-                at small scale before large sweeps.
                 'reversible' - a Haldane-style reversible saturating flux
-                that, unlike 'thermodynamic', depends only on R_alpha and
-                R_beta (not on N_i), so doesn't share that variant's
-                species-count-driven stiffness. Per edge alpha -> beta:
+                that depends only on R_alpha and R_beta (not on N_i). Per
+                edge alpha -> beta:
                 f = (R_alpha - R_beta*exp(-(w_alpha-w_beta))) /
                 (K_m + R_alpha + R_beta). The denominator is always
                 >= K_m > 0 (no poles). f -> R_alpha/(K_m+R_alpha) (forward
@@ -691,19 +669,6 @@ class ParametersInterface:
             its (w_alpha-w_beta) energy weighting, which 'reversible'
             otherwise lacks (its sign/magnitude is driven by the current
             resource state, not by any fixed per-consumer quantity).
-        log_eps : float
-            Only used if growth_saturation = True and saturation_kinetics =
-            'thermodynamic' - a floor applied to R before taking log(R) (used
-            to form L = log(R_beta/R_alpha) and its 1/R derivatives). Unlike
-            K_m, this isn't primarily a literal-zero guard (R = 0 exactly is
-            rare mid-trajectory) - its main job is capping how negative L can
-            get as a resource approaches extinction relative to others, which
-            otherwise drives Th = 1-exp(-(Delta-L)) to very large-magnitude
-            values and makes the ODE stiff. Larger log_eps (e.g. 1e-2 to
-            1e-1) smooths this at the cost of changing behaviour for
-            genuinely near-extinct resources; smaller log_eps (e.g. 1e-8) is
-            closer to "no regularisation" and more likely to reproduce the
-            stiffness seen with tiny K_m in the 'flux' variant.
         K_m : float
             Only used if growth_saturation = True - a Michaelis-Menten-style
             half-saturation constant added to the denominator of the
@@ -930,11 +895,10 @@ class ParametersInterface:
         self.growth_saturation = growth_saturation
         self.saturation_kinetics = saturation_kinetics
         self.K_m = K_m
-        self.log_eps = log_eps
 
         # consumer- and reaction-specific K_m/V_max, only used by
         # saturation_kinetics = 'reversible' (self.K_m above stays a scalar,
-        # unused by 'reversible', so 'flux'/'thermodynamic' are unaffected).
+        # unused by 'reversible', so 'flux' is unaffected).
         # Defaults reproduce a uniform scalar K_m (from the K_m argument
         # above) and V_max = 1 (no scaling) everywhere, matching the
         # previous behaviour when K_m_method/v_max_method are left at

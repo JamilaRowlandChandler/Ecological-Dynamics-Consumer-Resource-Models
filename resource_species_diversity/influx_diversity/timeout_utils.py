@@ -164,7 +164,7 @@ def _simulate_worker(params, queue):
         energies=w, adjacency=adjacency, network_method='step',
         resource_conversions={'p_s': params.get('p_s', 1)},
         growth_saturation=growth_saturation,
-        K_m=params['K_m'], log_eps=params.get('log_eps', 1e-4),
+        K_m=params['K_m'],
         production_method='constant', production_args={'p': params.get('p', 1)})
 
     if growth_saturation:
@@ -212,7 +212,7 @@ def _simulate_worker(params, queue):
 
 def simulate_with_timeout(M, S, mu_c, sigma_c, d, p_s, K_m, condition, o_val, seed,
                           w, adjacency, t_end=7000, timeout=60, saturation_kinetics='flux',
-                          log_eps=1e-4, b=-1, p=1, R_star=None, growth_saturation=True,
+                          b=-1, p=1, R_star=None, growth_saturation=True,
                           K_m_method=None, K_m_args=None, v_max_method=None, v_max_args=None):
 
     '''
@@ -225,7 +225,7 @@ def simulate_with_timeout(M, S, mu_c, sigma_c, d, p_s, K_m, condition, o_val, se
         pass the same arrays to every community that should share a network.
     growth_saturation : bool - if False, the original (unsaturated) MP_CRM
         model is used and saturation_kinetics is ignored.
-    saturation_kinetics : 'flux', 'thermodynamic', or 'reversible' - which
+    saturation_kinetics : 'flux', 'reversible', or 'boltzmann' - which
         growth_saturation=True variant to use (see metabolic_network()'s
         docstring). Ignored if growth_saturation=False.
     K_m_method, K_m_args, v_max_method, v_max_args : only meaningful for
@@ -253,7 +253,7 @@ def simulate_with_timeout(M, S, mu_c, sigma_c, d, p_s, K_m, condition, o_val, se
     params = dict(M=M, S=S, mu_c=mu_c, sigma_c=sigma_c, d=d, p_s=p_s, K_m=K_m,
                   condition=condition, o_val=o_val, seed=seed, t_end=t_end,
                   w=w, adjacency=adjacency, saturation_kinetics=saturation_kinetics,
-                  log_eps=log_eps, b=b, p=p, R_star=R_star,
+                  b=b, p=p, R_star=R_star,
                   growth_saturation=growth_saturation,
                   K_m_method=K_m_method, K_m_args=K_m_args,
                   v_max_method=v_max_method, v_max_args=v_max_args)
