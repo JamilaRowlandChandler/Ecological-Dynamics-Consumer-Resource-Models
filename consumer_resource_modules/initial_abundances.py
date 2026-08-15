@@ -168,9 +168,18 @@ class InitialConditionsInterface_ELV(Base_InitialConditions):
 
         '''
         
-        species_abundances = self.initial_variable_conditions(no_init_cond,
-                                                              self.no_species,
-                                                              init_cond_func,
-                                                              **kwargs)
+        if init_cond_func == "user-supplied":
+            
+            initial_abundances = self.initial_variable_conditions(no_init_cond,
+                                                                  self.no_species,
+                                                                  init_cond_func,
+                                                                  kwargs.get("initial_conditions"))
+            
+        else :
+            
+            initial_abundances = self.initial_variable_conditions(no_init_cond,
+                                                                  self.no_species,
+                                                                  init_cond_func)
         
-        return species_abundances
+        
+        return initial_abundances

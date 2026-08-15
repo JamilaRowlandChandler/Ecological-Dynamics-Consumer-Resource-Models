@@ -15,7 +15,7 @@ import numpy.typing as npt
 from scipy.integrate import solve_ivp
 from scipy.stats import pearsonr
 from typing import Union, Literal, TypedDict
-from copy import deepcopy
+from warnings import warn
 
 from models import SL_CRM, ES_CRM
 from parameters import ParametersInterface
@@ -57,8 +57,8 @@ class eLVMethods(DifferentialEquationsInterface_ELV):
         
         ### growth rates ###
         
-        self.mu_r = np.mean(self.species_growth)
-        self.sigma_r = np.std(self.species_growth)
+        self.mu_r = np.mean(self.r)
+        self.sigma_r = np.std(self.r)
         
         ### interactions ###
         
@@ -84,7 +84,52 @@ class eLVMethods(DifferentialEquationsInterface_ELV):
             
             return correlation
         
-        self.rho_A = diagonal_correlation(inter_species_interactions)
+        def row_correlation(matrix):
+            
+            S = matrix.shape[0]
+            
+            mask = ~np.eye(S, dtype=bool)
+            B = matrix[mask].reshape(S, S - 1)
+            
+            p, q = np.triu_indices(S - 1, k=1)
+            
+            correlation = pearsonr(B[:, p].ravel(), B[:, q].ravel())[0]
+            
+            return correlation
+        
+        def column_correlation(matrix):
+            
+            S = matrix.shape[0]
+            
+            mask = ~np.eye(S, dtype=bool)
+            C = matrix.T[mask].reshape(S, S - 1)
+            p, q = np.triu_indices(S - 1, k=1)
+            
+            correlation = pearsonr(C[:, p].ravel(), C[:, q].ravel())[0]
+            
+            return correlation
+            
+        def one_index_correlation(matrix):
+            
+            S = matrix.shape[0]
+            
+            mask = ~np.eye(S, dtype=bool)
+            B = matrix[mask].reshape(S, S - 1)       # B[i, :] = A[i, j] for j != i  (row entries)
+            C = matrix.T[mask].reshape(S, S - 1)
+            
+            offdiag_S1 = ~np.eye(S - 1, dtype=bool)
+            
+            cr1 = np.broadcast_to(B[:, :, None], (S, S - 1, S - 1))[:, offdiag_S1]
+            cr2 = np.broadcast_to(C[:, None, :], (S, S - 1, S - 1))[:, offdiag_S1]
+            
+            correlation = pearsonr(cr1.ravel(), cr2.ravel())[0]
+            
+            return correlation
+            
+        self.rho_D = diagonal_correlation(self.interaction_matrix)
+        self.rho_R = row_correlation(self.interaction_matrix)
+        self.rho_C = column_correlation(self.interaction_matrix)
+        self.rho_1idx = one_index_correlation(self.interaction_matrix)
          
         total_interact_per_species = np.sum(inter_species_interactions, axis = 1)
         
@@ -109,6 +154,16 @@ class eLVMethods(DifferentialEquationsInterface_ELV):
         
             return dNdt + 1e-8
         
+        def LV_jacobian(t, species, r, A):
+
+            # growth term: r_i - sum_j A_ij * N_j  (shared with LV_dynamics)
+            growth = r - np.sum(A * species, axis=1)
+    
+            # J = diag(growth) - diag(species) @ A
+            J = np.diag(growth) - species[:, None] * A
+    
+            return J
+            
         def unbounded_growth(t, var, *args):
             
             
@@ -126,10 +181,11 @@ class eLVMethods(DifferentialEquationsInterface_ELV):
         return solve_ivp(LV_dynamics,
                          [0, t_end],
                          initial_abundances, 
-                         args = (self.species_growth, self.interaction_matrix),
+                         args = (self.r, self.interaction_matrix),
                          method = 'LSODA',
                          rtol = 1e-7, atol = 1e-9,
                          t_eval = np.linspace(0, t_end, 200),
+                         jac = LV_jacobian,
                          events = unbounded_growth)
 
 # %%
@@ -162,7 +218,7 @@ class eLV_SL(eLVMethods, ParametersInterface):
                                       sigma_c = CRM_community.sigma_c,
                                       mu_g = CRM_community.mu_g, 
                                       sigma_g = CRM_community.sigma_g,
-                                      rho = CRM_community.rho,
+                                      rho = getattr(CRM_community, "rho", None),
                                       consumption = CRM_community.consumption,
                                       growth = CRM_community.growth)
         
@@ -248,18 +304,17 @@ class eLV_SL(eLVMethods, ParametersInterface):
         
             if hasattr(self, "resource_pa") is True:
                 
-                self.species_growth = np.sum((self.consumer_growth * self.resource_b * self.resource_pa),
-                                             axis = 1) - self.consumer_d
+                self.r = np.sum((self.growth * self.b * self.resource_pa),
+                                axis = 1) - self.d
                 
-                self.interaction_matrix = np.dot(self.consumer_growth,
+                self.interaction_matrix = np.dot(self.growth,
                                                  (self.consumption.T * self.resource_pa).T)
             
             else:
                 
-                self.species_growth = np.sum((self.consumer_growth * self.resource_b),
-                                             axis = 1) - self.consumer_d
+                self.r = np.sum((self.growth * self.b), axis = 1) - self.d
                 
-                self.interaction_matrix = np.dot(self.consumer_growth,
+                self.interaction_matrix = np.dot(self.growth,
                                                  (self.consumption.T).T)
                 
         else:
@@ -298,7 +353,7 @@ class eLV_ES(eLVMethods, ParametersInterface):
                                       sigma_c = CRM_community.sigma_c,
                                       mu_g = CRM_community.mu_g, 
                                       sigma_g = CRM_community.sigma_g,
-                                      rho = CRM_community.rho,
+                                      rho = getattr(CRM_community, "rho", None),
                                       consumption = CRM_community.consumption,
                                       growth = CRM_community.growth)
         
@@ -390,7 +445,7 @@ class eLV_ES(eLVMethods, ParametersInterface):
         
         if hasattr(self, "consumption") is True:
         
-            self.species_growth = \
+            self.r = \
                 np.sum((self.growth * (self.b / self.o)), axis = 1) - self.d
         
             self.interaction_matrix = \
@@ -459,68 +514,167 @@ def Effective_LV_Model(model : Literal["Self-limiting resource supply",
         
 # %%
 
-class gLV():
+class gLV(eLVMethods, ParametersInterface):
     
     def __init__(self,
                  no_species : float):
         
         self.no_species = no_species
-                  
-    def generate_interaction_matrix(self,
-                                    mu_a : float,
-                                    sigma_a : float):
         
-        self.mu_a = mu_a
-        self.sigma_a = sigma_a
+    def model_specific_rates(self,
+                             growth_method : 
+                                 Literal['normal', 'constant', 'user-supplied'] 
+                                 = 'constant',
+                             growth_args : Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
+                                                TypedDict('constant', {'r' : float}),
+                                                TypedDict('user-supplied', {'r' : npt.NDArray})]
+                             = {'r' : 1},
+                             interaction_method : 
+                                 Literal['normal', 'constant', 'user-supplied'] 
+                                 = 'normal',
+                             interaction_args : Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
+                                                TypedDict('constant', {'Aij' : float}),
+                                                TypedDict('user-supplied', {'Aij' : npt.NDArray})]
+                             = {'Aij' : {'mu' : 0, 'sigma' : 1}},
+                             self_inhibition_method : 
+                                 Literal['normal', 'constant', 'user-supplied'] 
+                                 = 'constant',
+                             self_inhibition_args : 
+                                 Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
+                                       TypedDict('constant', {'Aii' : float}),
+                                       TypedDict('user-supplied', {'Aii' : npt.NDArray})]
+                                 = {'Aii' : 1}):
         
-        ### interactions ###
+        '''
         
-        interaction_matrix = self.mu_a + self.sigma_a * np.random.randn(self.no_species,
-                                                                        self.no_species)
-        np.fill_diagonal(interaction_matrix, 1)
+        Generate parameters specific to the CRM with self-limiting resource 
+        dynamics - consumer death rates and intrinsic resource growth rates
+
+        Returns
+        -------
+        None.
+
+        '''
         
-        self.interaction_matrix = interaction_matrix
+        self.other_parameter_methods(growth_method,
+                                     growth_args,
+                                     'r',
+                                     (self.no_species, ))
         
-    def simulation(self,
-                   t_end : float,
-                   initial_abundances : np.typing.NDArray,
-                   assign : bool = True):
         
-        def dNdt(t, species, A):
+        
+        self.other_parameter_methods(self_inhibition_method,
+                                     self_inhibition_args,
+                                     'Aii',
+                                     (self.no_species, ))
+        
+        if interaction_args.get('rhos') is None:
             
-            # change in consumer abundances over time
-            dNdt = species * (1 - np.sum(A * species, axis = 1))
-        
-            return dNdt + 1e-8
-        
-        def unbounded_growth(t, var, *args):
-            
-            
-            # if any species or resource abundances are greater than some threshold
-            # or if any species abundances are less than or equal to 0  
-            if np.any(np.log10(np.abs(var) + 1e-20) > 4) or np.isnan(np.log10(np.abs(var) + 1e-20)).any():
-                
-                return 0 # when the returned value of an event function is 0, the ode 
-                            #solver terminates.
-            
-            else: 
-                
-                return 1 # the ode solver continues because the returned value is non-zero.
-                
-        sol = solve_ivp(dNdt,
-                        [0, t_end],
-                        initial_abundances, 
-                        args = (self.interaction_matrix, ),
-                        method = 'LSODA',
-                        rtol = 1e-7, atol = 1e-9,
-                        t_eval = np.linspace(0, t_end, 200),
-                        events = unbounded_growth)
-        
-        if assign is True:
-        
-            self.ODE_sol = sol
+            self.other_parameter_methods(interaction_method,
+                                         interaction_args,
+                                         'Aij',
+                                         (self.no_species, self.no_species))
             
         else:
-         
-            return sol 
+            
+            self.__correlated_interactions(interaction_args['mu'],
+                                           interaction_args['sigma'],
+                                           **interaction_args['rhos'])
+            
+        self.interaction_matrix = self.Aij
+        np.fill_diagonal(self.interaction_matrix, self.Aii)
         
+    def __correlated_interactions(self,
+                                  mu,
+                                  sigma,
+                                  rho_D=0.0,
+                                  rho_R=0.0,
+                                  rho_C=0.0,
+                                  rho_1idx=0.0,
+                                  rng=None):
+        """
+        Following Castedo, Holmes, Baron & Galla (arXiv:2409.12751), Sec. II.C.
+        z_ij = lambda_i + kappa_j + w_ij, with (lambda_i, kappa_i) and (w_ij, w_ji)
+        each drawn as correlated Gaussian pairs (unit variance), then rescaled by sigma.
+        """
+        
+        rng = np.random.default_rng() if rng is None else rng
+    
+        self.__feasibility_reason(rho_R,
+                                  rho_C,
+                                  rho_1idx,
+                                  rho_D)
+        
+        # --- species-level (lambda, kappa) pairs, unit variance, Eq. 4 ---
+        cov_lk = np.array([[rho_R, rho_1idx],
+                            [rho_1idx, rho_C]])
+        L_lk = self.__psd_sqrt(cov_lk)
+            
+        lk = rng.standard_normal((self.no_species, 2)) @ L_lk.T
+        lam, kap = lk[:, 0], lk[:, 1]
+    
+        # --- edge-level (w_ij, w_ji) pairs, unit variance, Eq. 5 ---
+        resid_var = 1 - rho_R - rho_C
+        resid_cov = rho_D - 2 * rho_1idx
+        cov_w = np.array([[resid_var, resid_cov],
+                           [resid_cov, resid_var]])
+        L_w = self.__psd_sqrt(cov_w)
+        
+        iu, ju = np.triu_indices(self.no_species, k=1)
+        wpairs = rng.standard_normal((iu.size, 2)) @ L_w.T
+        W = np.zeros((self.no_species, self.no_species))
+        W[iu, ju], W[ju, iu] = wpairs[:, 0], wpairs[:, 1]
+    
+        # --- assemble, unit-variance Z, Eq. 6 ---
+        Z = lam[:, None] + kap[None, :] + W
+        
+        Aij = mu + sigma * Z
+        
+        #####
+        
+        self.Aij = Aij
+        
+        self.corr_violate = getattr(self, "corr_violate", False)
+        
+    def __feasibility_reason(self,
+                             rho_R,
+                             rho_C,
+                             rho_1idx,
+                             rho_D,
+                             tol=0.05):
+        """
+        Checks the four analytic feasibility conditions in order and returns the
+        message for the first one violated, or None if all are satisfied.
+        """
+        conditions = [
+            (np.round(rho_R, 2) < 0 or np.round(rho_C, 2) < 0 + tol,
+             "rho_row and rho_col must be >= 0."),
+            (np.round(np.abs(rho_1idx), 2) + tol > np.round(np.sqrt(rho_R * rho_C), 2),
+             "|rho_cross| must be <= sqrt(rho_row*rho_col)."),
+            (np.round(rho_D - 2 * rho_1idx, 2) < 0 + tol,
+             "rho_recip must be >= 2*rho_cross."),
+            (np.round(rho_R + rho_C + (rho_D - 2 * rho_1idx), 2) > 1 + tol,
+             "rho_row + rho_col + (rho_recip - 2*rho_cross) must be <= 1."),
+        ]
+        
+        violation = next((msg for cond, msg in conditions if cond), None)
+        
+        if violation is not None:
+            
+            self.corr_violate = True
+    
+    def __psd_sqrt(self,
+                   cov,
+                   tol=1e-2):
+        
+        eigvals, eigvecs = np.linalg.eigh(cov)
+        
+        if np.any(eigvals < -tol):
+            
+            self.corr_violate = True
+            
+        eigvals = np.clip(eigvals, 0, None)
+        
+        return eigvecs @ np.diag(np.sqrt(eigvals))
+                     
+       

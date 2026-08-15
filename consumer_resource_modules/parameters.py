@@ -27,8 +27,8 @@ class ParametersInterface:
                                  mu_g : Union[float, None],
                                  sigma_g : Union[float, None],
                                  rho : Union[float, None] = None,
-                                 user_consumption : Union[npt.NDArray, None] = None,
-                                 user_growth : Union[npt.NDArray, None] = None,
+                                 consumption : Union[npt.NDArray, None] = None,
+                                 growth : Union[npt.NDArray, None] = None,
                                  trophic_level : Union[int, None] = None,
                                  all_positive : bool = False):
         
@@ -108,10 +108,10 @@ class ParametersInterface:
                 
             case 'user-supplied':
                 
-                if user_consumption is not None and user_growth is not None:
+                if consumption is not None and growth is not None:
                     
-                    consumption = user_consumption
-                    growth = user_growth 
+                    consumption = consumption
+                    growth = growth 
                     
                 else: 
                         
@@ -395,8 +395,8 @@ class ParametersInterface:
                     mu, sigma = parameter_args['mu'], parameter_args['sigma']
                     
                     # assign statistical properties to object
-                    setattr(self, 'mu_' + p_label[0], mu)
-                    setattr(self, 'sigma_' + p_label[0], sigma)
+                    setattr(self, 'mu_' + p_label, mu)
+                    setattr(self, 'sigma_' + p_label, sigma)
                     
                     # generate parameters
                     parameters = self.__normal_parameters(mu, sigma, dims)

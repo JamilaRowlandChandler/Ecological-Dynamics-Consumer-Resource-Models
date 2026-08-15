@@ -313,7 +313,9 @@ def trajectory_multi_trophic(community : "SL_TL_CRM",
                                                  initial_conditions = 
                                                  supplied_oc)
     # Simulate the perturbated community trajectory for time = T
-    perturbed_traj = community.simulate_community(T, 1, init_cond_func='user-supplied',
+    perturbed_traj = community.simulate_community(T,
+                                                  1,
+                                                  init_cond_func='user-supplied',
                                                   assign = False,
                                                   initial_conditions = 
                                                   supplied_perturb)
@@ -346,7 +348,7 @@ def trajectory_LV(community : Union["eLV_SL", "gLV"],
                                                  assign = False,
                                                  initial_conditions = perturbed_conditions)
     
-    return original_traj, perturbed_traj
+    return original_traj[0], perturbed_traj[0]
 
 #########
 
