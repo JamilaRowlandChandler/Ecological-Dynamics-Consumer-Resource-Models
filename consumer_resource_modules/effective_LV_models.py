@@ -662,6 +662,13 @@ class gLV(eLVMethods, ParametersInterface):
         rng = np.random.default_rng() if rng is None else rng
         S = self.no_species
 
+        # --- floor each rho at 0 ---
+
+        rho_D = max(rho_D, 0.0)
+        rho_R = max(rho_R, 0.0)
+        rho_C = max(rho_C, 0.0)
+        rho_1idx = max(rho_1idx, 0.0)
+
         # --- feasibility check (logs violation, does not stop) ---
 
         self.__feasibility_reason(rho_R, rho_C, rho_1idx, rho_D)
@@ -774,6 +781,12 @@ class gLV(eLVMethods, ParametersInterface):
         """
         rng = np.random.default_rng() if rng is None else rng
         S = self.no_species
+
+        # --- floor each rho at 0 ---
+
+        rho_r_Aij = max(rho_r_Aij, 0.0)
+        rho_Aii_Aij = max(rho_Aii_Aij, 0.0)
+        rho_r_Aii = max(rho_r_Aii, 0.0)
 
         # --- tolerance ---
         # Matches the tol=0.05 used in __feasibility_reason, so that
