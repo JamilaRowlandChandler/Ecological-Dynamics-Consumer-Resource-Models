@@ -514,39 +514,39 @@ def Effective_LV_Model(model : Literal["Self-limiting resource supply",
 # %%
 
 class gLV(eLVMethods, ParametersInterface):
-    
+
     def __init__(self,
                  no_species : float):
-        
+
         self.no_species = no_species
-        
+
     def model_specific_rates(self,
-                             growth_method : 
-                                 Literal['normal', 'constant', 'user-supplied'] 
+                             growth_method :
+                                 Literal['normal', 'constant', 'user-supplied']
                                  = 'constant',
                              growth_args : Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
                                                 TypedDict('constant', {'r' : float}),
                                                 TypedDict('user-supplied', {'r' : npt.NDArray})]
                              = {'r' : 1},
-                             interaction_method : 
-                                 Literal['normal', 'constant', 'user-supplied'] 
+                             interaction_method :
+                                 Literal['normal', 'constant', 'user-supplied']
                                  = 'normal',
                              interaction_args : Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
                                                 TypedDict('constant', {'Aij' : float}),
                                                 TypedDict('user-supplied', {'Aij' : npt.NDArray})]
                              = {'Aij' : {'mu' : 0, 'sigma' : 1}},
-                             self_inhibition_method : 
-                                 Literal['normal', 'constant', 'user-supplied'] 
+                             self_inhibition_method :
+                                 Literal['normal', 'constant', 'user-supplied']
                                  = 'constant',
-                             self_inhibition_args : 
+                             self_inhibition_args :
                                  Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
                                        TypedDict('constant', {'Aii' : float}),
                                        TypedDict('user-supplied', {'Aii' : npt.NDArray})]
                                  = {'Aii' : 1}):
-        
+
         '''
-        
-        Generate parameters specific to the CRM with self-limiting resource 
+
+        Generate parameters specific to the CRM with self-limiting resource
         dynamics - consumer death rates and intrinsic resource growth rates
 
         Returns
@@ -554,35 +554,58 @@ class gLV(eLVMethods, ParametersInterface):
         None.
 
         '''
-        
-        self.other_parameter_methods(growth_method,
-                                     growth_args,
-                                     'r',
-                                     (self.no_species, ))
-        
-        
-        
-        self.other_parameter_methods(self_inhibition_method,
-                                     self_inhibition_args,
-                                     'Aii',
-                                     (self.no_species, ))
-        
+
+        # check whether we have cross-parameter correlations to handle
+        cross_rhos = None
+        if interaction_args.get('rhos') is not None:
+            cross_rhos = interaction_args['rhos'].pop('rho_r_Aij', None)
+            # pull all three out if any are present
+            if cross_rhos is not None:
+                cross_rhos = {
+                    'rho_r_Aij': cross_rhos,
+                    'rho_Aii_Aij': interaction_args['rhos'].pop('rho_Aii_Aij', 0.0),
+                    'rho_r_Aii': interaction_args['rhos'].pop('rho_r_Aii', 0.0),
+                }
+
+        # --- generate A_ij first (needed before r/Aii if cross-correlated) ---
+
         if interaction_args.get('rhos') is None:
-            
+
             self.other_parameter_methods(interaction_method,
                                          interaction_args,
                                          'Aij',
                                          (self.no_species, self.no_species))
-            
         else:
-            
+
             self.__correlated_interactions(interaction_args['mu'],
                                            interaction_args['sigma'],
                                            **interaction_args['rhos'])
-            
+
+        # --- generate r and Aii ---
+
+        if cross_rhos is not None and not getattr(self, 'corr_violate', False):
+
+            # cross-parameter correlations requested:
+            # build r and Aii from row means of the already-generated Z
+            self.__correlated_rates(growth_args,
+                                    self_inhibition_args,
+                                    **cross_rhos)
+        else:
+
+            # no cross-parameter correlations: generate independently as before
+            self.other_parameter_methods(growth_method,
+                                         growth_args,
+                                         'r',
+                                         (self.no_species, ))
+
+            self.other_parameter_methods(self_inhibition_method,
+                                         self_inhibition_args,
+                                         'Aii',
+                                         (self.no_species, ))
+
         self.interaction_matrix = self.Aij
         np.fill_diagonal(self.interaction_matrix, self.Aii)
-        
+
     def __correlated_interactions(self,
                                   mu,
                                   sigma,
@@ -596,84 +619,184 @@ class gLV(eLVMethods, ParametersInterface):
         z_ij = lambda_i + kappa_j + w_ij, with (lambda_i, kappa_i) and (w_ij, w_ji)
         each drawn as correlated Gaussian pairs (unit variance), then rescaled by sigma.
         """
-        
+
         rng = np.random.default_rng() if rng is None else rng
-    
+
         self.__feasibility_reason(rho_R,
                                   rho_C,
                                   rho_1idx,
                                   rho_D)
-        
+
+        if getattr(self, 'corr_violate', False):
+            return
+
         # --- species-level (lambda, kappa) pairs, unit variance, Eq. 4 ---
         cov_lk = np.array([[rho_R, rho_1idx],
                             [rho_1idx, rho_C]])
         L_lk = self.__psd_sqrt(cov_lk)
-            
+
+        if getattr(self, 'corr_violate', False):
+            return
+
         lk = rng.standard_normal((self.no_species, 2)) @ L_lk.T
         lam, kap = lk[:, 0], lk[:, 1]
-    
+
         # --- edge-level (w_ij, w_ji) pairs, unit variance, Eq. 5 ---
         resid_var = 1 - rho_R - rho_C
         resid_cov = rho_D - 2 * rho_1idx
         cov_w = np.array([[resid_var, resid_cov],
                            [resid_cov, resid_var]])
         L_w = self.__psd_sqrt(cov_w)
-        
+
+        if getattr(self, 'corr_violate', False):
+            return
+
         iu, ju = np.triu_indices(self.no_species, k=1)
         wpairs = rng.standard_normal((iu.size, 2)) @ L_w.T
         W = np.zeros((self.no_species, self.no_species))
         W[iu, ju], W[ju, iu] = wpairs[:, 0], wpairs[:, 1]
-    
-        # --- assemble, unit-variance Z, Eq. 6 ---
+
+        # --- assemble standardised Z ---
         Z = lam[:, None] + kap[None, :] + W
-        
+
+        # store Z and rho_R for cross-parameter correlation construction
+        self._Z = Z
+        self._rho_R = rho_R
+
         Aij = mu + sigma * Z
-        
-        #####
-        
+
         self.Aij = Aij
-        
         self.corr_violate = getattr(self, "corr_violate", False)
-        
+
+    def __correlated_rates(self,
+                           growth_args,
+                           self_inhibition_args,
+                           rho_r_Aij=0.0,
+                           rho_Aii_Aij=0.0,
+                           rho_r_Aii=0.0,
+                           rng=None):
+        """
+        Construct r and Aii correlated with the off-diagonal A_ij by loading
+        onto the row means of the standardised Z matrix (stored by
+        __correlated_interactions).
+
+        The row mean of Z captures species-level signal more completely than
+        the scalar latent lambda_i alone, giving a higher ceiling for
+        achievable cross-parameter correlations.
+        """
+        rng = np.random.default_rng() if rng is None else rng
+
+        S = self.no_species
+        Z = self._Z
+        rho_R = self._rho_R
+
+        # extract moment targets from the args dicts
+        r_mean = growth_args.get('r', growth_args.get('mu', 1.0))
+        sigma_r = growth_args.get('sigma', 0.0)
+        Aii_mean = self_inhibition_args.get('Aii', self_inhibition_args.get('mu', 1.0))
+        sigma_Aii = self_inhibition_args.get('sigma', 0.0)
+
+        # --- row means of off-diagonal Z ---
+        Z_offdiag = Z.copy()
+        np.fill_diagonal(Z_offdiag, 0)
+        row_means = Z_offdiag.sum(axis=1) / (S - 1)
+
+        # theoretical variance: c = (1 + (S-2)*rho_R) / (S-1)
+        # max achievable corr(r, A_ij) = sqrt(c)
+        c = (1 + (S - 2) * rho_R) / (S - 1)
+
+        # standardise to unit variance
+        row_means_unit = row_means / np.sqrt(max(c, 1e-20))
+
+        # loadings: corr(r, A_ij) = beta * sqrt(c), so beta = rho / sqrt(c)
+        beta_r = rho_r_Aij / np.sqrt(c) if c > 0 else 0.0
+        beta_Aii = rho_Aii_Aij / np.sqrt(c) if c > 0 else 0.0
+
+        if beta_r**2 > 1 + 1e-10 or beta_Aii**2 > 1 + 1e-10:
+            self.corr_violate = True
+            # fall back to uncorrelated
+            self.r = r_mean * np.ones(S) if sigma_r == 0 else \
+                     r_mean + sigma_r * rng.standard_normal(S)
+            self.Aii = Aii_mean * np.ones(S) if sigma_Aii == 0 else \
+                       Aii_mean + sigma_Aii * rng.standard_normal(S)
+            return
+
+        beta_r = np.clip(beta_r, -1, 1)
+        beta_Aii = np.clip(beta_Aii, -1, 1)
+
+        noise_r_std = np.sqrt(max(1 - beta_r**2, 0))
+        noise_Aii_std = np.sqrt(max(1 - beta_Aii**2, 0))
+
+        # solve for noise correlation to match corr(r, Aii)
+        # corr(r, Aii) = beta_r * beta_Aii + noise_r * noise_Aii * rho_noise
+        implied = beta_r * beta_Aii
+        residual = rho_r_Aii - implied
+
+        if noise_r_std * noise_Aii_std > 1e-12:
+            rho_noise = residual / (noise_r_std * noise_Aii_std)
+            if abs(rho_noise) > 1 + 1e-10:
+                self.corr_violate = True
+                rho_noise = np.clip(rho_noise, -1, 1)
+            rho_noise = np.clip(rho_noise, -1, 1)
+        else:
+            rho_noise = 0.0
+
+        # draw correlated noise for r and Aii
+        cov_noise = np.array([[1.0, rho_noise],
+                               [rho_noise, 1.0]])
+        L_noise = self.__psd_sqrt(cov_noise)
+
+        if L_noise is None:
+            self.corr_violate = True
+            self.r = r_mean + sigma_r * rng.standard_normal(S)
+            self.Aii = Aii_mean + sigma_Aii * rng.standard_normal(S)
+            return
+
+        eta = rng.standard_normal((S, 2)) @ L_noise.T
+        eta_r, eta_Aii = eta[:, 0], eta[:, 1]
+
+        # assemble
+        self.r = r_mean + sigma_r * (beta_r * row_means_unit
+                                      + noise_r_std * eta_r)
+        self.Aii = Aii_mean + sigma_Aii * (beta_Aii * row_means_unit
+                                            + noise_Aii_std * eta_Aii)
+
+        # clean up stored Z
+        del self._Z, self._rho_R
+
     def __feasibility_reason(self,
                              rho_R,
                              rho_C,
                              rho_1idx,
                              rho_D,
                              tol=0.05):
-        """
-        Checks the four analytic feasibility conditions in order and returns the
-        message for the first one violated, or None if all are satisfied.
-        """
         conditions = [
-            (np.round(rho_R, 2) < 0 or np.round(rho_C, 2) < 0 + tol,
+            (rho_R < -tol or rho_C < -tol,
              "rho_row and rho_col must be >= 0."),
-            (np.round(np.abs(rho_1idx), 2) + tol > np.round(np.sqrt(rho_R * rho_C), 2),
+            (abs(rho_1idx) - tol > np.sqrt(rho_R * rho_C),
              "|rho_cross| must be <= sqrt(rho_row*rho_col)."),
-            (np.round(rho_D - 2 * rho_1idx, 2) < 0 + tol,
+            (rho_D - 2 * rho_1idx < -tol,
              "rho_recip must be >= 2*rho_cross."),
-            (np.round(rho_R + rho_C + (rho_D - 2 * rho_1idx), 2) > 1 + tol,
+            (rho_R + rho_C + (rho_D - 2 * rho_1idx) > 1 + tol,
              "rho_row + rho_col + (rho_recip - 2*rho_cross) must be <= 1."),
         ]
-        
+
         violation = next((msg for cond, msg in conditions if cond), None)
-        
+
         if violation is not None:
-            
             self.corr_violate = True
-    
+
     def __psd_sqrt(self,
                    cov,
                    tol=1e-2):
-        
+
         eigvals, eigvecs = np.linalg.eigh(cov)
-        
+
         if np.any(eigvals < -tol):
-            
             self.corr_violate = True
-            
+
         eigvals = np.clip(eigvals, 0, None)
-        
+
         return eigvecs @ np.diag(np.sqrt(eigvals))
                      
        
