@@ -15,7 +15,6 @@ import numpy.typing as npt
 from scipy.integrate import solve_ivp
 from scipy.stats import pearsonr
 from typing import Union, Literal, TypedDict
-from warnings import warn
 
 from models import SL_CRM, ES_CRM
 from parameters import ParametersInterface

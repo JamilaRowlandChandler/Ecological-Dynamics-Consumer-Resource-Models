@@ -291,19 +291,34 @@ def gLV_M_averaged(gLV_directory : str,
 
 # example usage, mirroring the directory/rho sweeps in mean_variance_test.py
 
-# gLV_directories = ["M_vs_mu_c_drc(averaged)",
-#                    "M_vs_mu_c_dr(averaged)",
-#                    "M_vs_mu_c_d(averaged)",
-#                    "M_vs_mu_c_norho(averaged)"]
+gLV_directories = ["M_vs_mu_c(averaged)",
+                   "M_vs_mu_c_drc(averaged)",
+                   "M_vs_mu_c_dr(averaged)",
+                   "M_vs_mu_c_d(averaged)",
+                   "M_vs_mu_c_norho(averaged)"]
 
-# incl_rhos = [["rho_D", "rho_R", "rho_C"],
-#              ["rho_D", "rho_R"],
-#              ["rho_D"],
-#              None]
+incl_rhos = [["rho_D", "rho_R", "rho_C", "rho_1idx"],
+             ["rho_D", "rho_R", "rho_C"],
+             ["rho_D", "rho_R"],
+             ["rho_D"],
+             None]
 
-# for gLV_directory, include_rho in zip(gLV_directories, incl_rhos):
+for gLV_directory, include_rho in zip(gLV_directories, incl_rhos):
 
-#     gLV_M_averaged(eLV_directory="M_vs_mu_c",
-#                    gLV_directory=gLV_directory,
-#                    n=100,
-#                    include_rho=include_rho)
+     gLV_M_averaged(eLV_directory="M_vs_mu_c",
+                    gLV_directory=gLV_directory,
+                    n=100,
+                    include_rho=include_rho)
+     
+gLV_directories_ar = ["M_vs_mu_c(averaged, all_resource)",
+                      "M_vs_mu_c_drc(averaged, all_resource)",
+                      "M_vs_mu_c_dr(averaged, all_resource)",
+                      "M_vs_mu_c_d(averaged, all_resource)",
+                      "M_vs_mu_c_norho(averaged, all_resource)"]
+
+for gLV_directory, include_rho in zip(gLV_directories_ar, incl_rhos):
+
+     gLV_M_averaged(eLV_directory="M_vs_mu_c(all_resource)",
+                    gLV_directory=gLV_directory,
+                    n=100,
+                    include_rho=include_rho)

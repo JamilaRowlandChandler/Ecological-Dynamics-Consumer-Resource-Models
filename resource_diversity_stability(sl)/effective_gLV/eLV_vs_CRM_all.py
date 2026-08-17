@@ -53,6 +53,10 @@ def read_eLV_data(subdirectory):
                           for gLV_community in egLV_communities],
                  'rho_1idx' : [gLV_community.rho_1idx
                           for gLV_community in egLV_communities],
+                 'corr_violate' : [gLV_community.corr_violate
+                                   if hasattr(gLV_community, "corr_violate")
+                                   else False
+                              for gLV_community in egLV_communities],
                  'mu_Aii' : [gLV_community.mu_Aii 
                           for gLV_community in egLV_communities],
                  'sigma_Aii' : [gLV_community.sigma_Aii
@@ -64,6 +68,8 @@ def read_eLV_data(subdirectory):
                  'sigma_r' : [gLV_community.sigma_r 
                               if hasattr(gLV_community, "sigma_r")
                               else 0
+                              for gLV_community in egLV_communities],
+                 'Divergence' : [gLV_community.ODE_sols[0].t[-1] 
                               for gLV_community in egLV_communities]
                  })
                          for egLV_communities in egLV_Ms]) 
@@ -109,14 +115,14 @@ def Stability_Plot(df_eLV_ar,
             
         else:
             
-            cbar = True #False
+            cbar = False
     
         subfig = sns.heatmap(stability_pivot,
                              ax = ax,
-                             #vmin = 0,
-                             #vmax = 1,
+                             vmin = 0,
+                             vmax = 1,
                              cbar = cbar,
-                             cmap = 'Purples_r')
+                             cmap = 'viridis_r')#'Purples_r')
         
         subfig.axhline(0, 0, 1, color = 'black', linewidth = 2)
         subfig.axhline(stability_pivot.shape[0], 0, 1,
@@ -142,17 +148,17 @@ def Stability_Plot(df_eLV_ar,
                      horizontalalignment = 'center',
                      verticalalignment = 'top')
         
-    cbar = ax.collections[0].colorbar
+        #cbar = ax.collections[0].colorbar
+        #cbar.set_label(label = 'Probability(stability)',
+        #               size = '8', horizontalalignment = 'center', 
+        #               verticalalignment = 'top')
+        #cbar.ax.tick_params(labelsize = 10)
+             
+    cbar = axs[-1].collections[0].colorbar
     cbar.set_label(label = 'Probability(stability)',
                    size = '8', horizontalalignment = 'center', 
                    verticalalignment = 'top')
     cbar.ax.tick_params(labelsize = 10)
-             
-    #cbar = axs[-1].collections[0].colorbar
-    #cbar.set_label(label = 'Probability(stability)',
-    #               size = '8', horizontalalignment = 'center', 
-    #               verticalalignment = 'top')
-    #cbar.ax.tick_params(labelsize = 10)
     
     fig.supxlabel('resource pool size, ' + r'$M$', fontsize = 10,
                   weight = 'bold')
@@ -180,11 +186,11 @@ def population_dynamics():
                                         "simulations_225_0.6444.pkl")
         
     chaotic_eLV = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/" +
-                                         "resource_diversity_stability/simulations/eLV/M_vs_mu_c(all_resource)/" + 
+                                         "resource_diversity_stability/simulations/gLV/M_vs_mu_c_drc/" + 
                                          "simulations_75_1.9333.pkl")
         
     stable_eLV = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/" +\
-                                        "resource_diversity_stability/simulations/eLV/M_vs_mu_c(all_resource)/" +  
+                                        "resource_diversity_stability/simulations/gLV/M_vs_mu_c_drc/" +  
                                         "simulations_225_0.6444.pkl")
                  
     def indices_and_cmaps(M):
@@ -259,11 +265,11 @@ def population_dynamics():
 
 # %%
 
-df_eLV_ar = read_eLV_data("eLV/M_vs_mu_c(all_resource)")
+df_eLV_ar = read_eLV_data("eLV/M_vs_mu_c")
 
 # %%
 
-df_eLV_phiR = read_eLV_data("gLV/M_vs_mu_c_d(all_resource)")
+df_eLV_phiR = read_eLV_data("gLV/M_vs_mu_c(averaged)")
 
 # %%
 
