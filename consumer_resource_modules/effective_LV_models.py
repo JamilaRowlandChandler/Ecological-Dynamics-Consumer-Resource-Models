@@ -585,7 +585,7 @@ class gLV(eLVMethods, ParametersInterface):
 
         # --- generate r and Aii ---
 
-        if cross_rhos is not None and not getattr(self, 'corr_violate', False):
+        if cross_rhos is not None:
 
             # cross-parameter correlations requested:
             # build r and Aii from row means of the already-generated Z
@@ -617,58 +617,109 @@ class gLV(eLVMethods, ParametersInterface):
                                   rho_1idx=0.0,
                                   rng=None):
         """
-        Following Castedo, Holmes, Baron & Galla (arXiv:2409.12751), Sec. II.C.
-        z_ij = lambda_i + kappa_j + w_ij, with (lambda_i, kappa_i) and (w_ij, w_ji)
-        each drawn as correlated Gaussian pairs (unit variance), then rescaled by sigma.
+        Generate an S x S off-diagonal interaction matrix with four target
+        correlations, following the latent-factor decomposition in
+        Castedo, Holmes, Baron & Galla (arXiv:2409.12751), Sec. II.C.
+
+        Each standardised entry is decomposed as:
+
+            Z_ij = lambda_i + kappa_j + w_ij
+
+        where:
+            - (lambda_i, kappa_i) are species-level latent traits drawn as
+              correlated pairs, generating row correlation (rho_R), column
+              correlation (rho_C), and one-index correlation (rho_1idx).
+            - (w_ij, w_ji) are edge-level latent pairs drawn with correlation
+              that generates the reciprocal/diagonal correlation (rho_D).
+
+        The final matrix is A_ij = mu + sigma * Z_ij.
+
+        Stores self.Aij for use by model_specific_rates, and self._Z and
+        self._rho_R for use by __correlated_rates (if cross-parameter
+        correlations are requested).
+
+        If any feasibility constraints are violated, self.corr_violate is
+        set to True but generation proceeds anyway — eigenvalues are clipped
+        to zero, producing the nearest valid covariance structure.
+
+        Parameters
+        ----------
+        mu : float
+            Mean of off-diagonal entries.
+        sigma : float
+            Standard deviation of off-diagonal entries.
+        rho_D : float
+            Reciprocal (cross-diagonal) correlation, corr(A_ij, A_ji).
+        rho_R : float
+            Row correlation, corr(A_ij, A_ik) for j != k.
+        rho_C : float
+            Column correlation, corr(A_ij, A_kj) for i != k.
+        rho_1idx : float
+            One-index correlation, corr(A_ij, A_ki).
+        rng : numpy.random.Generator, optional
+            Random number generator for reproducibility.
         """
-
         rng = np.random.default_rng() if rng is None else rng
+        S = self.no_species
 
-        self.__feasibility_reason(rho_R,
-                                  rho_C,
-                                  rho_1idx,
-                                  rho_D)
+        # --- feasibility check (logs violation, does not stop) ---
 
-        if getattr(self, 'corr_violate', False):
-            return
+        self.__feasibility_reason(rho_R, rho_C, rho_1idx, rho_D)
 
-        # --- species-level (lambda, kappa) pairs, unit variance, Eq. 4 ---
-        cov_lk = np.array([[rho_R, rho_1idx],
-                            [rho_1idx, rho_C]])
-        L_lk = self.__psd_sqrt(cov_lk)
+        # --- species-level latent traits (Eq. 4) ---
+        # (lambda_i, kappa_i) for each species i, drawn from a bivariate
+        # Gaussian with covariance [[rho_R, rho_1idx], [rho_1idx, rho_C]].
+        # lambda_i drives row i (species i's effect on others).
+        # kappa_i drives column i (others' effect on species i).
+        # Their cross-correlation generates rho_1idx.
 
-        if getattr(self, 'corr_violate', False):
-            return
+        cov_species = np.array([[rho_R, rho_1idx],
+                                 [rho_1idx, rho_C]])
+        L_species = self.__psd_sqrt(cov_species)
 
-        lk = rng.standard_normal((self.no_species, 2)) @ L_lk.T
-        lam, kap = lk[:, 0], lk[:, 1]
+        species_traits = rng.standard_normal((S, 2)) @ L_species.T
+        lam = species_traits[:, 0]  # row latent
+        kap = species_traits[:, 1]  # column latent
 
-        # --- edge-level (w_ij, w_ji) pairs, unit variance, Eq. 5 ---
+        # --- edge-level latent pairs (Eq. 5) ---
+        # (w_ij, w_ji) for each unordered pair {i,j}, drawn from a bivariate
+        # Gaussian. The residual variance (1 - rho_R - rho_C) is what remains
+        # after the species-level traits are accounted for. The residual
+        # covariance (rho_D - 2*rho_1idx) encodes the reciprocal correlation
+        # not already implied by the species traits.
+
         resid_var = 1 - rho_R - rho_C
         resid_cov = rho_D - 2 * rho_1idx
-        cov_w = np.array([[resid_var, resid_cov],
-                           [resid_cov, resid_var]])
-        L_w = self.__psd_sqrt(cov_w)
 
-        if getattr(self, 'corr_violate', False):
-            return
+        cov_edge = np.array([[resid_var, resid_cov],
+                              [resid_cov, resid_var]])
+        L_edge = self.__psd_sqrt(cov_edge)
 
-        iu, ju = np.triu_indices(self.no_species, k=1)
-        wpairs = rng.standard_normal((iu.size, 2)) @ L_w.T
-        W = np.zeros((self.no_species, self.no_species))
-        W[iu, ju], W[ju, iu] = wpairs[:, 0], wpairs[:, 1]
+        iu, ju = np.triu_indices(S, k=1)
+        edge_pairs = rng.standard_normal((iu.size, 2)) @ L_edge.T
 
-        # --- assemble standardised Z ---
+        W = np.zeros((S, S))
+        W[iu, ju] = edge_pairs[:, 0]  # w_ij
+        W[ju, iu] = edge_pairs[:, 1]  # w_ji (correlated with w_ij)
+
+        # --- assemble standardised matrix (Eq. 6) ---
+        # Z_ij has unit variance by construction:
+        # Var(Z_ij) = Var(lam_i) + Var(kap_j) + Var(w_ij)
+        #           = rho_R + rho_C + resid_var = 1
+
         Z = lam[:, None] + kap[None, :] + W
 
-        # store Z and rho_R for cross-parameter correlation construction
+        # --- store for cross-parameter correlations ---
+        # __correlated_rates needs the standardised Z and rho_R to compute
+        # row-mean loadings. These are deleted after use.
+
         self._Z = Z
         self._rho_R = rho_R
 
-        Aij = mu + sigma * Z
+        # --- rescale to target moments ---
 
-        self.Aij = Aij
-        self.corr_violate = getattr(self, "corr_violate", False)
+        self.Aij = mu + sigma * Z
+        self.corr_violate = getattr(self, 'corr_violate', False)
 
     def __correlated_rates(self,
                            growth_args,
@@ -678,50 +729,98 @@ class gLV(eLVMethods, ParametersInterface):
                            rho_r_Aii=0.0,
                            rng=None):
         """
-        Construct r and Aii correlated with the off-diagonal A_ij by loading
-        onto the row means of the standardised Z matrix (stored by
-        __correlated_interactions).
+        Construct growth rates (r) and self-inhibition (Aii) that are
+        correlated with the off-diagonal interactions (Aij).
 
-        The row mean of Z captures species-level signal more completely than
-        the scalar latent lambda_i alone, giving a higher ceiling for
-        achievable cross-parameter correlations.
+        Each parameter is built as:
+
+            r_i   = r_mean   + sigma_r   * (beta_r   * Zbar_i + noise_r   * eta_r_i)
+            Aii_i = Aii_mean + sigma_Aii * (beta_Aii * Zbar_i + noise_Aii * eta_Aii_i)
+
+        where:
+            - Zbar_i is the standardised row mean of species i's off-diagonal
+              interactions, capturing all of species i's shared signal.
+            - beta controls the loading strength onto Zbar_i, determining
+              corr(r_i, A_ij) and corr(Aii_i, A_ij) respectively.
+            - (eta_r, eta_Aii) are drawn as a correlated noise pair to
+              independently match corr(r_i, A_ii).
+
+        This loads onto row means of A rather than the scalar latent lambda_i,
+        because lambda_i alone can only achieve corr(r, Aij) up to
+        sqrt(rho_R), while row means achieve sqrt(c) where
+        c = (1 + (S-2)*rho_R)/(S-1) > rho_R at finite S.
+
+        Must be called AFTER __correlated_interactions, which stores
+        self._Z and self._rho_R.
+
+        If any cross-parameter feasibility constraints are violated,
+        self.corr_violate is set to True but generation proceeds anyway
+        with clipped loading coefficients.
+
+        Parameters
+        ----------
+        growth_args : dict
+            Must contain 'mu' (or 'r') and 'sigma' for growth rate moments.
+        self_inhibition_args : dict
+            Must contain 'mu' (or 'Aii') and 'sigma' for self-inhibition moments.
+        rho_r_Aij : float
+            Target corr(r_i, A_ij) for j != i.
+        rho_Aii_Aij : float
+            Target corr(A_ii, A_ij) for j != i.
+        rho_r_Aii : float
+            Target corr(r_i, A_ii).
+        rng : numpy.random.Generator, optional
+            Random number generator for reproducibility.
         """
         rng = np.random.default_rng() if rng is None else rng
-
         S = self.no_species
-        Z = self._Z
-        rho_R = self._rho_R
 
-        # extract moment targets from the args dicts
+        # --- tolerance ---
+        # Matches the tol=0.05 used in __feasibility_reason, so that
+        # targets allowed through the within-A check aren't flagged
+        # by a tighter threshold here.
+
+        tol = 0.05
+
+        # --- extract moment targets ---
+
         r_mean = growth_args.get('r', growth_args.get('mu', 1.0))
         sigma_r = growth_args.get('sigma', 0.0)
         Aii_mean = self_inhibition_args.get('Aii', self_inhibition_args.get('mu', 1.0))
         sigma_Aii = self_inhibition_args.get('sigma', 0.0)
 
-        # --- row means of off-diagonal Z ---
+        # --- compute row means of standardised Z ---
+        # Zbar_i = mean of off-diagonal entries in row i of Z.
+        # This is a denoised summary of species i's interaction profile:
+        # averaging over S-1 entries cancels idiosyncratic kappa_j and w_ij
+        # noise while preserving the species-level signal lambda_i.
+
+        Z = self._Z
+        rho_R = self._rho_R
+
         Z_offdiag = Z.copy()
         np.fill_diagonal(Z_offdiag, 0)
         row_means = Z_offdiag.sum(axis=1) / (S - 1)
 
-        # theoretical variance: c = (1 + (S-2)*rho_R) / (S-1)
-        # max achievable corr(r, A_ij) = sqrt(c)
-        c = (1 + (S - 2) * rho_R) / (S - 1)
+        # --- standardise row means ---
+        # Theoretical variance of Zbar_i:
+        #   c = (1 + (S-2)*rho_R) / (S-1)
+        # This is rho_R plus a finite-S correction term (1-rho_R)/(S-1)
+        # that vanishes as S -> inf.
 
-        # standardise to unit variance
+        c = (1 + (S - 2) * rho_R) / (S - 1)
         row_means_unit = row_means / np.sqrt(max(c, 1e-20))
 
-        # loadings: corr(r, A_ij) = beta * sqrt(c), so beta = rho / sqrt(c)
+        # --- compute loading coefficients ---
+        # corr(r_i, A_ij) = beta_r * sqrt(c), so beta_r = rho_r_Aij / sqrt(c).
+        # Feasibility requires beta^2 <= 1, i.e. |rho_target| <= sqrt(c).
+        # If violated by more than tol, log it. Clip to [-1, 1] regardless.
+
         beta_r = rho_r_Aij / np.sqrt(c) if c > 0 else 0.0
         beta_Aii = rho_Aii_Aij / np.sqrt(c) if c > 0 else 0.0
 
-        if beta_r**2 > 1 + 1e-10 or beta_Aii**2 > 1 + 1e-10:
+        if beta_r**2 > 1 + tol or beta_Aii**2 > 1 + tol:
             self.corr_violate = True
-            # fall back to uncorrelated
-            self.r = r_mean * np.ones(S) if sigma_r == 0 else \
-                     r_mean + sigma_r * rng.standard_normal(S)
-            self.Aii = Aii_mean * np.ones(S) if sigma_Aii == 0 else \
-                       Aii_mean + sigma_Aii * rng.standard_normal(S)
-            return
 
         beta_r = np.clip(beta_r, -1, 1)
         beta_Aii = np.clip(beta_Aii, -1, 1)
@@ -729,41 +828,50 @@ class gLV(eLVMethods, ParametersInterface):
         noise_r_std = np.sqrt(max(1 - beta_r**2, 0))
         noise_Aii_std = np.sqrt(max(1 - beta_Aii**2, 0))
 
-        # solve for noise correlation to match corr(r, Aii)
-        # corr(r, Aii) = beta_r * beta_Aii + noise_r * noise_Aii * rho_noise
+        # --- solve for residual noise correlation ---
+        # corr(r, Aii) gets two contributions:
+        #   (1) shared loading on Zbar:  beta_r * beta_Aii
+        #   (2) correlated noise:        noise_r_std * noise_Aii_std * rho_noise
+        #
+        # Setting these equal to the target rho_r_Aii and solving:
+
         implied = beta_r * beta_Aii
         residual = rho_r_Aii - implied
 
         if noise_r_std * noise_Aii_std > 1e-12:
             rho_noise = residual / (noise_r_std * noise_Aii_std)
-            if abs(rho_noise) > 1 + 1e-10:
+
+            if abs(rho_noise) > 1 + tol:
                 self.corr_violate = True
-                rho_noise = np.clip(rho_noise, -1, 1)
+
             rho_noise = np.clip(rho_noise, -1, 1)
         else:
+            # one or both loadings are ~1, leaving no noise to correlate.
+            # corr(r, Aii) is fully determined by the loadings alone.
             rho_noise = 0.0
 
-        # draw correlated noise for r and Aii
+        # --- draw correlated noise ---
+
         cov_noise = np.array([[1.0, rho_noise],
                                [rho_noise, 1.0]])
         L_noise = self.__psd_sqrt(cov_noise)
 
-        if L_noise is None:
-            self.corr_violate = True
-            self.r = r_mean + sigma_r * rng.standard_normal(S)
-            self.Aii = Aii_mean + sigma_Aii * rng.standard_normal(S)
-            return
-
         eta = rng.standard_normal((S, 2)) @ L_noise.T
-        eta_r, eta_Aii = eta[:, 0], eta[:, 1]
+        eta_r = eta[:, 0]
+        eta_Aii = eta[:, 1]
 
-        # assemble
+        # --- assemble r and Aii ---
+        # Each is: mean + sigma * (signal + noise), where signal and noise
+        # are constructed to have unit combined variance, preserving the
+        # target mean and standard deviation exactly (up to finite-S noise).
+
         self.r = r_mean + sigma_r * (beta_r * row_means_unit
                                       + noise_r_std * eta_r)
         self.Aii = Aii_mean + sigma_Aii * (beta_Aii * row_means_unit
-                                            + noise_Aii_std * eta_Aii)
+                                           + noise_Aii_std * eta_Aii)
 
-        # clean up stored Z
+        # --- clean up temporary storage ---
+
         del self._Z, self._rho_R
 
     def __feasibility_reason(self,
