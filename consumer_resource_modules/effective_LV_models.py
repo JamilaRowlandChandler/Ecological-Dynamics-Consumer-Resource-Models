@@ -46,97 +46,99 @@ class eLVMethods(DifferentialEquationsInterface_ELV):
        self.resource_pa = np.int64(resource_abundances > extinct_thresh).astype(np.float64)
         
     def calculate_interaction_stats(self):
-        
+
         '''
-        
+
         Determine the statistics, such as the mean, variance and correlations,
-        in species growth and interaction coefficients. 
-        
+        in species growth and interaction coefficients.
+
         '''
-        
+
+        S = self.no_species
+        A = self.interaction_matrix
+
         ### growth rates ###
-        
+
         self.mu_r = np.mean(self.r)
         self.sigma_r = np.std(self.r)
-        
-        ### interactions ###
-        
-        self_inhibition = np.diagonal(self.interaction_matrix)
-        
-        inter_species_interactions = self.interaction_matrix[~np.eye(self.interaction_matrix.shape[0],
-                                                                     dtype=bool)].reshape((self.no_species,
-                                                                                           self.no_species - 1))
-        
+
+        ### interaction moments ###
+
+        self_inhibition = np.diagonal(A)
+
+        mask = ~np.eye(S, dtype=bool)
+
+        inter_species_interactions = A[mask].reshape(S, S - 1)
+
         self.mu_Aii = np.mean(self_inhibition)
         self.sigma_Aii = np.std(self_inhibition)
         self.mu_Aij = np.mean(inter_species_interactions)
-        self.sigma_Aij = np.std(inter_species_interactions) 
-        
-        def diagonal_correlation(matrix):
-            
-            i_upper, j_upper = np.triu_indices_from(matrix, k=1)
+        self.sigma_Aij = np.std(inter_species_interactions)
 
-            upper_elements = matrix[i_upper, j_upper]
-            lower_elements = matrix[j_upper, i_upper]
+        ### within-A correlations ###
 
-            correlation = pearsonr(upper_elements, lower_elements)[0]
-            
-            return correlation
-        
-        def row_correlation(matrix):
-            
-            S = matrix.shape[0]
-            
-            mask = ~np.eye(S, dtype=bool)
-            B = matrix[mask].reshape(S, S - 1)
-            
-            p, q = np.triu_indices(S - 1, k=1)
-            
-            correlation = pearsonr(B[:, p].ravel(), B[:, q].ravel())[0]
-            
-            return correlation
-        
-        def column_correlation(matrix):
-            
-            S = matrix.shape[0]
-            
-            mask = ~np.eye(S, dtype=bool)
-            C = matrix.T[mask].reshape(S, S - 1)
-            p, q = np.triu_indices(S - 1, k=1)
-            
-            correlation = pearsonr(C[:, p].ravel(), C[:, q].ravel())[0]
-            
-            return correlation
-            
-        def one_index_correlation(matrix):
-            
-            S = matrix.shape[0]
-            
-            mask = ~np.eye(S, dtype=bool)
-            B = matrix[mask].reshape(S, S - 1)       # B[i, :] = A[i, j] for j != i  (row entries)
-            C = matrix.T[mask].reshape(S, S - 1)
-            
+        # shared arrays, computed once
+        B = inter_species_interactions                  # B[i, :] = A[i, j] for j != i
+        C = A.T[mask].reshape(S, S - 1)                # C[j, :] = A[i, j] for i != j
+        p, q = np.triu_indices(S - 1, k=1)
+
+        def diagonal_correlation(A):
+
+            iu, ju = np.triu_indices(S, k=1)
+
+            return pearsonr(A[iu, ju], A[ju, iu])[0]
+
+        def row_correlation(B, p, q):
+
+            return pearsonr(B[:, p].ravel(), B[:, q].ravel())[0]
+
+        def column_correlation(C, p, q):
+
+            return pearsonr(C[:, p].ravel(), C[:, q].ravel())[0]
+
+        def one_index_correlation(B, C):
+
             offdiag_S1 = ~np.eye(S - 1, dtype=bool)
-            
+
             cr1 = np.broadcast_to(B[:, :, None], (S, S - 1, S - 1))[:, offdiag_S1]
             cr2 = np.broadcast_to(C[:, None, :], (S, S - 1, S - 1))[:, offdiag_S1]
-            
-            correlation = pearsonr(cr1.ravel(), cr2.ravel())[0]
-            
-            return correlation
-            
-        self.rho_D = diagonal_correlation(self.interaction_matrix)
-        self.rho_R = row_correlation(self.interaction_matrix)
-        self.rho_C = column_correlation(self.interaction_matrix)
-        self.rho_1idx = one_index_correlation(self.interaction_matrix)
-         
-        total_interact_per_species = np.sum(inter_species_interactions, axis = 1)
-        
-        self.interaction_statistics = dict(Aii = self_inhibition,
-                                           sum_j_Aij = total_interact_per_species,
-                                           mu_Aij_tot = self.mu_Aij * \
+
+            return pearsonr(cr1.ravel(), cr2.ravel())[0]
+
+        def growth_interaction_correlation(r, B):
+
+            r_repeated = np.repeat(r, S - 1)
+
+            return pearsonr(r_repeated, B.ravel())[0]
+
+        def self_inhibition_interaction_correlation(Aii, B):
+
+            Aii_repeated = np.repeat(Aii, S - 1)
+
+            return pearsonr(Aii_repeated, B.ravel())[0]
+
+        def growth_self_inhibition_correlation(r, Aii):
+
+            return pearsonr(r, Aii)[0]
+
+        self.rho_D = diagonal_correlation(A)
+        self.rho_R = row_correlation(B, p, q)
+        self.rho_C = column_correlation(C, p, q)
+        self.rho_1idx = one_index_correlation(B, C)
+
+        self.rho_r_Aij = growth_interaction_correlation(self.r, B)
+        self.rho_Aii_Aij = self_inhibition_interaction_correlation(self_inhibition, B)
+        self.rho_r_Aii = growth_self_inhibition_correlation(self.r, self_inhibition)
+
+        ### summary statistics ###
+
+        total_interact_per_species = np.sum(inter_species_interactions, axis=1)
+
+        self.interaction_statistics = dict(Aii=self_inhibition,
+                                           sum_j_Aij=total_interact_per_species,
+                                           mu_Aij_tot=self.mu_Aij * \
                                                np.float64(self.no_species),
-                                           sigma_Aij_tot = self.sigma_Aij * \
+                                           sigma_Aij_tot=self.sigma_Aij * \
                                                np.sqrt(np.float64(self.no_species)))
                                            
     #####################################################
