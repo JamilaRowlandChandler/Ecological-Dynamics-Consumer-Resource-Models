@@ -37,11 +37,15 @@ def gLV_dynamics(eLV_community : Literal["eLV_SL"],
                  ["rho_D", "rho_R", "rho_C", "rho_1idx"]):
     
     if include_rho is not None:
-        
+
         rhos = {rho_key : getattr(eLV_community,
                                   rho_key)
                 for rho_key in include_rho}
-        
+
+        # correlations between A_ij and r, and A_ij and A_ii
+        rhos["rho_r_Aij"] = eLV_community.rho_r_Aij
+        rhos["rho_Aii_Aij"] = eLV_community.rho_Aii_Aij
+
         interaction_args = dict(mu = eLV_community.mu_Aij,
                                 sigma = eLV_community.sigma_Aij,
                                 rhos = rhos)
