@@ -24,26 +24,37 @@ os.chdir('C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Con
 
 sys.path.insert(0, "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/" + \
                     "resource_diversity_stability(sl)")
-from simulation_functions import generate_simulation_df, le_pivot_r
+from complete_simulation_functions import generate_simulation_df, le_pivot_r
 
 # %%
 
+# read_eLV_data() output columns - kept the same regardless of whether a
+# directory holds pickled community objects (eLV directories, v1) or v3 csvs
+# of pre-computed statistics (gLV directories, since gLV_M()/gLV_M_averaged()
+# switched to v3 saving - see mean_variance_test.py/averaged_stats_gLV.py)
+_READ_ELV_DATA_COLUMNS = ['M', 'mu_c', 'Max. lyapunov exponent', 'mu_Aij',
+                         'sigma_Aij', 'rho_D', 'rho_R', 'rho_C', 'rho_1idx',
+                         'corr_violate', 'mu_Aii', 'sigma_Aii', 'mu_r',
+                         'sigma_r', 'Divergence']
+
 def read_eLV_data(subdirectory):
-       
+
     directory = "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/" + \
                     subdirectory
-    
-    egLV_Ms = [pd.read_pickle(os.path.join(directory, file)) for file in os.listdir(directory)]
-    
-    egLV_df = pd.concat([pd.DataFrame({'M' : np.repeat(egLV_communities[0].no_resources,
+
+    def read_pkl(filepath):
+
+        egLV_communities = pd.read_pickle(filepath)
+
+        df = pd.DataFrame({'M' : np.repeat(egLV_communities[0].no_resources,
                                                          len(egLV_communities)),
                                        'mu_c' : np.repeat(np.round(egLV_communities[0].no_resources * egLV_communities[0].mu_c, 4),
                                                             len(egLV_communities)),
-                 'Max. lyapunov exponent' : [gLV_community.max_lyapunov_exponent 
+                 'Max. lyapunov exponent' : [gLV_community.max_lyapunov_exponent
                           for gLV_community in egLV_communities],
-                 'mu_Aij' : [gLV_community.mu_Aij 
+                 'mu_Aij' : [gLV_community.mu_Aij
                           for gLV_community in egLV_communities],
-                 'sigma_Aij' : [gLV_community.sigma_Aij 
+                 'sigma_Aij' : [gLV_community.sigma_Aij
                           for gLV_community in egLV_communities],
                  'rho_D' : [gLV_community.rho_D
                           for gLV_community in egLV_communities],
@@ -57,23 +68,42 @@ def read_eLV_data(subdirectory):
                                    if hasattr(gLV_community, "corr_violate")
                                    else False
                               for gLV_community in egLV_communities],
-                 'mu_Aii' : [gLV_community.mu_Aii 
+                 'mu_Aii' : [gLV_community.mu_Aii
                           for gLV_community in egLV_communities],
                  'sigma_Aii' : [gLV_community.sigma_Aii
                           for gLV_community in egLV_communities],
-                 'mu_r' : [gLV_community.mu_r 
+                 'mu_r' : [gLV_community.mu_r
                            if hasattr(gLV_community, "mu_r")
                            else gLV_community.r
                            for gLV_community in egLV_communities],
-                 'sigma_r' : [gLV_community.sigma_r 
+                 'sigma_r' : [gLV_community.sigma_r
                               if hasattr(gLV_community, "sigma_r")
                               else 0
                               for gLV_community in egLV_communities],
-                 'Divergence' : [gLV_community.ODE_sols[0].t[-1] 
+                 'Divergence' : [gLV_community.ODE_sols[0].t[-1]
                               for gLV_community in egLV_communities]
                  })
-                         for egLV_communities in egLV_Ms]) 
-    
+
+        return df[_READ_ELV_DATA_COLUMNS]
+
+    def read_csv(filepath):
+
+        df = pd.read_csv(filepath)
+
+        # 'M'/'mu_c' aren't stored directly by eLV_gLV_df_from_communities()
+        # (which keeps the per-resource no_resources/mu_c instead) - derive
+        # them the same way the pickled-object path above does
+        df['M'] = df['no_resources']
+        df['mu_c'] = np.round(df['no_resources'] * df['mu_c'], 4)
+
+        return df[_READ_ELV_DATA_COLUMNS]
+
+    egLV_df = pd.concat([read_csv(os.path.join(directory, file))
+                         if file.endswith('.csv')
+                         else read_pkl(os.path.join(directory, file))
+                         for file in os.listdir(directory)],
+                        axis = 0, ignore_index = True)
+
     return egLV_df
 
 # %%
@@ -170,7 +200,21 @@ def Stability_Plot(df_eLV_ar,
 # %%
 
 def population_dynamics():
-    
+
+    '''
+
+    BROKEN as of the gLV_M()/gLV_M_averaged() switch to v3 saving
+    (mean_variance_test.py/averaged_stats_gLV.py): gLV/M_vs_mu_c_drc/ now
+    holds per-file csvs of interaction statistics (simulations_*.csv), not
+    pickled community objects - chaotic_eLV/stable_eLV below will either
+    fail to find the (now .pkl-less) filenames, or if the directory is
+    regenerated, load statistics with no ODE_sols to plot trajectories
+    from. Needs either a dedicated v1 (full pickle) rerun of
+    M_vs_mu_c_drc specifically, or reworking to plot from raw eLV/CRM data
+    instead.
+
+    '''
+
     ####################### Example population dynamics ######################
     
     # M = 75 and 225, mu_c = 145

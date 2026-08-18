@@ -35,7 +35,7 @@ from community_level_properties import max_le
 
 sys.path.insert(0, "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models" + \
                     "/resource_diversity_stability(sl)")
-from simulation_functions import pickle_dump
+from complete_simulation_functions import eLV_gLV_df_from_communities
 
 # %%
 
@@ -262,9 +262,13 @@ def gLV_M_averaged(gLV_directory : str,
                                                              n,
                                                              include_rho)
 
-        # save gLV
-        pickle_dump(full_gLV_directory + "/" + filename,
-                    gLV_communities)
+        # save gLV interaction statistics as a csv (v3 method), rather than
+        # pickling the whole community objects
+        gLV_df = eLV_gLV_df_from_communities(gLV_communities)
+
+        csv_filename = os.path.splitext(filename)[0] + ".csv"
+
+        gLV_df.to_csv(full_gLV_directory + "/" + csv_filename, index = False)
 
     ###################################################################################
 
