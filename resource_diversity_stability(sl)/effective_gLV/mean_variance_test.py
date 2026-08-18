@@ -174,13 +174,13 @@ def gLV_M(gLV_directory : str,
         
 # %%
 
-gLV_directories = [# "M_vs_mu_c",
+gLV_directories = ["M_vs_mu_c",
                    "M_vs_mu_c_drc",
                    "M_vs_mu_c_dr",
                    "M_vs_mu_c_d",
                    "M_vs_mu_c_norho"]
 
-incl_rhos = [# ["rho_D", "rho_R", "rho_C", "rho_1idx"],
+incl_rhos = [["rho_D", "rho_R", "rho_C", "rho_1idx"],
              ["rho_D", "rho_R", "rho_C"],
              ["rho_D", "rho_R"],
              ["rho_D"],
@@ -212,25 +212,3 @@ for gLV_directory, include_rho in zip(gLV_directories, incl_rhos):
           gLV_directory=gLV_directory,
           include_rho=include_rho)
     
-# %%
-
-gLV_M(eLV_directory="M_vs_mu_c",
-      gLV_directory="M_vs_mu_c_norho",
-      include_rho=None)
-
-# %%
-
-gLV_M(eLV_directory = "M_vs_mu_c",
-      gLV_directory = "M_vs_mu_c")
-
-# %%
-
-gLV_M(eLV_directory = "M_vs_mu_c(all_resource)",
-      gLV_directory = "M_vs_mu_c(all_resource)")
-
-
-# %%
-
-gLV_M(eLV_directory = "M_vs_mu_c",
-      gLV_directory = "M_vs_mu_c(no_rho)",
-      include_rho = False)

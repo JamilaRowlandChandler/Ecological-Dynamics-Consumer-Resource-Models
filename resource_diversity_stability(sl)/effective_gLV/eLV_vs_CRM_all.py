@@ -125,8 +125,9 @@ def Stability_Plot(df_eLV_ar,
                         for df in [df_CRM, df_eLV_ar, df_eLV_phi_R]]
     
     titles = ["Consumer-resource model",
-              "Consumer-only model",
-              "Consumer-only model\n(inc. extinct resources)"]
+              "Consumer-only model\n(inc. extinct resources)",
+              "Reconstructed gLV\n(mean and variance in\n" + \
+                  r'$A_{ii}$' + " and " + r'$A_{ij}$' + " only"]
     
     sns.set_style('ticks')
 
@@ -152,7 +153,7 @@ def Stability_Plot(df_eLV_ar,
                              vmin = 0,
                              vmax = 1,
                              cbar = cbar,
-                             cmap = 'viridis_r')#'Purples_r')
+                             cmap = 'Purples_r') #'viridis_r')#
         
         subfig.axhline(0, 0, 1, color = 'black', linewidth = 2)
         subfig.axhline(stability_pivot.shape[0], 0, 1,
@@ -313,7 +314,7 @@ df_eLV_ar = read_eLV_data("eLV/M_vs_mu_c")
 
 # %%
 
-df_eLV_phiR = read_eLV_data("gLV/M_vs_mu_c(averaged)")
+df_eLV_phiR = read_eLV_data("gLV/M_vs_mu_c_norho(averaged)")
 
 # %%
 
