@@ -18,11 +18,13 @@ from typing import Union, Literal, TypedDict
 
 from models import SL_CRM, ES_CRM
 from parameters import ParametersInterface
-from differential_equations import DifferentialEquationsInterface_ELV
+from differential_equations import DifferentialEquationsInterface_LV
+from community_level_properties import CommunityPropertiesInterface_LV
     
 # %%
 
-class eLVMethods(DifferentialEquationsInterface_ELV):
+class eLVMethods(DifferentialEquationsInterface_LV,
+                 CommunityPropertiesInterface_LV):
    
     def suriving_resources(self,
                            CRM_community : Union["SL_CRM", "ES_CRM"],
