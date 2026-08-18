@@ -203,14 +203,14 @@ class CommunityPropertiesInterface:
 
 def max_le(community : Union["SL_CRM", "SL_SI_CRM", "SL_TL_CRM", "ES_CRM",
                              "Hybrid_CRM",
-                             "eLV_SL", "gLV"],
+                             "eLV_SL", "eLV_ES", "gLV"],
            initial_conditions : npt.NDArray,
            T : float = 100,
            perturbation : float = 1e-8):
     
     match type(community).__name__:
         
-        case glv if glv in ["eLV_SL", "gLV"]:
+        case glv if glv in ["eLV_SL", "eLV_ES", "gLV"]:
             
             original_traj, perturbed_traj = trajectory_LV(community,
                                                           initial_conditions,
@@ -324,7 +324,7 @@ def trajectory_multi_trophic(community : "SL_TL_CRM",
 
 #############
     
-def trajectory_LV(community : Union["eLV_SL", "gLV"],
+def trajectory_LV(community : Union["eLV_SL", "eLV_ES", "gLV"],
                   initial_conditions : npt.NDArray,
                   T : float,
                   perturbation : float):
