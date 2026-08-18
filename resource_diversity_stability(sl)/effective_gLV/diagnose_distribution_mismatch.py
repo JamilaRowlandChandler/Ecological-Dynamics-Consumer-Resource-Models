@@ -9,10 +9,31 @@ eLV community's r/interaction_matrix against a gLV community's, beyond just
 means and pairwise correlations (which calculate_interaction_stats() already
 covers) - distribution shape, sign, transitivity, spectrum, and fitness.
 
+Also loads an eLV community from a pickled file and generates its
+corresponding gLV community, following the same pooled-statistics approach
+as averaged_stats_gLV.py, so the two can be diagnosed directly.
+
 """
 
 import numpy as np
+import pandas as pd
+import os
+import sys
 from scipy.stats import skew, kurtosis
+from typing import Literal, Union
+
+os.chdir('C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/resource_diversity_stability(sl)/effective_gLV')
+
+sys.path.insert(0, "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models" + \
+                    "/consumer_resource_modules")
+
+# needed to import the sibling averaged_stats_gLV module below when this
+# file isn't the one being run directly (only the __main__ script's own
+# directory is added to sys.path automatically)
+sys.path.insert(0, "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models" + \
+                    "/resource_diversity_stability(sl)/effective_gLV")
+
+from averaged_stats_gLV import average_eLV_statistics, gLV_from_averaged_stats
 
 # %%
 
@@ -116,3 +137,92 @@ def diagnose_distribution_mismatch(eLV_community, gLV_community):
           f"cv={f_elv.std()/(abs(f_elv.mean())+1e-20):.4f}")
     print(f"  gLV: mean={f_glv.mean():.4f}  std={f_glv.std():.4f}  "
           f"cv={f_glv.std()/(abs(f_glv.mean())+1e-20):.4f}")
+
+# %%
+
+def load_eLV_and_generate_gLV(filepath : str,
+                              include_rho : Union[list[Literal["rho_D",
+                                                               "rho_R",
+                                                               "rho_C",
+                                                               "rho_1idx"]],
+                                                  None] =
+                              ["rho_D", "rho_R", "rho_C", "rho_1idx"]):
+
+    '''
+
+    Load all eLV communities pickled in filepath, pool their statistics, and
+    generate a single gLV community matching those pooled statistics - the
+    same pooled-statistics approach as
+    gLV_communities_from_averaged_eLV()/gLV_M_averaged() in
+    averaged_stats_gLV.py, but returning a representative eLV community
+    alongside the single generated gLV, for use with
+    diagnose_distribution_mismatch().
+
+    Parameters
+    ----------
+    filepath : str
+        Full path to a pickled file of eLV community objects.
+    include_rho : list of str, or None, optional
+        Which interaction-matrix correlations to pool and use to generate
+        correlated gLV interactions. The default is
+        ["rho_D", "rho_R", "rho_C", "rho_1idx"].
+
+    Returns
+    -------
+    eLV_community : eLV_SL or eLV_ES
+        A representative eLV community from filepath (the first one) -
+        pooled statistics are drawn from the whole file, but a single eLV
+        community is needed to compare against the single generated gLV.
+    gLV_community : gLV
+        gLV community generated from the pooled eLV statistics.
+
+    '''
+
+    eLV_communities = pd.read_pickle(filepath)
+
+    averaged_stats = average_eLV_statistics(eLV_communities, include_rho)
+
+    # assumes every eLV community in the file has the same species pool size
+    no_species = eLV_communities[0].no_species
+
+    gLV_community = gLV_from_averaged_stats(averaged_stats, no_species, include_rho)
+
+    return eLV_communities[0], gLV_community
+
+# %%
+
+def diagnose_from_file(filepath : str,
+                       include_rho : Union[list[Literal["rho_D",
+                                                        "rho_R",
+                                                        "rho_C",
+                                                        "rho_1idx"]],
+                                           None] =
+                       ["rho_D", "rho_R", "rho_C", "rho_1idx"]):
+
+    '''
+
+    Load an eLV community from filepath, generate its corresponding gLV
+    community (c.f. load_eLV_and_generate_gLV()), and diagnose the
+    distribution mismatch between the two.
+
+    Parameters
+    ----------
+    filepath : str
+        Full path to a pickled file of eLV community objects.
+    include_rho : list of str, or None, optional
+        The default is ["rho_D", "rho_R", "rho_C", "rho_1idx"].
+
+    Returns
+    -------
+    eLV_community : eLV_SL or eLV_ES
+        The representative eLV community used in the comparison.
+    gLV_community : gLV
+        The gLV community generated from the pooled eLV statistics.
+
+    '''
+
+    eLV_community, gLV_community = load_eLV_and_generate_gLV(filepath, include_rho)
+
+    diagnose_distribution_mismatch(eLV_community, gLV_community)
+
+    return eLV_community, gLV_community
