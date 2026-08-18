@@ -79,6 +79,9 @@ def average_eLV_statistics(eLV_communities : list,
 
         stat_keys += list(include_rho)
 
+        # correlations between A_ij and r, and A_ij and A_ii
+        stat_keys += ["rho_r_Aij", "rho_Aii_Aij"]
+
     averaged_stats = {key : np.mean([getattr(eLV_community, key)
                                      for eLV_community in eLV_communities])
                       for key in stat_keys}
@@ -127,6 +130,10 @@ def gLV_from_averaged_stats(averaged_stats : dict,
     if include_rho is not None:
 
         rhos = {rho_key : averaged_stats[rho_key] for rho_key in include_rho}
+
+        # correlations between A_ij and r, and A_ij and A_ii
+        rhos["rho_r_Aij"] = averaged_stats["rho_r_Aij"]
+        rhos["rho_Aii_Aij"] = averaged_stats["rho_Aii_Aij"]
 
         interaction_args = dict(mu = averaged_stats["mu_Aij"],
                                 sigma = averaged_stats["sigma_Aij"],
@@ -289,36 +296,40 @@ def gLV_M_averaged(gLV_directory : str,
 
 # %%
 
-# example usage, mirroring the directory/rho sweeps in mean_variance_test.py
+# example usage, mirroring the directory/rho sweeps in mean_variance_test.py.
+# Guarded so importing this module (e.g. to reuse the functions above) never
+# re-triggers the real generation sweep - only running this file directly does.
 
-gLV_directories = ["M_vs_mu_c(averaged)",
-                   "M_vs_mu_c_drc(averaged)",
-                   "M_vs_mu_c_dr(averaged)",
-                   "M_vs_mu_c_d(averaged)",
-                   "M_vs_mu_c_norho(averaged)"]
+if __name__ == "__main__":
 
-incl_rhos = [["rho_D", "rho_R", "rho_C", "rho_1idx"],
-             ["rho_D", "rho_R", "rho_C"],
-             ["rho_D", "rho_R"],
-             ["rho_D"],
-             None]
+    gLV_directories = ["M_vs_mu_c(averaged)",
+                       "M_vs_mu_c_drc(averaged)",
+                       "M_vs_mu_c_dr(averaged)",
+                       "M_vs_mu_c_d(averaged)",
+                       "M_vs_mu_c_norho(averaged)"]
 
-for gLV_directory, include_rho in zip(gLV_directories, incl_rhos):
+    incl_rhos = [["rho_D", "rho_R", "rho_C", "rho_1idx"],
+                 ["rho_D", "rho_R", "rho_C"],
+                 ["rho_D", "rho_R"],
+                 ["rho_D"],
+                 None]
 
-     gLV_M_averaged(eLV_directory="M_vs_mu_c",
-                    gLV_directory=gLV_directory,
-                    n=100,
-                    include_rho=include_rho)
-     
-gLV_directories_ar = ["M_vs_mu_c(averaged, all_resource)",
-                      "M_vs_mu_c_drc(averaged, all_resource)",
-                      "M_vs_mu_c_dr(averaged, all_resource)",
-                      "M_vs_mu_c_d(averaged, all_resource)",
-                      "M_vs_mu_c_norho(averaged, all_resource)"]
+    for gLV_directory, include_rho in zip(gLV_directories, incl_rhos):
 
-for gLV_directory, include_rho in zip(gLV_directories_ar, incl_rhos):
+         gLV_M_averaged(eLV_directory="M_vs_mu_c",
+                        gLV_directory=gLV_directory,
+                        n=100,
+                        include_rho=include_rho)
 
-     gLV_M_averaged(eLV_directory="M_vs_mu_c(all_resource)",
-                    gLV_directory=gLV_directory,
-                    n=100,
-                    include_rho=include_rho)
+    gLV_directories_ar = ["M_vs_mu_c(averaged, all_resource)",
+                          "M_vs_mu_c_drc(averaged, all_resource)",
+                          "M_vs_mu_c_dr(averaged, all_resource)",
+                          "M_vs_mu_c_d(averaged, all_resource)",
+                          "M_vs_mu_c_norho(averaged, all_resource)"]
+
+    for gLV_directory, include_rho in zip(gLV_directories_ar, incl_rhos):
+
+         gLV_M_averaged(eLV_directory="M_vs_mu_c(all_resource)",
+                        gLV_directory=gLV_directory,
+                        n=100,
+                        include_rho=include_rho)
