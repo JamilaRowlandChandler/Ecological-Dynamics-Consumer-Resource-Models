@@ -546,12 +546,20 @@ class gLV(eLVMethods, ParametersInterface):
                                  Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
                                        TypedDict('constant', {'Aii' : float}),
                                        TypedDict('user-supplied', {'Aii' : npt.NDArray})]
-                                 = {'Aii' : 1}):
+                                 = {'Aii' : 1},
+                             empirical : bool = True):
 
         '''
 
         Generate parameters specific to the CRM with self-limiting resource
         dynamics - consumer death rates and intrinsic resource growth rates
+
+        Parameters
+        ----------
+        empirical : bool, optional
+            Only used if interaction_args['rhos'] requests cross-parameter
+            correlations (rho_r_Aij/rho_Aii_Aij) - see __correlated_rates()
+            for what this controls. The default is True.
 
         Returns
         -------
@@ -563,12 +571,11 @@ class gLV(eLVMethods, ParametersInterface):
         cross_rhos = None
         if interaction_args.get('rhos') is not None:
             cross_rhos = interaction_args['rhos'].pop('rho_r_Aij', None)
-            # pull all three out if any are present
+            # pull both out if either is present
             if cross_rhos is not None:
                 cross_rhos = {
                     'rho_r_Aij': cross_rhos,
                     'rho_Aii_Aij': interaction_args['rhos'].pop('rho_Aii_Aij', 0.0),
-                    'rho_r_Aii': interaction_args['rhos'].pop('rho_r_Aii', 0.0),
                 }
 
         # --- generate A_ij first (needed before r/Aii if cross-correlated) ---
@@ -593,7 +600,8 @@ class gLV(eLVMethods, ParametersInterface):
             # build r and Aii from row means of the already-generated Z
             self.__correlated_rates(growth_args,
                                     self_inhibition_args,
-                                    **cross_rhos)
+                                    **cross_rhos,
+                                    empirical=empirical)
         else:
 
             # no cross-parameter correlations: generate independently as before
@@ -735,36 +743,35 @@ class gLV(eLVMethods, ParametersInterface):
                            self_inhibition_args,
                            rho_r_Aij=0.0,
                            rho_Aii_Aij=0.0,
-                           rho_r_Aii=0.0,
+                           empirical=True,
                            rng=None):
         """
         Construct growth rates (r) and self-inhibition (Aii) that are
-        correlated with the off-diagonal interactions (Aij).
+        each correlated with the off-diagonal interactions (Aij), by
+        loading onto the row means of the standardised interaction
+        matrix Z.
 
-        Each parameter is built as:
+        The correlation between r and Aii is not set independently —
+        it emerges from both loading onto the same row-mean signal:
 
-            r_i   = r_mean   + sigma_r   * (beta_r   * Zbar_i + noise_r   * eta_r_i)
-            Aii_i = Aii_mean + sigma_Aii * (beta_Aii * Zbar_i + noise_Aii * eta_Aii_i)
+            corr(r_i, A_ii) = beta_r * beta_Aii
 
-        where:
-            - Zbar_i is the standardised row mean of species i's off-diagonal
-              interactions, capturing all of species i's shared signal.
-            - beta controls the loading strength onto Zbar_i, determining
-              corr(r_i, A_ij) and corr(Aii_i, A_ij) respectively.
-            - (eta_r, eta_Aii) are drawn as a correlated noise pair to
-              independently match corr(r_i, A_ii).
+        Two standardisation modes control how row means are normalised
+        and how the loading coefficients are computed:
 
-        This loads onto row means of A rather than the scalar latent lambda_i,
-        because lambda_i alone can only achieve corr(r, Aij) up to
-        sqrt(rho_R), while row means achieve sqrt(c) where
-        c = (1 + (S-2)*rho_R)/(S-1) > rho_R at finite S.
+            empirical=True  (default): uses the actual variance and
+                correlation of this realisation's row means. Guarantees
+                Var(r) = sigma_r^2 exactly per realisation. Use for
+                simulations comparing to specific eLV instances.
+
+            empirical=False: uses the theoretical expected variance
+                c = (1 + (S-2)*rho_R)/(S-1). Var(r) = sigma_r^2 on
+                average across realisations, but can fluctuate for any
+                individual one. Use for analytical predictions (cavity
+                method, random matrix theory).
 
         Must be called AFTER __correlated_interactions, which stores
         self._Z and self._rho_R.
-
-        If any cross-parameter feasibility constraints are violated,
-        self.corr_violate is set to True but generation proceeds anyway
-        with clipped loading coefficients.
 
         Parameters
         ----------
@@ -776,25 +783,14 @@ class gLV(eLVMethods, ParametersInterface):
             Target corr(r_i, A_ij) for j != i.
         rho_Aii_Aij : float
             Target corr(A_ii, A_ij) for j != i.
-        rho_r_Aii : float
-            Target corr(r_i, A_ii).
+        empirical : bool
+            If True, standardise row means using their realised variance.
+            If False, use the theoretical expected variance.
         rng : numpy.random.Generator, optional
             Random number generator for reproducibility.
         """
         rng = np.random.default_rng() if rng is None else rng
         S = self.no_species
-
-        # --- floor each rho at 0 ---
-
-        rho_r_Aij = max(rho_r_Aij, 0.0)
-        rho_Aii_Aij = max(rho_Aii_Aij, 0.0)
-        rho_r_Aii = max(rho_r_Aii, 0.0)
-
-        # --- tolerance ---
-        # Matches the tol=0.05 used in __feasibility_reason, so that
-        # targets allowed through the within-A check aren't flagged
-        # by a tighter threshold here.
-
         tol = 0.05
 
         # --- extract moment targets ---
@@ -804,86 +800,80 @@ class gLV(eLVMethods, ParametersInterface):
         Aii_mean = self_inhibition_args.get('Aii', self_inhibition_args.get('mu', 1.0))
         sigma_Aii = self_inhibition_args.get('sigma', 0.0)
 
-        # --- compute row means of standardised Z ---
-        # Zbar_i = mean of off-diagonal entries in row i of Z.
-        # This is a denoised summary of species i's interaction profile:
-        # averaging over S-1 entries cancels idiosyncratic kappa_j and w_ij
-        # noise while preserving the species-level signal lambda_i.
+        # =====================================================
+        # Shared signal: row means of standardised Z
+        # =====================================================
 
         Z = self._Z
         rho_R = self._rho_R
+        mask = ~np.eye(S, dtype=bool)
 
         Z_offdiag = Z.copy()
         np.fill_diagonal(Z_offdiag, 0)
         row_means = Z_offdiag.sum(axis=1) / (S - 1)
 
-        # --- standardise row means ---
-        # Theoretical variance of Zbar_i:
-        #   c = (1 + (S-2)*rho_R) / (S-1)
-        # This is rho_R plus a finite-S correction term (1-rho_R)/(S-1)
-        # that vanishes as S -> inf.
+        # =====================================================
+        # Standardisation and conversion factor
+        # =====================================================
+        # row_means_unit: row means scaled to unit variance.
+        # corr_factor: corr(Zbar_i, Z_ij) — converts a loading
+        #   on row means into the resulting corr with individual entries.
+        #
+        # Empirical: both computed from the realised Z.
+        # Theoretical: both computed from rho_R and S alone.
 
-        c = (1 + (S - 2) * rho_R) / (S - 1)
-        row_means_unit = row_means / np.sqrt(max(c, 1e-20))
+        if empirical:
 
-        # --- compute loading coefficients ---
-        # corr(r_i, A_ij) = beta_r * sqrt(c), so beta_r = rho_r_Aij / sqrt(c).
-        # Feasibility requires beta^2 <= 1, i.e. |rho_target| <= sqrt(c).
-        # If violated by more than tol, log it. Clip to [-1, 1] regardless.
+            rm_std = row_means.std()
+            row_means_unit = ((row_means - row_means.mean())
+                              / (rm_std + 1e-20))
 
-        beta_r = rho_r_Aij / np.sqrt(c) if c > 0 else 0.0
-        beta_Aii = rho_Aii_Aij / np.sqrt(c) if c > 0 else 0.0
+            rm_repeated = np.repeat(row_means, S - 1)
+            corr_factor = np.corrcoef(rm_repeated, Z[mask])[0, 1]
 
-        if beta_r**2 > 1 + tol or beta_Aii**2 > 1 + tol:
+        else:
+
+            c = (1 + (S - 2) * rho_R) / (S - 1)
+            row_means_unit = row_means / np.sqrt(max(c, 1e-20))
+            corr_factor = np.sqrt(max(c, 1e-20))
+
+        # =====================================================
+        # Loading r onto row means
+        # =====================================================
+        # corr(r_i, A_ij) = beta_r * corr_factor
+        # so beta_r = rho_r_Aij / corr_factor
+
+        beta_r = rho_r_Aij / corr_factor if abs(corr_factor) > 1e-12 else 0.0
+
+        if beta_r**2 > 1 + tol:
             self.corr_violate = True
 
         beta_r = np.clip(beta_r, -1, 1)
-        beta_Aii = np.clip(beta_Aii, -1, 1)
-
         noise_r_std = np.sqrt(max(1 - beta_r**2, 0))
-        noise_Aii_std = np.sqrt(max(1 - beta_Aii**2, 0))
-
-        # --- solve for residual noise correlation ---
-        # corr(r, Aii) gets two contributions:
-        #   (1) shared loading on Zbar:  beta_r * beta_Aii
-        #   (2) correlated noise:        noise_r_std * noise_Aii_std * rho_noise
-        #
-        # Setting these equal to the target rho_r_Aii and solving:
-
-        implied = beta_r * beta_Aii
-        residual = rho_r_Aii - implied
-
-        if noise_r_std * noise_Aii_std > 1e-12:
-            rho_noise = residual / (noise_r_std * noise_Aii_std)
-
-            if abs(rho_noise) > 1 + tol:
-                self.corr_violate = True
-
-            rho_noise = np.clip(rho_noise, -1, 1)
-        else:
-            # one or both loadings are ~1, leaving no noise to correlate.
-            # corr(r, Aii) is fully determined by the loadings alone.
-            rho_noise = 0.0
-
-        # --- draw correlated noise ---
-
-        cov_noise = np.array([[1.0, rho_noise],
-                               [rho_noise, 1.0]])
-        L_noise = self.__psd_sqrt(cov_noise)
-
-        eta = rng.standard_normal((S, 2)) @ L_noise.T
-        eta_r = eta[:, 0]
-        eta_Aii = eta[:, 1]
-
-        # --- assemble r and Aii ---
-        # Each is: mean + sigma * (signal + noise), where signal and noise
-        # are constructed to have unit combined variance, preserving the
-        # target mean and standard deviation exactly (up to finite-S noise).
 
         self.r = r_mean + sigma_r * (beta_r * row_means_unit
-                                      + noise_r_std * eta_r)
+                                      + noise_r_std * rng.standard_normal(S))
+
+        # =====================================================
+        # Loading Aii onto row means
+        # =====================================================
+        # corr(A_ii, A_ij) = beta_Aii * corr_factor
+        # so beta_Aii = rho_Aii_Aij / corr_factor
+
+        beta_Aii = rho_Aii_Aij / corr_factor if abs(corr_factor) > 1e-12 else 0.0
+
+        if beta_Aii**2 > 1 + tol:
+            self.corr_violate = True
+
+        beta_Aii = np.clip(beta_Aii, -1, 1)
+        noise_Aii_std = np.sqrt(max(1 - beta_Aii**2, 0))
+
         self.Aii = Aii_mean + sigma_Aii * (beta_Aii * row_means_unit
-                                           + noise_Aii_std * eta_Aii)
+                                           + noise_Aii_std * rng.standard_normal(S))
+
+        # The implied corr(r, Aii) = beta_r * beta_Aii, which emerges
+        # naturally from both loading on the same signal. No additional
+        # correlation is imposed.
 
         # --- clean up temporary storage ---
 
