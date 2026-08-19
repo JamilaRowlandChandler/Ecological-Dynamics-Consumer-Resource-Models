@@ -168,9 +168,9 @@ def load_eLV_and_generate_gLV(filepath : str,
         correlated gLV interactions. The default is
         ["rho_D", "rho_R", "rho_C", "rho_1idx"].
     empirical : bool, optional
-        Only used when rho_r_Aij/rho_Aii_Aij are requested (i.e. include_rho
-        is not None) - see gLV.__correlated_rates() in effective_LV_models.py
-        for what this controls. The default is True.
+        Only used when include_rho is not None - see
+        gLV.__correlated_interactions()/__correlated_rates() in
+        effective_LV_models.py for what this controls. The default is True.
 
     Returns
     -------
@@ -219,9 +219,9 @@ def diagnose_from_file(filepath : str,
     include_rho : list of str, or None, optional
         The default is ["rho_D", "rho_R", "rho_C", "rho_1idx"].
     empirical : bool, optional
-        Only used when rho_r_Aij/rho_Aii_Aij are requested (i.e. include_rho
-        is not None) - see gLV.__correlated_rates() in effective_LV_models.py
-        for what this controls. The default is True.
+        Only used when include_rho is not None - see
+        gLV.__correlated_interactions()/__correlated_rates() in
+        effective_LV_models.py for what this controls. The default is True.
 
     Returns
     -------

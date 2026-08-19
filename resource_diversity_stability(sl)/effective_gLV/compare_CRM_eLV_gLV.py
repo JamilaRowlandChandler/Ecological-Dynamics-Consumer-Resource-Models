@@ -65,8 +65,9 @@ def gLV_from_eLV(eLV_community,
         Which interaction-matrix correlations to use to generate correlated
         gLV interactions. The default is ["rho_D", "rho_R", "rho_C", "rho_1idx"].
     empirical : bool, optional
-        Only used when include_rho is not None - see gLV.__correlated_rates()
-        in effective_LV_models.py for what this controls. The default is True.
+        Only used when include_rho is not None - see
+        gLV.__correlated_interactions()/__correlated_rates() in
+        effective_LV_models.py for what this controls. The default is True.
     t_end : float, optional
         Simulation end time. The default is 7000.
     no_init_cond : int, optional
@@ -165,8 +166,9 @@ def compare_CRM_eLV_gLV(CRM_filepath : str,
         Which interaction-matrix correlations to use to generate correlated
         gLV interactions. The default is ["rho_D", "rho_R", "rho_C", "rho_1idx"].
     empirical : bool, optional
-        Only used when include_rho is not None - see gLV.__correlated_rates()
-        in effective_LV_models.py for what this controls. The default is True.
+        Only used when include_rho is not None - see
+        gLV.__correlated_interactions()/__correlated_rates() in
+        effective_LV_models.py for what this controls. The default is True.
 
     Returns
     -------
