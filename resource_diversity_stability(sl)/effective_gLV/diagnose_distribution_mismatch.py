@@ -146,7 +146,8 @@ def load_eLV_and_generate_gLV(filepath : str,
                                                                "rho_C",
                                                                "rho_1idx"]],
                                                   None] =
-                              ["rho_D", "rho_R", "rho_C", "rho_1idx"]):
+                              ["rho_D", "rho_R", "rho_C", "rho_1idx"],
+                              empirical : bool = True):
 
     '''
 
@@ -166,6 +167,10 @@ def load_eLV_and_generate_gLV(filepath : str,
         Which interaction-matrix correlations to pool and use to generate
         correlated gLV interactions. The default is
         ["rho_D", "rho_R", "rho_C", "rho_1idx"].
+    empirical : bool, optional
+        Only used when rho_r_Aij/rho_Aii_Aij are requested (i.e. include_rho
+        is not None) - see gLV.__correlated_rates() in effective_LV_models.py
+        for what this controls. The default is True.
 
     Returns
     -------
@@ -185,7 +190,8 @@ def load_eLV_and_generate_gLV(filepath : str,
     # assumes every eLV community in the file has the same species pool size
     no_species = eLV_communities[0].no_species
 
-    gLV_community = gLV_from_averaged_stats(averaged_stats, no_species, include_rho)
+    gLV_community = gLV_from_averaged_stats(averaged_stats, no_species, include_rho,
+                                            empirical)
 
     return eLV_communities[0], gLV_community
 
@@ -197,7 +203,8 @@ def diagnose_from_file(filepath : str,
                                                         "rho_C",
                                                         "rho_1idx"]],
                                            None] =
-                       ["rho_D", "rho_R", "rho_C", "rho_1idx"]):
+                       ["rho_D", "rho_R", "rho_C", "rho_1idx"],
+                       empirical : bool = True):
 
     '''
 
@@ -211,6 +218,10 @@ def diagnose_from_file(filepath : str,
         Full path to a pickled file of eLV community objects.
     include_rho : list of str, or None, optional
         The default is ["rho_D", "rho_R", "rho_C", "rho_1idx"].
+    empirical : bool, optional
+        Only used when rho_r_Aij/rho_Aii_Aij are requested (i.e. include_rho
+        is not None) - see gLV.__correlated_rates() in effective_LV_models.py
+        for what this controls. The default is True.
 
     Returns
     -------
@@ -221,7 +232,8 @@ def diagnose_from_file(filepath : str,
 
     '''
 
-    eLV_community, gLV_community = load_eLV_and_generate_gLV(filepath, include_rho)
+    eLV_community, gLV_community = load_eLV_and_generate_gLV(filepath, include_rho,
+                                                              empirical)
 
     diagnose_distribution_mismatch(eLV_community, gLV_community)
 

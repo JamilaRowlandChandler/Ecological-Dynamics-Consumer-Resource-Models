@@ -103,7 +103,8 @@ def gLV_from_averaged_stats(averaged_stats : dict,
                                                              "rho_C",
                                                              "rho_1idx"]],
                                                 None] =
-                            ["rho_D", "rho_R", "rho_C", "rho_1idx"]):
+                            ["rho_D", "rho_R", "rho_C", "rho_1idx"],
+                            empirical : bool = True):
 
     '''
 
@@ -119,6 +120,10 @@ def gLV_from_averaged_stats(averaged_stats : dict,
     include_rho : list of str, or None, optional
         Which interaction-matrix correlations to use to generate correlated
         gLV interactions. The default is ["rho_D", "rho_R", "rho_C", "rho_1idx"].
+    empirical : bool, optional
+        Only used when rho_r_Aij/rho_Aii_Aij are requested (i.e. include_rho
+        is not None) - see gLV.__correlated_rates() in effective_LV_models.py
+        for what this controls. The default is True.
 
     Returns
     -------
@@ -152,7 +157,8 @@ def gLV_from_averaged_stats(averaged_stats : dict,
                                        interaction_args=interaction_args,
                                        self_inhibition_method='normal',
                                        self_inhibition_args=dict(mu = averaged_stats["mu_Aii"],
-                                                                 sigma = averaged_stats["sigma_Aii"]))
+                                                                 sigma = averaged_stats["sigma_Aii"]),
+                                       empirical=empirical)
 
     gLV_community.calculate_interaction_stats()
 
