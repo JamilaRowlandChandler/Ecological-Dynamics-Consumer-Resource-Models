@@ -557,9 +557,13 @@ class gLV(eLVMethods, ParametersInterface):
         Parameters
         ----------
         empirical : bool, optional
-            Only used if interaction_args['rhos'] requests cross-parameter
-            correlations (rho_r_Aij/rho_Aii_Aij) - see __correlated_rates()
-            for what this controls. The default is True.
+            Only used if interaction_args['rhos'] requests correlated
+            interactions. Standardises the interaction matrix (and, if
+            cross-parameter correlations rho_r_Aij/rho_Aii_Aij are also
+            requested, the row means used to build r/Aii) to their realised
+            mean/variance per realisation, rather than their theoretical
+            expected values - see __correlated_interactions() and
+            __correlated_rates() for details. The default is True.
 
         Returns
         -------
@@ -590,7 +594,8 @@ class gLV(eLVMethods, ParametersInterface):
 
             self.__correlated_interactions(interaction_args['mu'],
                                            interaction_args['sigma'],
-                                           **interaction_args['rhos'])
+                                           **interaction_args['rhos'],
+                                           empirical=empirical)
 
         # --- generate r and Aii ---
 
@@ -625,6 +630,7 @@ class gLV(eLVMethods, ParametersInterface):
                                   rho_R=0.0,
                                   rho_C=0.0,
                                   rho_1idx=0.0,
+                                  empirical=True,
                                   rng=None):
         """
         Generate an S x S off-diagonal interaction matrix with four target
@@ -666,6 +672,12 @@ class gLV(eLVMethods, ParametersInterface):
             Column correlation, corr(A_ij, A_kj) for i != k.
         rho_1idx : float
             One-index correlation, corr(A_ij, A_ki).
+        empirical : bool
+            If True, standardise Z's off-diagonal entries to have exactly
+            mean 0 and variance 1 before applying mu + sigma * Z. This
+            guarantees the target sigma per realisation but makes the
+            construction data-dependent. If False, use Z as-is (unit
+            variance in expectation, can fluctuate per realisation).
         rng : numpy.random.Generator, optional
             Random number generator for reproducibility.
         """
@@ -684,26 +696,16 @@ class gLV(eLVMethods, ParametersInterface):
         self.__feasibility_reason(rho_R, rho_C, rho_1idx, rho_D)
 
         # --- species-level latent traits (Eq. 4) ---
-        # (lambda_i, kappa_i) for each species i, drawn from a bivariate
-        # Gaussian with covariance [[rho_R, rho_1idx], [rho_1idx, rho_C]].
-        # lambda_i drives row i (species i's effect on others).
-        # kappa_i drives column i (others' effect on species i).
-        # Their cross-correlation generates rho_1idx.
 
         cov_species = np.array([[rho_R, rho_1idx],
                                  [rho_1idx, rho_C]])
         L_species = self.__psd_sqrt(cov_species)
 
         species_traits = rng.standard_normal((S, 2)) @ L_species.T
-        lam = species_traits[:, 0]  # row latent
-        kap = species_traits[:, 1]  # column latent
+        lam = species_traits[:, 0]
+        kap = species_traits[:, 1]
 
         # --- edge-level latent pairs (Eq. 5) ---
-        # (w_ij, w_ji) for each unordered pair {i,j}, drawn from a bivariate
-        # Gaussian. The residual variance (1 - rho_R - rho_C) is what remains
-        # after the species-level traits are accounted for. The residual
-        # covariance (rho_D - 2*rho_1idx) encodes the reciprocal correlation
-        # not already implied by the species traits.
 
         resid_var = 1 - rho_R - rho_C
         resid_cov = rho_D - 2 * rho_1idx
@@ -716,19 +718,33 @@ class gLV(eLVMethods, ParametersInterface):
         edge_pairs = rng.standard_normal((iu.size, 2)) @ L_edge.T
 
         W = np.zeros((S, S))
-        W[iu, ju] = edge_pairs[:, 0]  # w_ij
-        W[ju, iu] = edge_pairs[:, 1]  # w_ji (correlated with w_ij)
+        W[iu, ju] = edge_pairs[:, 0]
+        W[ju, iu] = edge_pairs[:, 1]
 
         # --- assemble standardised matrix (Eq. 6) ---
-        # Z_ij has unit variance by construction:
-        # Var(Z_ij) = Var(lam_i) + Var(kap_j) + Var(w_ij)
-        #           = rho_R + rho_C + resid_var = 1
 
         Z = lam[:, None] + kap[None, :] + W
 
+        # --- empirical standardisation of Z ---
+        # At finite S, the off-diagonal entries of Z can have
+        # empirical variance != 1.0, because each latent component
+        # (lam, kap, W) has only S or S(S-1)/2 independent draws.
+        # When this variance overshoots, sigma * Z inflates the
+        # effective interaction strength, widening the row-sum
+        # distribution and reducing diversity.
+        #
+        # Rescaling all off-diagonal entries by a single scalar
+        # preserves all four within-A correlations exactly (they
+        # are ratios of covariances, and uniform scaling cancels).
+
+        if empirical:
+            mask = ~np.eye(S, dtype=bool)
+            Z_offdiag = Z[mask]
+            Z_mean = Z_offdiag.mean()
+            Z_std = Z_offdiag.std()
+            Z = (Z - Z_mean) / (Z_std + 1e-20)
+
         # --- store for cross-parameter correlations ---
-        # __correlated_rates needs the standardised Z and rho_R to compute
-        # row-mean loadings. These are deleted after use.
 
         self._Z = Z
         self._rho_R = rho_R

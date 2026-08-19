@@ -187,7 +187,8 @@ def gLV_communities_from_averaged_eLV(eLV_communities : list,
                                                                        "rho_C",
                                                                        "rho_1idx"]],
                                                           None] =
-                                      ["rho_D", "rho_R", "rho_C", "rho_1idx"]):
+                                      ["rho_D", "rho_R", "rho_C", "rho_1idx"],
+                                      empirical : bool = True):
 
     '''
 
@@ -202,6 +203,10 @@ def gLV_communities_from_averaged_eLV(eLV_communities : list,
         Number of gLV communities to generate from the averaged statistics.
     include_rho : list of str, or None, optional
         The default is ["rho_D", "rho_R", "rho_C", "rho_1idx"].
+    empirical : bool, optional
+        Only used when include_rho is not None - see gLV.__correlated_interactions()/
+        __correlated_rates() in effective_LV_models.py for what this
+        controls. The default is True.
 
     Returns
     -------
@@ -215,7 +220,8 @@ def gLV_communities_from_averaged_eLV(eLV_communities : list,
     # assumes every eLV community in the file has the same species pool size
     no_species = eLV_communities[0].no_species
 
-    return [gLV_from_averaged_stats(averaged_stats, no_species, include_rho)
+    return [gLV_from_averaged_stats(averaged_stats, no_species, include_rho,
+                                    empirical)
             for _ in tqdm(range(n), leave = False, position = 0, total = n)]
 
 # %%
@@ -228,7 +234,8 @@ def gLV_M_averaged(gLV_directory : str,
                                                     "rho_C",
                                                     "rho_1idx"]],
                                        None] =
-                   ["rho_D", "rho_R", "rho_C", "rho_1idx"]):
+                   ["rho_D", "rho_R", "rho_C", "rho_1idx"],
+                   empirical : bool = True):
 
     '''
 
@@ -247,6 +254,10 @@ def gLV_M_averaged(gLV_directory : str,
         distribution).
     include_rho : list of str, or None, optional
         The default is ["rho_D", "rho_R", "rho_C", "rho_1idx"].
+    empirical : bool, optional
+        Only used when include_rho is not None - see gLV.__correlated_interactions()/
+        __correlated_rates() in effective_LV_models.py for what this
+        controls. The default is True.
 
     Returns
     -------
@@ -266,7 +277,8 @@ def gLV_M_averaged(gLV_directory : str,
         # pool eLV statistics, generate n gLVs from the averaged distribution
         gLV_communities = gLV_communities_from_averaged_eLV(eLV_communities,
                                                              n,
-                                                             include_rho)
+                                                             include_rho,
+                                                             empirical)
 
         # save gLV interaction statistics as a csv (v3 method), rather than
         # pickling the whole community objects

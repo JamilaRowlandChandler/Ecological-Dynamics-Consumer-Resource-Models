@@ -34,8 +34,9 @@ def gLV_dynamics(eLV_community : Literal["eLV_SL"],
                                                   "rho_C",
                                                   "rho_1dix"]],
                                      None] =
-                 ["rho_D", "rho_R", "rho_C", "rho_1idx"]):
-    
+                 ["rho_D", "rho_R", "rho_C", "rho_1idx"],
+                 empirical : bool = True):
+
     if include_rho is not None:
 
         rhos = {rho_key : getattr(eLV_community,
@@ -49,12 +50,12 @@ def gLV_dynamics(eLV_community : Literal["eLV_SL"],
         interaction_args = dict(mu = eLV_community.mu_Aij,
                                 sigma = eLV_community.sigma_Aij,
                                 rhos = rhos)
-        
+
     else:
-        
+
         interaction_args = dict(mu = eLV_community.mu_Aij,
                                 sigma = eLV_community.sigma_Aij)
-        
+
     gLV_community = gLV(eLV_community.no_species)
     gLV_community.model_specific_rates(growth_method='normal',
                                        growth_args=dict(mu = eLV_community.mu_r,
@@ -63,7 +64,8 @@ def gLV_dynamics(eLV_community : Literal["eLV_SL"],
                                        interaction_args=interaction_args,
                                        self_inhibition_method='normal',
                                        self_inhibition_args=dict(mu = eLV_community.mu_Aii,
-                                                                 sigma = eLV_community.sigma_Aii))
+                                                                 sigma = eLV_community.sigma_Aii),
+                                       empirical=empirical)
     
     gLV_community.calculate_interaction_stats()
     
@@ -92,10 +94,11 @@ def gLV_M(gLV_directory : str,
                                            "rho_C",
                                            "rho_1dix"]],
                               None] =
-          ["rho_D", "rho_R", "rho_C", "rho_1idx"]):
-    
+          ["rho_D", "rho_R", "rho_C", "rho_1idx"],
+          empirical : bool = True):
+
     '''
-    
+
     ...
 
     Parameters
@@ -108,6 +111,10 @@ def gLV_M(gLV_directory : str,
         File directory to save elVs in. The default is "eLV/M_vs_mu_c".
     all_resource_survive : bool, optional
         Do we assume all resources survive or not. The default is False.
+    empirical : bool, optional
+        Only used when include_rho is not None - see gLV.__correlated_interactions()/
+        __correlated_rates() in effective_LV_models.py for what this
+        controls. The default is True.
 
     Returns
     -------
@@ -120,14 +127,15 @@ def gLV_M(gLV_directory : str,
                       full_gLV_directory : str,
                       filename : str,
                       include_rho : bool):
-        
+
         # read in eLV communities
         eLV_communities = pd.read_pickle(full_eLV_directory + "/" + filename)
-        
+
         # generate gLV from eLV communities, run simulations
         gLV_communities = [gLV_dynamics(eLV_community,
-                                        include_rho) 
-                            for eLV_community in 
+                                        include_rho,
+                                        empirical)
+                            for eLV_community in
                             tqdm(eLV_communities,
                                  leave = False,
                                  position = 0,
