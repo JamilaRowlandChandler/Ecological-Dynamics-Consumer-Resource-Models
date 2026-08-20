@@ -183,13 +183,146 @@ class eLVMethods(DifferentialEquationsInterface_LV,
             
         return solve_ivp(LV_dynamics,
                          [0, t_end],
-                         initial_abundances, 
+                         initial_abundances,
                          args = (self.r, self.interaction_matrix),
                          method = 'LSODA',
                          rtol = 1e-7, atol = 1e-9,
                          t_eval = np.linspace(0, t_end, 200),
                          jac = LV_jacobian,
                          events = unbounded_growth)
+
+    def decompose_eLV(self):
+
+        '''
+
+        Decompose the off-diagonal entries of interaction_matrix into the
+        additive components of the latent factor model:
+
+            Z_ij = lam_i + kap_j + w_ij
+
+        lam_i = mean of row i (row effect)
+        kap_j = mean of column j after removing row effects (column effect)
+        w_ij  = residual (edge-specific)
+
+        Returns
+        -------
+        grand_mean : float
+            Mean of all off-diagonal entries.
+        lam : npt.NDArray
+            Row effects, shape (no_species,).
+        kap : npt.NDArray
+            Column effects, shape (no_species,).
+        W : npt.NDArray
+            Edge-specific residuals, shape (no_species, no_species) (diagonal
+            set to 0).
+
+        '''
+
+        A = self.interaction_matrix
+        S = A.shape[0]
+        mask = ~np.eye(S, dtype=bool)
+
+        # work with off-diagonal entries only
+        A_work = A.copy()
+        grand_mean = A_work[mask].mean()
+
+        # row effects: mean of each row's off-diagonal entries
+        A_offdiag = A_work.copy()
+        np.fill_diagonal(A_offdiag, np.nan)
+        row_means = np.nanmean(A_offdiag, axis=1)
+        lam = row_means - grand_mean
+
+        # column effects: mean of each column after removing row effects
+        residual_after_row = A_work - lam[:, None] - grand_mean
+        np.fill_diagonal(residual_after_row, np.nan)
+        col_means = np.nanmean(residual_after_row, axis=0)
+        kap = col_means
+
+        # edge-specific residual
+        W = A_work - grand_mean - lam[:, None] - kap[None, :]
+        np.fill_diagonal(W, 0)
+
+        return grand_mean, lam, kap, W
+
+    def reconstruct_ablated(self,
+                            grand_mean, lam, kap, W,
+                            keep_row=True,
+                            keep_col=True,
+                            keep_residual=True,
+                            keep_r_corr=True,
+                            keep_Aii_corr=True):
+
+        '''
+
+        Reconstruct an interaction matrix (and growth-rate vector) from the
+        components returned by decompose_eLV(), selectively zeroing out
+        specific structural features of this community's own
+        interaction_matrix/r.
+
+        Zeroing a component removes ONLY that component's contribution to
+        the correlation structure, without collateral damage to others.
+
+        Parameters
+        ----------
+        grand_mean, lam, kap, W : as returned by decompose_eLV().
+        keep_row : bool, optional
+            Keep the row effect (drives rho_R). The default is True.
+        keep_col : bool, optional
+            Keep the column effect (drives rho_C). The default is True.
+        keep_residual : bool, optional
+            Keep the edge-specific residual (carries the reciprocal
+            correlation, rho_D, in its symmetric part). The default is True.
+        keep_r_corr : bool, optional
+            Keep r's correlation with the interaction matrix (if False,
+            shuffle r so any such correlation is destroyed). The default is
+            True.
+        keep_Aii_corr : bool, optional
+            Keep Aii's correlation with the interaction matrix (if False,
+            shuffle the diagonal so any such correlation is destroyed). The
+            default is True.
+
+        Returns
+        -------
+        A_new : npt.NDArray
+            Reconstructed interaction matrix.
+        r_new : npt.NDArray
+            Growth rates (this community's own r), shuffled if keep_r_corr
+            is False.
+
+        '''
+
+        S = len(lam)
+
+        # row effect
+        row_component = lam[:, None] if keep_row else np.zeros((S, 1))
+
+        # column effect
+        col_component = kap[None, :] if keep_col else np.zeros((1, S))
+
+        # residual (carries reciprocal correlation in its symmetric part)
+        edge_component = W if keep_residual else np.zeros((S, S))
+
+        # reconstruct off-diagonal
+        A_new = grand_mean + row_component + col_component + edge_component
+
+        # diagonal
+        diag = np.diagonal(self.interaction_matrix)
+
+        if keep_Aii_corr:
+            np.fill_diagonal(A_new, diag)
+        else:
+            diag_shuffled = diag.copy()
+            np.random.shuffle(diag_shuffled)
+            np.fill_diagonal(A_new, diag_shuffled)
+
+        # growth rates
+        if keep_r_corr:
+            r_new = self.r.copy()
+        else:
+            r_new = self.r.copy()
+            np.random.shuffle(r_new)
+
+        return A_new, r_new
 
 # %%
 
