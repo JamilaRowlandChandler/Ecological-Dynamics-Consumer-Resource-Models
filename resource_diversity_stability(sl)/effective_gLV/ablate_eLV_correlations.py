@@ -94,6 +94,67 @@ def _ablated_community(eLV_community, A_new, r_new, t_end, no_init_cond):
 
 # %%
 
+def _ablate_single(eLV_community,
+                   ablation : str,
+                   decomposition : Union[tuple, None] = None,
+                   t_end : float = 7000,
+                   no_init_cond : int = 1):
+
+    '''
+
+    Perform exactly one ablation on eLV_community, returning the resulting
+    (fully re-simulated/re-analysed) ablated community.
+
+    Parameters
+    ----------
+    eLV_community : eLV_SL or eLV_ES
+        Must already have interaction_matrix/r set.
+    ablation : str
+        One of _ALL_ABLATIONS (rho_R, rho_C, rho_D, rho_r_Aij, rho_Aii_Aij,
+        mu_r, mu_Aij, sigma_r, sigma_Aij, sigma_Aii).
+    decomposition : tuple, optional
+        Precomputed (grand_mean, lam, kap, W) from
+        eLV_community.decompose_eLV(), to avoid recomputing it when
+        ablating several correlations from the same community in a loop
+        (see ablate_eLV_correlations()). Only used for correlation
+        ablations; ignored (and unnecessary) for moment ablations. If None
+        and ablation is a correlation, decompose_eLV() is called here.
+    t_end : float, optional
+        Simulation end time. The default is 7000.
+    no_init_cond : int, optional
+        Number of initial abundances dynamics are simulated from. The
+        default is 1.
+
+    Returns
+    -------
+    community : eLV_SL or eLV_ES
+        The ablated community.
+
+    '''
+
+    if ablation in _CORRELATION_ABLATIONS:
+
+        if decomposition is None:
+
+            decomposition = eLV_community.decompose_eLV()
+
+        grand_mean, lam, kap, W = decomposition
+
+        A_new, r_new = eLV_community.reconstruct_ablated(grand_mean, lam, kap, W,
+                                                          **_CORRELATION_ABLATIONS[ablation])
+
+    elif ablation in _MOMENT_ABLATIONS:
+
+        A_new, r_new = eLV_community.ablate_moments(**_MOMENT_ABLATIONS[ablation])
+
+    else:
+
+        raise ValueError(f"Unknown ablation '{ablation}'. Must be one of {_ALL_ABLATIONS}.")
+
+    return _ablated_community(eLV_community, A_new, r_new, t_end, no_init_cond)
+
+# %%
+
 def ablate_eLV_correlations(eLV_community,
                             t_end : float = 7000,
                             no_init_cond : int = 1,
@@ -109,6 +170,9 @@ def ablate_eLV_correlations(eLV_community,
     via decompose_eLV()/reconstruct_ablated(). Moments (mu_r, mu_Aij,
     sigma_r, sigma_Aij, sigma_Aii) are removed via ablate_moments() - see
     both for what "removed" means for each.
+
+    For a single ablation type at a time (e.g. to parallelise across
+    ablation types), use _ablate_single() instead.
 
     Parameters
     ----------
@@ -138,26 +202,11 @@ def ablate_eLV_correlations(eLV_community,
 
         np.random.seed(seed)
 
-    grand_mean, lam, kap, W = eLV_community.decompose_eLV()
+    decomposition = eLV_community.decompose_eLV()
 
-    ablated = {}
-
-    for label, kwargs in _CORRELATION_ABLATIONS.items():
-
-        A_new, r_new = eLV_community.reconstruct_ablated(grand_mean, lam, kap, W,
-                                                          **kwargs)
-
-        ablated[label] = _ablated_community(eLV_community, A_new, r_new,
-                                            t_end, no_init_cond)
-
-    for label, kwargs in _MOMENT_ABLATIONS.items():
-
-        A_new, r_new = eLV_community.ablate_moments(**kwargs)
-
-        ablated[label] = _ablated_community(eLV_community, A_new, r_new,
-                                            t_end, no_init_cond)
-
-    return ablated
+    return {label : _ablate_single(eLV_community, label, decomposition,
+                                   t_end, no_init_cond)
+           for label in _ALL_ABLATIONS}
 
 # %%
 
@@ -274,6 +323,7 @@ def _build_eLV_from_CRM(CRM_community, sces):
 
 def ablate_eLV_directory(source_directory : str,
                          output_directory : str,
+                         ablation : str,
                          source_type : Literal['CRM', 'eLV'] = 'eLV',
                          cavity_phi_R : bool = False,
                          t_end : float = 7000,
@@ -284,29 +334,29 @@ def ablate_eLV_directory(source_directory : str,
 
     For every file in source_directory (a pickled list of CRM or eLV
     community objects - one file per parameter combination, typically
-    several replicate communities each), individually ablate each of the
-    ten correlations/moments (see ablate_eLV_correlations()) for every
-    community in the file, then save each ablation type's resulting
-    communities as an interaction-statistics csv (v3 method,
-    eLV_gLV_df_from_communities() in complete_simulation_functions.py) to
-    its own subdirectory of output_directory, named after the ablated
-    component - e.g. ablating rho_D saves to output_directory/rho_D/, with
-    one csv per source file (same filename, .csv extension).
+    several replicate communities each), read in the communities (building
+    the eLV first if source_type='CRM'), perform exactly ONE ablation
+    (`ablation`) on every community, and save the results as an
+    interaction-statistics csv (v3 method, eLV_gLV_df_from_communities() in
+    complete_simulation_functions.py) to output_directory/<ablation>/,
+    with one csv per source file (same filename, .csv extension).
 
-    Note: this re-simulates every community ten times over (once per
-    ablation), so runtime scales as
-    (files x communities per file x 10 x simulation cost) - expect this to
-    take a long time for large directories/species pools. Consider testing
-    on a single small file first.
+    This runs a single ablation type across the whole directory - call it
+    once per label in _ALL_ABLATIONS (in separate processes, if desired) to
+    parallelise across ablation types, rather than looping over all ten
+    within one call.
 
     Parameters
     ----------
     source_directory : str
         Full path to a directory of pickled CRM or eLV community lists.
     output_directory : str
-        Full path to a directory to save the ablated results in. One
-        subdirectory is created per ablation label (see _ALL_ABLATIONS),
-        each holding one csv per source file.
+        Full path to a directory to save the ablated results in. Results go
+        in output_directory/<ablation>/, one csv per source file.
+    ablation : str
+        Which single ablation to perform on every community - one of
+        _ALL_ABLATIONS (rho_R, rho_C, rho_D, rho_r_Aij, rho_Aii_Aij, mu_r,
+        mu_Aij, sigma_r, sigma_Aij, sigma_Aii).
     source_type : str, optional
         'CRM' - build the eLV from each CRM community first (via
             eLV_from_CRM_dynamics()).
@@ -319,7 +369,16 @@ def ablate_eLV_directory(source_directory : str,
         source_directory's own top-level name (same convention as
         decompose_and_ablate_CRM()). The default is False (all resources
         assumed to survive).
-    t_end, no_init_cond, seed : see ablate_eLV_correlations().
+    t_end : float, optional
+        Simulation end time for each ablated community. The default is 7000.
+    no_init_cond : int, optional
+        Number of initial abundances dynamics are simulated from. The
+        default is 1.
+    seed : int, optional
+        Seed for the row/diagonal shuffles reconstruct_ablated() uses when
+        ablation is rho_r_Aij/rho_Aii_Aij, for reproducibility. Not used by
+        any other ablation (they involve no randomness). The default is
+        None.
 
     Returns
     -------
@@ -327,17 +386,19 @@ def ablate_eLV_directory(source_directory : str,
 
     '''
 
-    if not os.path.exists(output_directory):
+    if ablation not in _ALL_ABLATIONS:
 
-        os.makedirs(output_directory)
+        raise ValueError(f"Unknown ablation '{ablation}'. Must be one of {_ALL_ABLATIONS}.")
 
-    for label in _ALL_ABLATIONS:
+    ablation_directory = os.path.join(output_directory, ablation)
 
-        ablation_directory = os.path.join(output_directory, label)
+    if not os.path.exists(ablation_directory):
 
-        if not os.path.exists(ablation_directory):
+        os.makedirs(ablation_directory)
 
-            os.makedirs(ablation_directory)
+    if seed is not None:
+
+        np.random.seed(seed)
 
     sces = _load_sces(source_directory) if (source_type == 'CRM' and cavity_phi_R is True) else None
 
@@ -359,29 +420,21 @@ def ablate_eLV_directory(source_directory : str,
 
             eLV_communities = source_communities
 
-        # ablate every community in this file, grouped by ablation label
-        per_label_communities = {label : [] for label in _ALL_ABLATIONS}
+        # perform the one requested ablation on every community in this file
+        ablated_communities = [_ablate_single(eLV_community, ablation,
+                                              t_end = t_end, no_init_cond = no_init_cond)
+                               for eLV_community in tqdm(eLV_communities,
+                                                        leave = False,
+                                                        position = 1,
+                                                        total = len(eLV_communities))]
 
-        for eLV_community in tqdm(eLV_communities,
-                                  leave = False,
-                                  position = 1,
-                                  total = len(eLV_communities)):
+        # save the results (v3 method: interaction-stats csv)
+        df = eLV_gLV_df_from_communities(ablated_communities)
 
-            ablated = ablate_eLV_correlations(eLV_community, t_end, no_init_cond, seed)
-
-            for label, community in ablated.items():
-
-                per_label_communities[label].append(community)
-
-        # save each ablation type's results (v3 method: interaction-stats csv)
         csv_filename = os.path.splitext(filename)[0] + ".csv"
 
-        for label, communities in per_label_communities.items():
-
-            df = eLV_gLV_df_from_communities(communities)
-
-            df.to_csv(os.path.join(output_directory, label, csv_filename),
-                     index = False)
+        df.to_csv(os.path.join(ablation_directory, csv_filename),
+                 index = False)
 
 # %%
 
@@ -400,8 +453,13 @@ def ablate_eLV_directory(source_directory : str,
 #         print(f"no {label}: species_survival_fraction={community.species_survival_fraction[0]:.4f}  "
 #               f"max_lyapunov_exponent={community.max_lyapunov_exponent:.4f}")
 #
-#     ablate_eLV_directory(
-#         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV/M_vs_mu_c",
-#         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV_ablations/M_vs_mu_c",
-#         source_type='eLV',
-#         seed=0)
+#     # one call per ablation label - run these in parallel (separate
+#     # processes/jobs) if desired, since each is fully independent
+#     for ablation in _ALL_ABLATIONS:
+#
+#         ablate_eLV_directory(
+#             "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV/M_vs_mu_c",
+#             "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV_ablations/M_vs_mu_c",
+#             ablation,
+#             source_type='eLV',
+#             seed=0)
