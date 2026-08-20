@@ -324,6 +324,87 @@ class eLVMethods(DifferentialEquationsInterface_LV,
 
         return A_new, r_new
 
+    def ablate_moments(self,
+                       ablate_mu_r=False,
+                       ablate_mu_Aij=False,
+                       ablate_sigma_r=False,
+                       ablate_sigma_Aij=False,
+                       ablate_sigma_Aii=False):
+
+        '''
+
+        Ablate the mean or variance of r/A_ij/A_ii, independent of the
+        correlation ablations in reconstruct_ablated().
+
+        Ablating a mean (ablate_mu_r/ablate_mu_Aij) shifts that parameter so
+        its mean equals the community's own mean self-inhibition (mean of
+        the diagonal of interaction_matrix), while leaving its variance and
+        any correlation it carries with other parameters unchanged - this
+        is a pure additive shift, and corr(x + c, y) = corr(x, y) for any
+        constant c.
+
+        Ablating a variance (ablate_sigma_r/ablate_sigma_Aij/
+        ablate_sigma_Aii) collapses that parameter to a constant at its own
+        mean, removing all of its variance and, necessarily, any
+        correlation it carried with other parameters.
+
+        Parameters
+        ----------
+        ablate_mu_r : bool, optional
+            Shift r so mean(r) == mean(diag(interaction_matrix)). The
+            default is False.
+        ablate_mu_Aij : bool, optional
+            Shift the off-diagonal entries of interaction_matrix so their
+            mean == mean(diag(interaction_matrix)). The default is False.
+        ablate_sigma_r : bool, optional
+            Collapse r to a constant at its own mean. The default is False.
+        ablate_sigma_Aij : bool, optional
+            Collapse the off-diagonal entries of interaction_matrix to a
+            constant at their own mean. The default is False.
+        ablate_sigma_Aii : bool, optional
+            Collapse the diagonal of interaction_matrix to a constant at
+            its own mean. The default is False.
+
+        Returns
+        -------
+        A_new : npt.NDArray
+            Ablated interaction matrix.
+        r_new : npt.NDArray
+            Ablated growth rates.
+
+        '''
+
+        S = self.no_species
+        mask = ~np.eye(S, dtype=bool)
+
+        A_new = self.interaction_matrix.copy()
+        r_new = self.r.copy()
+
+        # reference point for mean ablations, taken before any ablation is
+        # applied below
+        mu_Aii = np.diagonal(A_new).mean()
+
+        # --- mean ablations (additive shift; preserves variance/correlations) ---
+
+        if ablate_mu_r:
+            r_new = r_new - r_new.mean() + mu_Aii
+
+        if ablate_mu_Aij:
+            A_new[mask] = A_new[mask] - A_new[mask].mean() + mu_Aii
+
+        # --- variance ablations (collapse to a constant, destroys all structure) ---
+
+        if ablate_sigma_r:
+            r_new = np.full(S, r_new.mean())
+
+        if ablate_sigma_Aij:
+            A_new[mask] = A_new[mask].mean()
+
+        if ablate_sigma_Aii:
+            np.fill_diagonal(A_new, np.diagonal(A_new).mean())
+
+        return A_new, r_new
+
 # %%
 
 class eLV_SL(eLVMethods, ParametersInterface):
