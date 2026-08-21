@@ -195,6 +195,26 @@ def read_all_ablations(ablation_base_directory : str,
 
 # %%
 
+def survival_fraction_pivot(df : pd.DataFrame):
+
+    '''
+
+    pivot_func for plot_ablation_heatmaps(): mean species_survival_fraction
+    (mu_c vs M), via agg_pivot().
+
+    species_survival_fraction may not be available for every dataframe -
+    the base eLV pipeline (read_pickled_eLV_directory(), eLV_M() in
+    all_mu_c_vs_M_egLV.py) never calls calculate_community_properties(), so
+    that column is all-NaN there, and agg_pivot()'s mean will silently
+    produce NaN cells (left blank by seaborn) rather than raising.
+
+    '''
+
+    return agg_pivot(df, values = 'species_survival_fraction',
+                     index = 'mu_c', columns = 'M')[0]
+
+# %%
+
 def plot_ablation_heatmaps(ablation_dfs : dict,
                            pivot_func = None,
                            cbar_label : str = "Probability(stability)",
@@ -325,4 +345,11 @@ def plot_ablation_heatmaps(ablation_dfs : dict,
 #         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV_ablations/M_vs_mu_c",
 #         eLV_directory = "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV/M_vs_mu_c")
 #
+#     # probability(stability)
 #     fig, axs = plot_ablation_heatmaps(ablation_dfs)
+#
+#     # mean species survival fraction (NaN/blank for 'original' - not
+#     # available for the base eLV pipeline, see survival_fraction_pivot())
+#     fig, axs = plot_ablation_heatmaps(ablation_dfs,
+#                                       pivot_func = survival_fraction_pivot,
+#                                       cbar_label = "Mean species survival fraction")
