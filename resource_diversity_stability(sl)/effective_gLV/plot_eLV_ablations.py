@@ -79,7 +79,69 @@ def read_ablation_directory(directory : str):
 
 # %%
 
+def read_pickled_eLV_directory(directory : str):
+
+    '''
+
+    Load every pickled file in `directory` (full eLV_SL/eLV_ES community
+    objects, e.g. as saved by eLV_M() in all_mu_c_vs_M_egLV.py - this data
+    was deliberately NOT switched to v3 csv saving, unlike the gLV/ablation
+    directories, so it needs its own reader) into a single dataframe with
+    the same M/mu_c/'Max. lyapunov exponent' columns
+    read_ablation_directory() produces, so it can be plotted alongside the
+    ablations for comparison (c.f. read_eLV_data()'s pkl branch in
+    eLV_vs_CRM_all.py, which this mirrors).
+
+    species_survival_fraction is only included if calculate_community_
+    properties() was called on these communities (not true of the base
+    eLV_M() pipeline as of writing) - falls back to NaN otherwise, rather
+    than raising.
+
+    Parameters
+    ----------
+    directory : str
+        Full path to a directory of pickled eLV community lists (e.g.
+        ".../eLV/M_vs_mu_c").
+
+    Returns
+    -------
+    df : pd.DataFrame
+        Concatenated interaction statistics across every file in directory.
+
+    '''
+
+    dfs = []
+
+    for file in os.listdir(directory):
+
+        eLV_communities = pd.read_pickle(os.path.join(directory, file))
+
+        df = pd.DataFrame({
+            'M' : [c.no_resources for c in eLV_communities],
+            'mu_c' : [np.round(c.no_resources * c.mu_c, 4) for c in eLV_communities],
+            'Max. lyapunov exponent' : [c.max_lyapunov_exponent for c in eLV_communities],
+            'mu_Aij' : [c.mu_Aij for c in eLV_communities],
+            'sigma_Aij' : [c.sigma_Aij for c in eLV_communities],
+            'mu_Aii' : [c.mu_Aii for c in eLV_communities],
+            'sigma_Aii' : [c.sigma_Aii for c in eLV_communities],
+            'mu_r' : [c.mu_r for c in eLV_communities],
+            'sigma_r' : [c.sigma_r for c in eLV_communities],
+            'rho_D' : [c.rho_D for c in eLV_communities],
+            'rho_R' : [c.rho_R for c in eLV_communities],
+            'rho_C' : [c.rho_C for c in eLV_communities],
+            'rho_1idx' : [c.rho_1idx for c in eLV_communities],
+            'species_survival_fraction' : [getattr(c, 'species_survival_fraction', [np.nan])[0]
+                                           for c in eLV_communities],
+            })
+
+        dfs.append(df)
+
+    return pd.concat(dfs, axis = 0, ignore_index = True)
+
+# %%
+
 def read_all_ablations(ablation_base_directory : str,
+                       eLV_directory : Union[str, None] = None,
                        ablations : list = ALL_ABLATIONS):
 
     '''
@@ -96,18 +158,27 @@ def read_all_ablations(ablation_base_directory : str,
     ablation_base_directory : str
         Full path to the directory ablate_eLV_directory() was given as
         output_directory (e.g. ".../eLV_ablations/M_vs_mu_c").
+    eLV_directory : str, optional
+        If given, also load the un-ablated eLV data from this directory
+        (pickled eLV community objects, e.g. ".../eLV/M_vs_mu_c") as an
+        'original' entry, for comparison alongside the ablations. Placed
+        first in the returned dict. The default is None (not included).
     ablations : list, optional
         Which ablation labels to look for. The default is ALL_ABLATIONS.
 
     Returns
     -------
     ablation_dfs : dict
-        {ablation label : dataframe}, one entry per ablation with data
-        present.
+        {label : dataframe}, one entry per ablation with data present, plus
+        'original' first if eLV_directory was given.
 
     '''
 
     ablation_dfs = {}
+
+    if eLV_directory is not None:
+
+        ablation_dfs['original'] = read_pickled_eLV_directory(eLV_directory)
 
     for ablation in ablations:
 
@@ -224,7 +295,9 @@ def plot_ablation_heatmaps(ablation_dfs : dict,
         ax.set_xlabel('')
         ax.set_ylabel('')
         ax.invert_yaxis()
-        ax.set_title(f"no {label}", fontsize = 10, weight = 'bold')
+
+        title = "original (no ablation)" if label == "original" else f"no {label}"
+        ax.set_title(title, fontsize = 10, weight = 'bold')
 
     # hide any unused panels (n not a multiple of ncols)
     for ax in axs_flat[n:]:
@@ -249,6 +322,7 @@ def plot_ablation_heatmaps(ablation_dfs : dict,
 # if __name__ == "__main__":
 #
 #     ablation_dfs = read_all_ablations(
-#         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV_ablations/M_vs_mu_c")
+#         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV_ablations/M_vs_mu_c",
+#         eLV_directory = "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV/M_vs_mu_c")
 #
 #     fig, axs = plot_ablation_heatmaps(ablation_dfs)
