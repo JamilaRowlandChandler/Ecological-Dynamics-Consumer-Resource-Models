@@ -25,6 +25,7 @@ import sys
 from tqdm import tqdm
 from typing import Literal, Union
 import numpy.typing as npt
+from matplotlib import pyplot as plt
 
 os.chdir('C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/resource_diversity_stability(sl)/effective_gLV')
 
@@ -35,7 +36,7 @@ from community_level_properties import max_le
 
 sys.path.insert(0, "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models" + \
                     "/resource_diversity_stability(sl)")
-from simulation_functions import pickle_dump
+from complete_simulation_functions import eLV_gLV_df_from_communities
 
 # %%
 
@@ -79,6 +80,9 @@ def average_eLV_statistics(eLV_communities : list,
 
         stat_keys += list(include_rho)
 
+        # correlations between A_ij and r, and A_ij and A_ii
+        stat_keys += ["rho_r_Aij", "rho_Aii_Aij"]
+
     averaged_stats = {key : np.mean([getattr(eLV_community, key)
                                      for eLV_community in eLV_communities])
                       for key in stat_keys}
@@ -100,7 +104,8 @@ def gLV_from_averaged_stats(averaged_stats : dict,
                                                              "rho_C",
                                                              "rho_1idx"]],
                                                 None] =
-                            ["rho_D", "rho_R", "rho_C", "rho_1idx"]):
+                            ["rho_D", "rho_R", "rho_C", "rho_1idx"],
+                            empirical : bool = True):
 
     '''
 
@@ -116,6 +121,10 @@ def gLV_from_averaged_stats(averaged_stats : dict,
     include_rho : list of str, or None, optional
         Which interaction-matrix correlations to use to generate correlated
         gLV interactions. The default is ["rho_D", "rho_R", "rho_C", "rho_1idx"].
+    empirical : bool, optional
+        Only used when rho_r_Aij/rho_Aii_Aij are requested (i.e. include_rho
+        is not None) - see gLV.__correlated_rates() in effective_LV_models.py
+        for what this controls. The default is True.
 
     Returns
     -------
@@ -128,6 +137,10 @@ def gLV_from_averaged_stats(averaged_stats : dict,
 
         rhos = {rho_key : averaged_stats[rho_key] for rho_key in include_rho}
 
+        # correlations between A_ij and r, and A_ij and A_ii
+        rhos["rho_r_Aij"] = averaged_stats["rho_r_Aij"]
+        rhos["rho_Aii_Aij"] = averaged_stats["rho_Aii_Aij"]
+
         interaction_args = dict(mu = averaged_stats["mu_Aij"],
                                 sigma = averaged_stats["sigma_Aij"],
                                 rhos = rhos)
@@ -136,7 +149,7 @@ def gLV_from_averaged_stats(averaged_stats : dict,
 
         interaction_args = dict(mu = averaged_stats["mu_Aij"],
                                 sigma = averaged_stats["sigma_Aij"])
-
+        
     gLV_community = gLV(no_species)
     gLV_community.model_specific_rates(growth_method='normal',
                                        growth_args=dict(mu = averaged_stats["mu_r"],
@@ -145,13 +158,19 @@ def gLV_from_averaged_stats(averaged_stats : dict,
                                        interaction_args=interaction_args,
                                        self_inhibition_method='normal',
                                        self_inhibition_args=dict(mu = averaged_stats["mu_Aii"],
-                                                                 sigma = averaged_stats["sigma_Aii"]))
+                                                                 sigma = averaged_stats["sigma_Aii"]),
+                                       empirical=empirical)
 
     gLV_community.calculate_interaction_stats()
+    
+    #gLV_community.interaction_matrix = gLV_community.interaction_matrix/gLV_community.r
+    #gLV_community.r = gLV_community.r/gLV_community.r
 
     # run simulations from randomly generated initial abundances
     gLV_community.simulate_community(t_end = 7000,
                                      no_init_cond = 1)
+    
+    gLV_community.calculate_community_properties()
 
     # numerically estimate the max. lyapunov exponent
     gLV_community.max_lyapunov_exponent = max_le(gLV_community,
@@ -174,7 +193,8 @@ def gLV_communities_from_averaged_eLV(eLV_communities : list,
                                                                        "rho_C",
                                                                        "rho_1idx"]],
                                                           None] =
-                                      ["rho_D", "rho_R", "rho_C", "rho_1idx"]):
+                                      ["rho_D", "rho_R", "rho_C", "rho_1idx"],
+                                      empirical : bool = True):
 
     '''
 
@@ -189,6 +209,10 @@ def gLV_communities_from_averaged_eLV(eLV_communities : list,
         Number of gLV communities to generate from the averaged statistics.
     include_rho : list of str, or None, optional
         The default is ["rho_D", "rho_R", "rho_C", "rho_1idx"].
+    empirical : bool, optional
+        Only used when include_rho is not None - see gLV.__correlated_interactions()/
+        __correlated_rates() in effective_LV_models.py for what this
+        controls. The default is True.
 
     Returns
     -------
@@ -202,7 +226,8 @@ def gLV_communities_from_averaged_eLV(eLV_communities : list,
     # assumes every eLV community in the file has the same species pool size
     no_species = eLV_communities[0].no_species
 
-    return [gLV_from_averaged_stats(averaged_stats, no_species, include_rho)
+    return [gLV_from_averaged_stats(averaged_stats, no_species, include_rho,
+                                    empirical)
             for _ in tqdm(range(n), leave = False, position = 0, total = n)]
 
 # %%
@@ -215,7 +240,8 @@ def gLV_M_averaged(gLV_directory : str,
                                                     "rho_C",
                                                     "rho_1idx"]],
                                        None] =
-                   ["rho_D", "rho_R", "rho_C", "rho_1idx"]):
+                   ["rho_D", "rho_R", "rho_C", "rho_1idx"],
+                   empirical : bool = True):
 
     '''
 
@@ -234,6 +260,10 @@ def gLV_M_averaged(gLV_directory : str,
         distribution).
     include_rho : list of str, or None, optional
         The default is ["rho_D", "rho_R", "rho_C", "rho_1idx"].
+    empirical : bool, optional
+        Only used when include_rho is not None - see gLV.__correlated_interactions()/
+        __correlated_rates() in effective_LV_models.py for what this
+        controls. The default is True.
 
     Returns
     -------
@@ -253,11 +283,16 @@ def gLV_M_averaged(gLV_directory : str,
         # pool eLV statistics, generate n gLVs from the averaged distribution
         gLV_communities = gLV_communities_from_averaged_eLV(eLV_communities,
                                                              n,
-                                                             include_rho)
+                                                             include_rho,
+                                                             empirical)
 
-        # save gLV
-        pickle_dump(full_gLV_directory + "/" + filename,
-                    gLV_communities)
+        # save gLV interaction statistics as a csv (v3 method), rather than
+        # pickling the whole community objects
+        gLV_df = eLV_gLV_df_from_communities(gLV_communities)
+
+        csv_filename = os.path.splitext(filename)[0] + ".csv"
+
+        gLV_df.to_csv(full_gLV_directory + "/" + csv_filename, index = False)
 
     ###################################################################################
 
@@ -289,36 +324,41 @@ def gLV_M_averaged(gLV_directory : str,
 
 # %%
 
-# example usage, mirroring the directory/rho sweeps in mean_variance_test.py
+# example usage, mirroring the directory/rho sweeps in mean_variance_test.py.
+# Guarded so importing this module (e.g. to reuse the functions above) never
+# re-triggers the real generation sweep - only running this file directly does.
 
-gLV_directories = ["M_vs_mu_c(averaged)",
-                   "M_vs_mu_c_drc(averaged)",
-                   "M_vs_mu_c_dr(averaged)",
-                   "M_vs_mu_c_d(averaged)",
-                   "M_vs_mu_c_norho(averaged)"]
+if __name__ == "__main__":
 
-incl_rhos = [["rho_D", "rho_R", "rho_C", "rho_1idx"],
-             ["rho_D", "rho_R", "rho_C"],
-             ["rho_D", "rho_R"],
-             ["rho_D"],
-             None]
+    gLV_directories = [#"M_vs_mu_c(averaged)",
+                       #"M_vs_mu_c_drc(averaged)",
+                       #"M_vs_mu_c_dr(averaged)",
+                       #"M_vs_mu_c_d(averaged)",
+                       "M_vs_mu_c_norho(averaged)"]
 
-for gLV_directory, include_rho in zip(gLV_directories, incl_rhos):
+    incl_rhos = [#["rho_D", "rho_R", "rho_C", "rho_1idx"],
+                 #["rho_D", "rho_R", "rho_C"],
+                 #["rho_D", "rho_R"],
+                 #["rho_D"],
+                 None]
 
-     gLV_M_averaged(eLV_directory="M_vs_mu_c",
-                    gLV_directory=gLV_directory,
-                    n=100,
-                    include_rho=include_rho)
-     
-gLV_directories_ar = ["M_vs_mu_c(averaged, all_resource)",
-                      "M_vs_mu_c_drc(averaged, all_resource)",
-                      "M_vs_mu_c_dr(averaged, all_resource)",
-                      "M_vs_mu_c_d(averaged, all_resource)",
-                      "M_vs_mu_c_norho(averaged, all_resource)"]
+    for gLV_directory, include_rho in zip(gLV_directories, incl_rhos):
 
-for gLV_directory, include_rho in zip(gLV_directories_ar, incl_rhos):
+         gLV_M_averaged(eLV_directory="M_vs_mu_c",
+                        gLV_directory=gLV_directory,
+                        n=40,
+                        include_rho=include_rho)
 
-     gLV_M_averaged(eLV_directory="M_vs_mu_c(all_resource)",
-                    gLV_directory=gLV_directory,
-                    n=100,
-                    include_rho=include_rho)
+    gLV_directories_ar = ["M_vs_mu_c(averaged, all_resource)",
+                          "M_vs_mu_c_drc(averaged, all_resource)",
+                          "M_vs_mu_c_dr(averaged, all_resource)",
+                          "M_vs_mu_c_d(averaged, all_resource)",
+                          "M_vs_mu_c_norho(averaged, all_resource)"]
+
+    for gLV_directory, include_rho in zip(gLV_directories_ar, incl_rhos):
+
+         gLV_M_averaged(eLV_directory="M_vs_mu_c(all_resource)",
+                        gLV_directory=gLV_directory,
+                        n=40,
+                        include_rho=include_rho)
+         

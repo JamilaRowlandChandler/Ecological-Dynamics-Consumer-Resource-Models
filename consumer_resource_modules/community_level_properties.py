@@ -200,17 +200,168 @@ class CommunityPropertiesInterface:
 ###########################################################################################################
 
 # %%
+########### Community properties #############
+
+class CommunityPropertiesInterface_LV:
+        
+    def calculate_community_properties(self,
+                                       sensitivity_distribution : bool = False):
+        '''
+        
+        Call methods that calculate the moments of the species and resource
+        abundance distribution, then assign them as attributes to the 
+        consumer resource model object.
+
+        Parameters
+        ----------
+        average_property : Bool, optional
+            Whether or not to calculate community properties at the end of simulations (False)
+            or over as an average over some time period (True). The default is False.
+        time_window : float, optional
+            If average_property is True, this is the time window to calculate
+            community properties over. The default is 500.
+
+        Returns
+        -------
+        None.
+
+        '''
+        
+            
+        self.assign_abundance_distribution("species",
+                                           [0, self.no_species])
+            
+    def assign_abundance_distribution(self,
+                                      attr_name : str,
+                                      attr_idx : int):
+        
+        distributions = \
+            [self.abundance_distribution(simulation.y[attr_idx[0] : attr_idx[1],
+                                                      -1])    
+             for simulation in self.ODE_sols] 
+        
+        # assign survival fraction
+        setattr(self,
+                attr_name + "_survival_fraction",
+                [dist[0] for dist in distributions])
+        
+        # assign average abundance
+        
+        setattr(self,
+                attr_name + "_avg_abundance",
+                [dist[1] for dist in distributions])
+        
+        # assign 2nd moment in bundance distribution
+        setattr(self,
+                attr_name + "_abundance_fluctuations",
+                [dist[2] for dist in distributions])
+             
+    def abundance_distribution(self,
+                               abundances : npt.NDArray,
+                               extinct_thresh : float = 1e-4):
+        
+        '''
+        
+        Calculate the moments of the species and resource abundance distribution
+
+        Parameters
+        ----------
+        abundances : np.ndarray
+            Abundances of some variable, either over a time frame or at the end of simulations.
+        extinct_thresh : float, optional
+            Extinction threshold for the variable. The default is 1e-4.
+
+        Returns
+        -------
+        zeroth_moment : float
+            0th moment of the abundance distribution.
+        first_moment : float
+            1st moment of the abundance distribution.
+        second_moment : float
+            1st moment of the abundance distribution.
+
+        '''
+        
+        zeroth_moment = \
+            np.count_nonzero(abundances > extinct_thresh)/len(abundances)
+            
+        first_moment = np.mean(abundances)
+        
+        second_moment = np.mean(abundances**2)
+        
+        return zeroth_moment, first_moment, second_moment
+    
+    def assign_sensitivity_distribution(self):
+        
+        distributions = \
+            [self.sensitivity_distribution(simulation.y)    
+             if np.ndim(simulation.y) > 1
+             else {}
+             for simulation in self.ODE_sols]
+                        
+        setattr(self,
+                "interaction_sensitivity",
+                distributions)
+    
+    def sensitivity_distribution(self,
+                                 abundances : npt.NDArray):
+        
+        if abundances.shape[1] < 10:
+            
+            outputs = [self.dNdinteractions(abundances, i) 
+                       for i in np.arange(-abundances.shape[1], 0, 1)]
+        
+        else:
+        
+            outputs = [self.dNdinteractions(abundances, i) 
+                       for i in np.arange(-10, 0, 1)]
+        
+        concat_outputs = [np.concatenate([output[i] for output in outputs])
+                          for i in range(3)]
+        
+        interaction_sensitivities = {key : binned_statistic(concat_outputs[0],
+                                                            var,
+                                                            statistic='mean',
+                                                            bins=15).statistic
+                                     for key, var in zip(['x',
+                                                          'N',
+                                                          'dNdx2'],
+                                                         concat_outputs)}
+        
+        return interaction_sensitivities
+    
+    def dNdinteraction(self,
+                       abundances : npt.NDArray,
+                       i : int):
+        
+        species = abundances[:, i]
+          
+        tot_A = np.sum(self.interaction_matrix * species, axis=1)
+        
+        sort_idx = np.argsort(tot_A)
+        
+        sorted_tot_A = tot_A[sort_idx]
+        sorted_abundances = abundances[sort_idx]
+        
+        dNdtotA = np.gradient(sorted_abundances, sorted_tot_A)**2
+        
+        return sorted_tot_A, sorted_abundances, dNdtotA
+            
+###########################################################################################################
+
+
+# %%
 
 def max_le(community : Union["SL_CRM", "SL_SI_CRM", "SL_TL_CRM", "ES_CRM",
                              "Hybrid_CRM",
-                             "eLV_SL", "gLV"],
+                             "eLV_SL", "eLV_ES", "gLV"],
            initial_conditions : npt.NDArray,
            T : float = 100,
            perturbation : float = 1e-8):
-    
+
     match type(community).__name__:
-        
-        case glv if glv in ["eLV_SL", "gLV"]:
+
+        case glv if glv in ["eLV_SL", "eLV_ES", "gLV"]:
             
             original_traj, perturbed_traj = trajectory_LV(community,
                                                           initial_conditions,
@@ -324,7 +475,7 @@ def trajectory_multi_trophic(community : "SL_TL_CRM",
 
 #############
     
-def trajectory_LV(community : Union["eLV_SL", "gLV"],
+def trajectory_LV(community : Union["eLV_SL", "eLV_ES", "gLV"],
                   initial_conditions : npt.NDArray,
                   T : float,
                   perturbation : float):
