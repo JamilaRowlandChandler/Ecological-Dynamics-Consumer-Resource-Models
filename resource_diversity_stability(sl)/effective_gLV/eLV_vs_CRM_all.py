@@ -231,11 +231,11 @@ def population_dynamics():
                                         "simulations_225_0.6444.pkl")
         
     chaotic_eLV = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/" +
-                                         "resource_diversity_stability/simulations/gLV/M_vs_mu_c_drc/" + 
+                                         "resource_diversity_stability/simulations/eLV/M_vs_mu_c/" + 
                                          "simulations_75_1.9333.pkl")
         
     stable_eLV = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/" +\
-                                        "resource_diversity_stability/simulations/gLV/M_vs_mu_c_drc/" +  
+                                        "resource_diversity_stability/simulations/eLV/M_vs_mu_c/" +  
                                         "simulations_225_0.6444.pkl")
                  
     def indices_and_cmaps(M):
@@ -269,10 +269,10 @@ def population_dynamics():
             ax.plot(data.t, data.y[v,:].T, color = 'black', linewidth = 0.5)
             ax.plot(data.t, data.y[v,:].T, color = cmap(i), linewidth = 0.45)
         
-            ax.set_xticks([])
-            ax.set_yticks([])
-            ax.set_xticklabels([])
-            ax.set_yticklabels([])
+            #ax.set_xticks([])
+            #ax.set_yticks([])
+            #ax.set_xticklabels([])
+            #ax.set_yticklabels([])
             
             ax.set_title(title, fontsize = 9, y = 0.85)
         
@@ -314,12 +314,13 @@ df_eLV_ar = read_eLV_data("eLV/M_vs_mu_c")
 
 # %%
 
-df_eLV_phiR = read_eLV_data("gLV/M_vs_mu_c_norho(averaged)")
+df_eLV_phiR = read_eLV_data("eLV/M_vs_mu_c")
 
 # %%
 
-df_CRM = generate_simulation_df("C:/Users/jamil/Documents/PhD/Data/" \
-                                + 'resource_diversity_stability/simulations/M_vs_mu_c')
+df_CRM = read_eLV_data("eLV/M_vs_mu_c") 
+#generate_simulation_df("C:/Users/jamil/Documents/PhD/Data/" \
+#                                + 'resource_diversity_stability/simulations/M_vs_mu_c')
 
     
 # %%

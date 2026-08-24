@@ -451,7 +451,7 @@ def ablate_eLV_directory(source_directory : str,
 
 # example usage (guarded so importing this module never runs it):
 
-# if __name__ == "__main__":
+if __name__ == "__main__":
 #
 #     eLV_community, ablated = decompose_and_ablate_CRM(
 #         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/M_vs_mu_c/simulations_100_1.0.pkl",
@@ -468,72 +468,74 @@ def ablate_eLV_directory(source_directory : str,
 #     # for loop) so each can be split off/parallelised independently -
 #     # e.g. run each in its own process/job, or comment out all but one
 #
-#     ablate_eLV_directory(
-#         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV/M_vs_mu_c",
-#         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV_ablations/M_vs_mu_c",
-#         "rho_R",
-#         source_type='eLV',
-#         seed=0)
+    ablate_eLV_directory(
+         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV/M_vs_mu_c",
+         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV_ablations/M_vs_mu_c",
+         "rho_R",
+         source_type='eLV',
+         seed=0)
 #
-#     ablate_eLV_directory(
-#         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV/M_vs_mu_c",
-#         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV_ablations/M_vs_mu_c",
-#         "rho_C",
-#         source_type='eLV',
-#         seed=0)
+    ablate_eLV_directory(
+         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV/M_vs_mu_c",
+         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV_ablations/M_vs_mu_c",
+         "rho_C",
+         source_type='eLV',
+         seed=0)
+
+    ablate_eLV_directory(
+         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV/M_vs_mu_c",
+         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV_ablations/M_vs_mu_c",
+         "rho_D",
+         source_type='eLV',
+         seed=0)
 #
-#     ablate_eLV_directory(
-#         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV/M_vs_mu_c",
-#         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV_ablations/M_vs_mu_c",
-#         "rho_D",
-#         source_type='eLV',
-#         seed=0)
+    ablate_eLV_directory(
+         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV/M_vs_mu_c",
+         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV_ablations/M_vs_mu_c",
+         "rho_r_Aij",
+         source_type='eLV',
+         seed=0)
 #
-#     ablate_eLV_directory(
-#         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV/M_vs_mu_c",
-#         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV_ablations/M_vs_mu_c",
-#         "rho_r_Aij",
-#         source_type='eLV',
-#         seed=0)
+    ablate_eLV_directory(
+         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV/M_vs_mu_c",
+         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV_ablations/M_vs_mu_c",
+         "rho_Aii_Aij",
+         source_type='eLV',
+         seed=0)
+
+    ablate_eLV_directory(
+         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV/M_vs_mu_c",
+         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV_ablations/M_vs_mu_c",
+         "sigma_r",
+         source_type='eLV',
+         seed=0)
 #
-#     ablate_eLV_directory(
-#         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV/M_vs_mu_c",
-#         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV_ablations/M_vs_mu_c",
-#         "rho_Aii_Aij",
-#         source_type='eLV',
-#         seed=0)
+    ablate_eLV_directory(
+         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV/M_vs_mu_c",
+         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV_ablations/M_vs_mu_c",
+         "sigma_Aij",
+         source_type='eLV',
+         seed=0)
 #
-#     ablate_eLV_directory(
-#         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV/M_vs_mu_c",
-#         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV_ablations/M_vs_mu_c",
-#         "mu_r",
-#         source_type='eLV',
-#         seed=0)
+    ablate_eLV_directory(
+         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV/M_vs_mu_c",
+         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV_ablations/M_vs_mu_c",
+         "sigma_Aii",
+         source_type='eLV',
+         seed=0)
+    
+# %%
+
+ablate_eLV_directory(
+     "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV/M_vs_mu_c",
+     "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV_ablations/M_vs_mu_c",
+     "mu_r",
+     source_type='eLV',
+     seed=0)
 #
-#     ablate_eLV_directory(
-#         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV/M_vs_mu_c",
-#         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV_ablations/M_vs_mu_c",
-#         "mu_Aij",
-#         source_type='eLV',
-#         seed=0)
-#
-#     ablate_eLV_directory(
-#         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV/M_vs_mu_c",
-#         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV_ablations/M_vs_mu_c",
-#         "sigma_r",
-#         source_type='eLV',
-#         seed=0)
-#
-#     ablate_eLV_directory(
-#         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV/M_vs_mu_c",
-#         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV_ablations/M_vs_mu_c",
-#         "sigma_Aij",
-#         source_type='eLV',
-#         seed=0)
-#
-#     ablate_eLV_directory(
-#         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV/M_vs_mu_c",
-#         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV_ablations/M_vs_mu_c",
-#         "sigma_Aii",
-#         source_type='eLV',
-#         seed=0)
+ablate_eLV_directory(
+     "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV/M_vs_mu_c",
+     "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV_ablations/M_vs_mu_c",
+     "mu_Aij",
+     source_type='eLV',
+     seed=0)

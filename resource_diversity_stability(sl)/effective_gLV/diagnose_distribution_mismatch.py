@@ -137,6 +137,102 @@ def diagnose_distribution_mismatch(eLV_community, gLV_community):
           f"cv={f_elv.std()/(abs(f_elv.mean())+1e-20):.4f}")
     print(f"  gLV: mean={f_glv.mean():.4f}  std={f_glv.std():.4f}  "
           f"cv={f_glv.std()/(abs(f_glv.mean())+1e-20):.4f}")
+    
+    # row sums (total competitive pressure on species i)
+    rowsum_elv = A_elv.sum(axis=1)
+    rowsum_glv = A_glv.sum(axis=1)
+    
+    # fitness = r_i - sum_j A_ij at N=1
+    f_elv = r_elv - rowsum_elv
+    f_glv = r_glv - rowsum_glv
+    
+    # how tightly does r_i track its total competitive burden?
+    # in the eLV, r_i = sum_b x_ib and sum_j A_ij = sum_b x_ib (sum_j y_jb)
+    # so corr(r_i, rowsum_i) is very high by construction
+    print("--- corr(r_i, sum_j A_ij) ---")
+    print(f"  eLV: {np.corrcoef(r_elv, rowsum_elv)[0,1]:.6f}")
+    print(f"  gLV: {np.corrcoef(r_glv, rowsum_glv)[0,1]:.6f}")
+    
+    # the KEY quantity: variance of fitness RESIDUAL after
+    # accounting for the r-rowsum relationship
+    # in the eLV, r and rowsum share x_i so tightly that
+    # their difference (fitness) has very low variance
+    print(f"\n--- Fitness variance decomposition ---")
+    print(f"  Var(r):       eLV={np.var(r_elv):.4f}  gLV={np.var(r_glv):.4f}")
+    print(f"  Var(rowsum):  eLV={np.var(rowsum_elv):.4f}  gLV={np.var(rowsum_glv):.4f}")
+    print(f"  Var(fitness): eLV={np.var(f_elv):.4f}  gLV={np.var(f_glv):.4f}")
+    print(f"  Var(fitness) / Var(r): eLV={np.var(f_elv)/np.var(r_elv):.6f}  "
+          f"gLV={np.var(f_glv)/np.var(r_glv):.6f}")
+    
+    # correlation between r and DIAGONAL of A
+    # and between r and OFF-DIAGONAL row sums separately
+    offdiag_rowsum_elv = rowsum_elv - np.diag(A_elv)
+    offdiag_rowsum_glv = rowsum_glv - np.diag(A_glv)
+    
+    print(f"\n--- Correlation breakdown ---")
+    print(f"  corr(r, A_ii):            eLV={np.corrcoef(r_elv, np.diag(A_elv))[0,1]:.6f}  "
+          f"gLV={np.corrcoef(r_glv, np.diag(A_glv))[0,1]:.6f}")
+    print(f"  corr(r, sum_j!=i A_ij):   eLV={np.corrcoef(r_elv, offdiag_rowsum_elv)[0,1]:.6f}  "
+          f"gLV={np.corrcoef(r_glv, offdiag_rowsum_glv)[0,1]:.6f}")
+    print(f"  corr(A_ii, sum_j!=i A_ij): eLV={np.corrcoef(np.diag(A_elv), offdiag_rowsum_elv)[0,1]:.6f}  "
+          f"gLV={np.corrcoef(np.diag(A_glv), offdiag_rowsum_glv)[0,1]:.6f}")
+    
+    elv_offdiag = A_elv[mask].reshape(S, S - 1)
+    glv_offdiag = A_glv[mask].reshape(S, S - 1)
+    
+    # row sums
+    rs_elv = elv_offdiag.sum(axis=1)
+    rs_glv = glv_offdiag.sum(axis=1)
+    
+    print("--- Row sum statistics ---")
+    print(f"  eLV: mean={rs_elv.mean():.4f}  std={rs_elv.std():.4f}")
+    print(f"  gLV: mean={rs_glv.mean():.4f}  std={rs_glv.std():.4f}")
+    
+    # decompose: is the inflation from sigma, rho_R, or something else?
+    sigma_elv = elv_offdiag.std()
+    sigma_glv = glv_offdiag.std()
+    
+    # empirical row correlation
+    p, q = np.triu_indices(S - 1, k=1)
+    rho_R_elv = np.corrcoef(elv_offdiag[:, p].ravel(),
+                             elv_offdiag[:, q].ravel())[0, 1]
+    rho_R_glv = np.corrcoef(glv_offdiag[:, p].ravel(),
+                             glv_offdiag[:, q].ravel())[0, 1]
+    
+    print(f"\n--- Components ---")
+    print(f"  sigma:  eLV={sigma_elv:.6f}  gLV={sigma_glv:.6f}")
+    print(f"  rho_R:  eLV={rho_R_elv:.6f}  gLV={rho_R_glv:.6f}")
+    
+    # predicted Var(rowsum) from these
+    pred_elv = (S - 1) * sigma_elv**2 * (1 + (S - 2) * rho_R_elv)
+    pred_glv = (S - 1) * sigma_glv**2 * (1 + (S - 2) * rho_R_glv)
+    actual_elv = rs_elv.var()
+    actual_glv = rs_glv.var()
+    
+    print(f"\n--- Var(rowsum) ---")
+    print(f"  eLV: predicted={pred_elv:.2f}  actual={actual_elv:.2f}  "
+          f"ratio={actual_elv/pred_elv:.4f}")
+    print(f"  gLV: predicted={pred_glv:.2f}  actual={actual_glv:.2f}  "
+          f"ratio={actual_glv/pred_glv:.4f}")
+    
+    elv_offdiag = A_elv[mask]
+    glv_offdiag = A_glv[mask]
+    
+    # the ratio actual/predicted tells us if second-order stats
+    # fully explain row-sum variance:
+    #   ratio ≈ 1.0: yes, Gaussian construction captures it
+    #   ratio != 1.0: higher-order structure matters
+    
+    print(f"eLV kurtosis: {kurtosis(elv_offdiag):.4f}")
+    print(f"gLV kurtosis: {kurtosis(glv_offdiag):.4f}")
+
+    # more directly: compare the range of row sums
+    # (which is what determines fitness spread)
+    elv_rowsums = A_elv[mask].reshape(S, S-1).sum(axis=1)
+    glv_rowsums = A_glv[mask].reshape(S, S-1).sum(axis=1)
+    
+    print(f"\neLV rowsum range: {elv_rowsums.max() - elv_rowsums.min():.4f}")
+    print(f"gLV rowsum range: {glv_rowsums.max() - glv_rowsums.min():.4f}")
 
 # %%
 
@@ -237,4 +333,8 @@ def diagnose_from_file(filepath : str,
 
     diagnose_distribution_mismatch(eLV_community, gLV_community)
 
-    return eLV_community, gLV_community
+#    return eLV_community, gLV_community
+
+# %%
+
+diagnose_from_file("C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV/M_vs_mu_c/simulations_250_0.4.pkl")

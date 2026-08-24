@@ -21,6 +21,7 @@ import pandas as pd
 import os
 import sys
 from typing import Literal, Union
+from matplotlib import pyplot as plt
 
 os.chdir('C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/resource_diversity_stability(sl)/effective_gLV')
 
@@ -89,6 +90,7 @@ def gLV_from_eLV(eLV_community,
         # correlations between A_ij and r, and A_ij and A_ii
         rhos["rho_r_Aij"] = eLV_community.rho_r_Aij
         rhos["rho_Aii_Aij"] = eLV_community.rho_Aii_Aij
+        print(rhos["rho_r_Aij"])
 
         interaction_args = dict(mu = eLV_community.mu_Aij,
                                 sigma = eLV_community.sigma_Aij,
@@ -134,7 +136,7 @@ def gLV_from_eLV(eLV_community,
 
 def compare_CRM_eLV_gLV(CRM_filepath : str,
                         CRM_index : int = 0,
-                        cavity_phi_R : Union[float, None] = None,
+                        cavity_phi_R : bool = False,
                         include_rho : Union[list[Literal["rho_D",
                                                          "rho_R",
                                                          "rho_C",
@@ -182,8 +184,11 @@ def compare_CRM_eLV_gLV(CRM_filepath : str,
     '''
 
     # --- load the CRM simulation ---
+    
+    complete_CRM_filepath = "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/" + \
+                        CRM_filepath
 
-    CRM_communities = pd.read_pickle(CRM_filepath)
+    CRM_communities = pd.read_pickle(complete_CRM_filepath)
     CRM_community = CRM_communities[CRM_index]
 
     if not hasattr(CRM_community, "species_survival_fraction"):
@@ -193,10 +198,25 @@ def compare_CRM_eLV_gLV(CRM_filepath : str,
     model = _CRM_MODEL_NAMES[type(CRM_community).__name__]
 
     # --- build the eLV from the CRM ---
+    
+    if cavity_phi_R is True:
+        
+        sces = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/self_consistency_equations/" + \
+                              CRM_filepath.split("/")[0] + ".pkl")
+        
+        phiR = sces.loc[np.where((sces["mu_c"] == 
+                                  np.round(CRM_community.mu_c * CRM_community.no_resources, 4)) & \
+                                 (sces["M"] == CRM_community.no_resources)),
+                        "phi_R"].to_numpy()
+            
+        eLV_community = eLV_from_CRM_dynamics(model,
+                                              [CRM_community],
+                                              phiR)[0]
+    
+    else:
 
-    eLV_community = eLV_from_CRM_dynamics(model,
-                                          [CRM_community],
-                                          cavity_phi_R)[0]
+        eLV_community = eLV_from_CRM_dynamics(model,
+                                              [CRM_community])[0]
 
     # --- build the gLV from the eLV ---
 
@@ -217,7 +237,19 @@ def compare_CRM_eLV_gLV(CRM_filepath : str,
 
 # example usage (guarded so importing this module never runs it):
 
-# if __name__ == "__main__":
-#
-#     CRM_community, eLV_community, gLV_community = compare_CRM_eLV_gLV(
-#         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/M_vs_mu_c/simulations_100_1.0.pkl")
+if __name__ == "__main__":
+
+     CRM_community, eLV_community, gLV_community = compare_CRM_eLV_gLV(
+         "M_vs_mu_c/simulations_250_1.0.pkl",
+         cavity_phi_R=True,
+         empirical=True)
+     
+# %%
+
+fig, (ax1, ax2) = plt.subplots(1, 2)
+
+ax1.plot(eLV_community.ODE_sols[0].t,
+         eLV_community.ODE_sols[0].y.T)
+
+ax2.plot(gLV_community.ODE_sols[0].t,
+         gLV_community.ODE_sols[0].y.T)

@@ -952,6 +952,7 @@ class gLV(eLVMethods, ParametersInterface):
         # are ratios of covariances, and uniform scaling cancels).
 
         if empirical:
+            print("empirical i")
             mask = ~np.eye(S, dtype=bool)
             Z_offdiag = Z[mask]
             Z_mean = Z_offdiag.mean()
@@ -1060,12 +1061,16 @@ class gLV(eLVMethods, ParametersInterface):
 
             rm_repeated = np.repeat(row_means, S - 1)
             corr_factor = np.corrcoef(rm_repeated, Z[mask])[0, 1]
+            
+            print('empirical')
 
         else:
 
             c = (1 + (S - 2) * rho_R) / (S - 1)
             row_means_unit = row_means / np.sqrt(max(c, 1e-20))
             corr_factor = np.sqrt(max(c, 1e-20))
+            
+            print('theoretical')
 
         # =====================================================
         # Loading r onto row means

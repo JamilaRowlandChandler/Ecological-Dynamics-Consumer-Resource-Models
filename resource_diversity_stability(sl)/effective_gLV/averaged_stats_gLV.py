@@ -25,6 +25,7 @@ import sys
 from tqdm import tqdm
 from typing import Literal, Union
 import numpy.typing as npt
+from matplotlib import pyplot as plt
 
 os.chdir('C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/resource_diversity_stability(sl)/effective_gLV')
 
@@ -148,7 +149,7 @@ def gLV_from_averaged_stats(averaged_stats : dict,
 
         interaction_args = dict(mu = averaged_stats["mu_Aij"],
                                 sigma = averaged_stats["sigma_Aij"])
-
+        
     gLV_community = gLV(no_species)
     gLV_community.model_specific_rates(growth_method='normal',
                                        growth_args=dict(mu = averaged_stats["mu_r"],
@@ -161,10 +162,15 @@ def gLV_from_averaged_stats(averaged_stats : dict,
                                        empirical=empirical)
 
     gLV_community.calculate_interaction_stats()
+    
+    #gLV_community.interaction_matrix = gLV_community.interaction_matrix/gLV_community.r
+    #gLV_community.r = gLV_community.r/gLV_community.r
 
     # run simulations from randomly generated initial abundances
     gLV_community.simulate_community(t_end = 7000,
                                      no_init_cond = 1)
+    
+    gLV_community.calculate_community_properties()
 
     # numerically estimate the max. lyapunov exponent
     gLV_community.max_lyapunov_exponent = max_le(gLV_community,
@@ -324,23 +330,23 @@ def gLV_M_averaged(gLV_directory : str,
 
 if __name__ == "__main__":
 
-    gLV_directories = ["M_vs_mu_c(averaged)",
-                       "M_vs_mu_c_drc(averaged)",
-                       "M_vs_mu_c_dr(averaged)",
-                       "M_vs_mu_c_d(averaged)",
+    gLV_directories = [#"M_vs_mu_c(averaged)",
+                       #"M_vs_mu_c_drc(averaged)",
+                       #"M_vs_mu_c_dr(averaged)",
+                       #"M_vs_mu_c_d(averaged)",
                        "M_vs_mu_c_norho(averaged)"]
 
-    incl_rhos = [["rho_D", "rho_R", "rho_C", "rho_1idx"],
-                 ["rho_D", "rho_R", "rho_C"],
-                 ["rho_D", "rho_R"],
-                 ["rho_D"],
+    incl_rhos = [#["rho_D", "rho_R", "rho_C", "rho_1idx"],
+                 #["rho_D", "rho_R", "rho_C"],
+                 #["rho_D", "rho_R"],
+                 #["rho_D"],
                  None]
 
     for gLV_directory, include_rho in zip(gLV_directories, incl_rhos):
 
          gLV_M_averaged(eLV_directory="M_vs_mu_c",
                         gLV_directory=gLV_directory,
-                        n=100,
+                        n=40,
                         include_rho=include_rho)
 
     gLV_directories_ar = ["M_vs_mu_c(averaged, all_resource)",
@@ -353,5 +359,6 @@ if __name__ == "__main__":
 
          gLV_M_averaged(eLV_directory="M_vs_mu_c(all_resource)",
                         gLV_directory=gLV_directory,
-                        n=100,
+                        n=40,
                         include_rho=include_rho)
+         
