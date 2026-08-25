@@ -150,7 +150,7 @@ class InitialConditionsInterface(Base_InitialConditions):
                     
         return initial_abundances
     
-class InitialConditionsInterface_LV(Base_InitialConditions):
+class InitialConditionsInterface_ELV(Base_InitialConditions):
     
     def generate_initial_conditions(self,
                                     no_init_cond : int, 

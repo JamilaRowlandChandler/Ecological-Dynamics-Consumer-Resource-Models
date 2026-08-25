@@ -349,6 +349,36 @@ def compare_abiotic_biotic(stability_ab,
                      marker = 'o', markersize = 8,
                      markeredgewidth = 0.4, markeredgecolor = 'black')
         
+        #axCompareCondition.hlines(example_rho**2,
+        #                          np.min(dfl['sigma_c']), np.max(dfl['sigma_c']),
+        #                          zorder = 1,
+        #                          color = '#00557aff',
+        #                          linewidth = 4)
+        
+        #axCompareCondition.hlines(example_rho**2,
+        #                          np.min(dfl['sigma_c']), np.max(dfl['sigma_c']),
+        #                          zorder = 2,
+        #                          color = '#00557aff',
+        #                          linewidth = 3.5)
+        
+        #sns.lineplot(#dfl[dfl['variable'] == 'Packing ratio'],
+        #             #x = 'sigma_c', y = 'value',
+        #             x = dfl.loc[dfl['variable'] == 'Packing ratio', 'sigma_c'],
+        #             y = 4*dfl.loc[dfl['variable'] == 'Packing ratio', 'value'],
+        #             color = 'black',
+        #             ax = axCompareCondition, zorder = 10,
+        #             linewidth = 3)
+        
+        #sns.lineplot(#dfl[dfl['variable'] == 'Packing ratio'],
+        #             #x = 'sigma_c', y = 'value',
+        #             x = dfl.loc[dfl['variable'] == 'Packing ratio', 'sigma_c'],
+        #             y = 4*dfl.loc[dfl['variable'] == 'Packing ratio', 'value'],
+        #             color = '#3dc27aff',
+        #             ax = axCompareCondition, zorder = 12,
+        #             linewidth = 2.5, 
+        #             marker = 'o', markersize = 8,
+        #             markeredgewidth = 0.4, markeredgecolor = 'black')
+        
         axCompareCondition.set_xlabel('')
         axCompareCondition.set_xticks(sigma_labels,
                                labels = sigma_labels,
@@ -529,7 +559,7 @@ def abiotic_stability_cond(stability_ab,
                             sigmas,
                             axCondition):
         
-        sces['biotic_stability_distance'] = sces['rho']**2 - sces['Packing ratio']
+        sces['biotic_stability_distance'] = sces['rho'] - sces['Packing ratio']
         
         dfl = pd.melt(sces.loc[sces['rho'] == example_rho,
                                    ['sigma_c',

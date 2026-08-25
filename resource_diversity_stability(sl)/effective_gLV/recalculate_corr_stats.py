@@ -31,11 +31,8 @@ from simulation_functions import pickle_dump
 
 def recalculate_interact_stats(eLV_community : Literal["eLV_SL"]):
     
-    if hasattr(eLV_community, "species_growth"):
-        
-        eLV_community.r = eLV_community.species_growth
-    
-        delattr(eLV_community, "species_growth")
+    eLV_community.r = eLV_community.species_growth
+    delattr(eLV_community, "species_growth")
     
     eLV_community.calculate_interaction_stats()
     
