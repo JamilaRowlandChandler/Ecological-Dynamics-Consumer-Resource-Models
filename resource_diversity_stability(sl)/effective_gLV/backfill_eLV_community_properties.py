@@ -1,108 +1,104 @@
 # -*- coding: utf-8 -*-
 """
-Created on Thu Aug 13 17:44:58 2026
+Created on Tue Aug 18 00:00:00 2026
 
 @author: jamil
+
+Backfill calculate_community_properties() (species_survival_fraction,
+species_avg_abundance, species_abundance_fluctuations) onto already-pickled
+eLV community objects - the base eLV_M() pipeline in all_mu_c_vs_M_egLV.py
+never calls it, so these attributes are missing on existing eLV data (see
+read_pickled_eLV_directory()/survival_fraction_pivot() in
+plot_eLV_ablations.py, which needed this to compare survival fraction
+against the ablations).
+
+Cheap: only recomputes summary statistics from each community's existing
+ODE_sols - no re-simulation is done.
 
 """
 
 from __future__ import annotations
 
-import numpy as np
-import pandas as pd
 import os
 import sys
 from tqdm import tqdm
-from typing import Literal, Union
-import numpy.typing as npt
+from typing import Literal
 
 os.chdir('C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/resource_diversity_stability(sl)/effective_gLV')
 
 sys.path.insert(0, "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models" + \
                     "/consumer_resource_modules")
-from effective_LV_models import eLV_SL
-from community_level_properties import max_le
-    
+
 sys.path.insert(0, "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models" + \
                     "/resource_diversity_stability(sl)")
 from simulation_functions import pickle_dump
 
 # %%
 
-def recalculate_interact_stats(eLV_community : Literal["eLV_SL"]):
-    
-    if hasattr(eLV_community, "species_growth"):
-        
-        eLV_community.r = eLV_community.species_growth
-    
-        delattr(eLV_community, "species_growth")
-    
-    eLV_community.calculate_interaction_stats()
-    
+def backfill_community_properties(eLV_community : Literal["eLV_SL"]):
+
+    eLV_community.calculate_community_properties()
+
     return eLV_community
-    
+
 # %%
 
-def recalculate_eLVs(eLV_directory : str):
+def backfill_eLV_directory(eLV_directory : str):
 
+    '''
+
+    For every file in eLV_directory (a pickled list of eLV community
+    objects), call calculate_community_properties() on every community and
+    re-save the file in place.
+
+    Parameters
+    ----------
+    eLV_directory : str
+        Directory (relative to
+        C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/)
+        of pickled eLV community lists, e.g. "eLV/M_vs_mu_c".
+
+    Returns
+    -------
+    None.
+
+    '''
 
     def read_upd_eLV(full_eLV_directory : str,
-                      filename : str):
-        
-        '''
-        
-        Read in consumer-resource models and generate effective-Lotka Volterra 
-        models from them. Returns resource pool size vs stability
+                     filename : str):
 
-        Parameters
-        ----------
-        filename : str
-            Consumer-resource model filenames (determined by mu_c).
-        cavity_phi_R : float
-            resource survival fraction from the cavity calculation.
+        import pandas as pd
 
-        Returns
-        -------
-        dict
-            resource pool size vs max. lyapunov exponents for all eLVs.
-
-        '''
-        
-        # read in consumer-resource model (CRM) communities
         eLV_communities = pd.read_pickle(full_eLV_directory + "/" + filename)
-        
-        # generate eLV from CRM communities, run simulations
-        eLV_communities_upd = [recalculate_interact_stats(eLV_community)
+
+        eLV_communities_upd = [backfill_community_properties(eLV_community)
                                for eLV_community in
                                tqdm(eLV_communities,
                                     leave = False,
                                     position = 0,
                                     total = len(eLV_communities))]
-       
-        # save eLV
+
         pickle_dump(full_eLV_directory + "/" + filename,
                     eLV_communities_upd)
-    
+
     ###################################################################################
-                           
+
     full_eLV_directory = "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/" + \
                           eLV_directory
-            
+
     filenames = os.listdir(full_eLV_directory)
-        
+
     for filename in tqdm(filenames,
                          leave = True,
                          position = 1,
                          total = len(filenames)):
-        
-        read_upd_eLV(full_eLV_directory,
-                     filename)
+
+        read_upd_eLV(full_eLV_directory, filename)
 
 # %%
 
-recalculate_eLVs(eLV_directory = "eLV/M_vs_mu_c")
+# example usage (guarded so importing this module never runs it):
 
-# %%
-
-recalculate_eLVs(eLV_directory = "eLV/M_vs_mu_c(all_resource)")
-
+# if __name__ == "__main__":
+#
+#     backfill_eLV_directory("eLV/M_vs_mu_c")

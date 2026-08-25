@@ -17,7 +17,7 @@ import numpy.typing as npt
 from abc import ABC, abstractmethod
 
 from initial_abundances import InitialConditionsInterface, \
-                               InitialConditionsInterface_ELV
+                               InitialConditionsInterface_LV
 
 #%%
 
@@ -87,7 +87,7 @@ class DifferentialEquationsInterface(ABC, InitialConditionsInterface):
         
         pass
     
-class DifferentialEquationsInterface_ELV(ABC, InitialConditionsInterface_ELV):
+class DifferentialEquationsInterface_LV(ABC, InitialConditionsInterface_LV):
     
     def simulate_community(self,
                            t_end : float,

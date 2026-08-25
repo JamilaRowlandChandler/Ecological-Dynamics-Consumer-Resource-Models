@@ -24,7 +24,7 @@ from community_level_properties import max_le
     
 sys.path.insert(0, "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models" + \
                     "/resource_diversity_stability(sl)")
-from simulation_functions import pickle_dump
+from complete_simulation_functions import eLV_gLV_df_from_communities
 
 # %%
 
@@ -34,23 +34,28 @@ def gLV_dynamics(eLV_community : Literal["eLV_SL"],
                                                   "rho_C",
                                                   "rho_1dix"]],
                                      None] =
-                 ["rho_D", "rho_R", "rho_C", "rho_1idx"]):
-    
+                 ["rho_D", "rho_R", "rho_C", "rho_1idx"],
+                 empirical : bool = True):
+
     if include_rho is not None:
-        
+
         rhos = {rho_key : getattr(eLV_community,
                                   rho_key)
                 for rho_key in include_rho}
-        
+
+        # correlations between A_ij and r, and A_ij and A_ii
+        rhos["rho_r_Aij"] = eLV_community.rho_r_Aij
+        rhos["rho_Aii_Aij"] = eLV_community.rho_Aii_Aij
+
         interaction_args = dict(mu = eLV_community.mu_Aij,
                                 sigma = eLV_community.sigma_Aij,
                                 rhos = rhos)
-        
+
     else:
-        
+
         interaction_args = dict(mu = eLV_community.mu_Aij,
                                 sigma = eLV_community.sigma_Aij)
-        
+
     gLV_community = gLV(eLV_community.no_species)
     gLV_community.model_specific_rates(growth_method='normal',
                                        growth_args=dict(mu = eLV_community.mu_r,
@@ -59,7 +64,8 @@ def gLV_dynamics(eLV_community : Literal["eLV_SL"],
                                        interaction_args=interaction_args,
                                        self_inhibition_method='normal',
                                        self_inhibition_args=dict(mu = eLV_community.mu_Aii,
-                                                                 sigma = eLV_community.sigma_Aii))
+                                                                 sigma = eLV_community.sigma_Aii),
+                                       empirical=empirical)
     
     gLV_community.calculate_interaction_stats()
     
@@ -88,10 +94,11 @@ def gLV_M(gLV_directory : str,
                                            "rho_C",
                                            "rho_1dix"]],
                               None] =
-          ["rho_D", "rho_R", "rho_C", "rho_1idx"]):
-    
+          ["rho_D", "rho_R", "rho_C", "rho_1idx"],
+          empirical : bool = True):
+
     '''
-    
+
     ...
 
     Parameters
@@ -104,6 +111,10 @@ def gLV_M(gLV_directory : str,
         File directory to save elVs in. The default is "eLV/M_vs_mu_c".
     all_resource_survive : bool, optional
         Do we assume all resources survive or not. The default is False.
+    empirical : bool, optional
+        Only used when include_rho is not None - see gLV.__correlated_interactions()/
+        __correlated_rates() in effective_LV_models.py for what this
+        controls. The default is True.
 
     Returns
     -------
@@ -116,26 +127,31 @@ def gLV_M(gLV_directory : str,
                       full_gLV_directory : str,
                       filename : str,
                       include_rho : bool):
-        
+
         # read in eLV communities
         eLV_communities = pd.read_pickle(full_eLV_directory + "/" + filename)
-        
+
         # generate gLV from eLV communities, run simulations
         gLV_communities = [gLV_dynamics(eLV_community,
-                                        include_rho) 
-                            for eLV_community in 
+                                        include_rho,
+                                        empirical)
+                            for eLV_community in
                             tqdm(eLV_communities,
                                  leave = False,
                                  position = 0,
                                  total = len(eLV_communities))]
         
-        cleaned_gLV_communities = [comm 
-                                   for comm in gLV_communities 
+        cleaned_gLV_communities = [comm
+                                   for comm in gLV_communities
                                    if comm is not None]
-       
-        # save gLV
-        pickle_dump(full_gLV_directory + "/" + filename,
-                    cleaned_gLV_communities)
+
+        # save gLV interaction statistics as a csv (v3 method), rather than
+        # pickling the whole community objects
+        gLV_df = eLV_gLV_df_from_communities(cleaned_gLV_communities)
+
+        csv_filename = os.path.splitext(filename)[0] + ".csv"
+
+        gLV_df.to_csv(full_gLV_directory + "/" + csv_filename, index = False)
     
     ###################################################################################
     
@@ -166,13 +182,13 @@ def gLV_M(gLV_directory : str,
         
 # %%
 
-gLV_directories = [# "M_vs_mu_c",
+gLV_directories = ["M_vs_mu_c",
                    "M_vs_mu_c_drc",
                    "M_vs_mu_c_dr",
                    "M_vs_mu_c_d",
                    "M_vs_mu_c_norho"]
 
-incl_rhos = [# ["rho_D", "rho_R", "rho_C", "rho_1idx"],
+incl_rhos = [["rho_D", "rho_R", "rho_C", "rho_1idx"],
              ["rho_D", "rho_R", "rho_C"],
              ["rho_D", "rho_R"],
              ["rho_D"],
@@ -204,25 +220,3 @@ for gLV_directory, include_rho in zip(gLV_directories, incl_rhos):
           gLV_directory=gLV_directory,
           include_rho=include_rho)
     
-# %%
-
-gLV_M(eLV_directory="M_vs_mu_c",
-      gLV_directory="M_vs_mu_c_norho",
-      include_rho=None)
-
-# %%
-
-gLV_M(eLV_directory = "M_vs_mu_c",
-      gLV_directory = "M_vs_mu_c")
-
-# %%
-
-gLV_M(eLV_directory = "M_vs_mu_c(all_resource)",
-      gLV_directory = "M_vs_mu_c(all_resource)")
-
-
-# %%
-
-gLV_M(eLV_directory = "M_vs_mu_c",
-      gLV_directory = "M_vs_mu_c(no_rho)",
-      include_rho = False)

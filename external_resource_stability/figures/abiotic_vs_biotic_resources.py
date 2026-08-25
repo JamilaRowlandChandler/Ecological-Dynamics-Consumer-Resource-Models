@@ -10,7 +10,7 @@ import pandas as pd
 import seaborn as sns
 import os
 import sys
-
+from scipy.optimize import curve_fit
 from matplotlib import pyplot as plt
 from matplotlib.colors import colorConverter, LinearSegmentedColormap
 
@@ -80,12 +80,60 @@ def feasible_region(df, index = 'rho', columns = 'sigma_c'):
 
 # %%
 
-def compare_abiotic_biotic(stability_ab,
+def compare_abiotic_biotic(df_ab,
+                           df_b,
+                           stability_ab,
                            feasibility_ab,
                            stability_b,
                            feasibility_b,
                            example_simulations,
                            sces):
+    
+    def ndimension_fit(xvals,
+                       yvals,
+                       dim = 2):
+        
+        smoother = np.poly1d(np.polyfit(xvals, yvals, dim))
+        
+        return smoother
+    
+    def log_fit(xvals, yvals):
+        
+        fit_p, _ = curve_fit(log,
+                             xvals, yvals,
+                             bounds = [0, 1e6])
+        
+        return fit_p
+    
+    def log(x,
+            a, b):
+        
+        return a + b*np.log(x) #a - b/x
+    
+    def fitted_threshold(x,
+                         not_groupby_var,
+                         stability_distance = 'stability_distance'):
+        
+        #smoothed_x = np.arange(np.min(x['sigma_c']),
+        #                       np.max(x['sigma_c']) + 2,
+        #                       0.01)
+        
+        x[x == np.inf] = 1e5
+        x[x == -np.inf] = -1e5
+        
+        smoothed_x = np.arange(0, 1, 0.01) \
+                     if not_groupby_var == "rho" \
+                     else np.arange(np.min(x[not_groupby_var]),
+                                    np.max(x[not_groupby_var]) + 2,
+                                    0.01)
+        
+        #smoother = ndimension_fit(x['sigma_c'].to_numpy(),
+        smoother = ndimension_fit(x[not_groupby_var].to_numpy(),
+                                  x[stability_distance].to_numpy())
+        
+        stability_threshold = smoothed_x[np.abs(smoother(smoothed_x)).argmin()]
+        
+        return stability_threshold
     
     def stability_plot(stability_pivot,
                        feasibility_pivot,
@@ -134,12 +182,62 @@ def compare_abiotic_biotic(stability_ab,
                       fontsize = 10, weight = 'bold')
         
         ax.set_title(title, fontsize = 10, weight = 'bold')
-             
-        #cbar = ax.collections[0].colorbar
-        #cbar.set_label(label = 'Prob. (stability)',
-        #               size = '10', horizontalalignment = 'center', 
-        #               verticalalignment = 'top', weight = 'bold')
-        #cbar.ax.tick_params(labelsize = 10)
+        
+    def stability_boundary(df,
+                           rhos,
+                           sigmas,
+                           groupby_var,
+                           ax,
+                           fit_method = "log"):
+        
+        not_groupby_var = "rho" if groupby_var == "sigma_c" else "sigma_c"
+        
+        df['Packing ratio'] = df['phi_N']/df['phi_R']
+        df['stability_distance'] = df['rho']**2 - df['Packing ratio'] 
+        
+        sces_thresh = (df.loc[~np.isnan(df['Max. lyapunov exponent']),
+                              ['rho','sigma_c', 'stability_distance']]
+                       .groupby(['rho', 'sigma_c'])
+                       .apply('mean',
+                              include_groups=False)
+                       .reset_index()
+                       .groupby(groupby_var)
+                       .apply(fitted_threshold,
+                              not_groupby_var=not_groupby_var,
+                              include_groups=False)
+                       .to_frame(not_groupby_var)
+                       .reset_index())
+        
+        sigma_diff = np.unique(np.abs(np.diff(sigmas)))[0]
+        
+        plot_sigmas = np.arange(np.min(sigmas) - sigma_diff,
+                                np.max(sigmas) + 2*sigma_diff,
+                                sigma_diff)
+        
+        match fit_method:
+            
+            case "polynomial":    
+            
+                estimated_boundary = ndimension_fit(sces_thresh['sigma_c'],
+                                                   sces_thresh['rho'],
+                                                   2)(plot_sigmas)
+                 
+            case "log":
+        
+                estimated_boundary = log(plot_sigmas,
+                                         *log_fit(sces_thresh['sigma_c'],
+                                                  sces_thresh['rho']))
+                
+        y_phase = estimated_boundary - np.min(rhos)
+        y_vals = (1/np.unique(np.round(np.abs(np.diff(rhos)), 7)))*y_phase + 0.5
+        
+        x_vals = -0.5 + np.arange(0, len(plot_sigmas), 1)
+        
+        sns.lineplot(x = x_vals,
+                     y = y_vals,
+                     ax = ax,
+                     color = 'black',
+                     linewidth = 3)
         
     def example_dynamics(df, sub_axs):
     
@@ -211,17 +309,6 @@ def compare_abiotic_biotic(stability_ab,
     
     sns.set_style('ticks')
     
-    #mosaic = [["PA", ".", "DA_SR", ".", "DA_UR"],
-    #          ["PA", ".", "DA_SC", ".", "DA_UC"],
-    #          [".", ".", ".", ".", "."],
-    #          ["PB", ".", "DB_SR", ".", "DB_UR"],
-    #          ["PB", ".", "DB_SC", ".", "DB_UC"]]
-    
-    #mosaic = [["PA", "PA", "PA", ".", ".", "PB", "PB", "PB", "."],
-    #          [".", ".", ".", ".", ".", ".", ".", ".", "."],
-    #          ["DA_SR", ".", "DA_UR",  ".", "DB_SR", "DB_SR", "DB_CR", "DB_UR", "DB_UR"],
-    #          ["DA_SC", ".", "DA_UC", ".",  "DB_SC", "DB_SC", "DB_CC", "DB_UC", "DB_UC"]]
-    
     mosaic = [["PA", "PA", ".", "PB", "PB"],
               [".", ".", ".", ".", "."],
               ["DA_SR", "DA_SC",  ".", "DB_SR", "DB_SC"],
@@ -238,10 +325,22 @@ def compare_abiotic_biotic(stability_ab,
                    "Externally-supplied resources",
                    axs["PA"])
     
+    stability_boundary(df_ab,
+                       rhos,
+                       sigmas,
+                       "rho",
+                       axs["PA"])
+    
     stability_plot(stability_b,
                    feasibility_b,
                    "Self-limiting resources",
                    axs["PB"])
+    
+    stability_boundary(df_b,
+                       rhos,
+                       sigmas,
+                       "sigma_c",
+                       axs["PB"])
     
     axs["PA"].set_facecolor('white')
     axs["PB"].set_facecolor('white')
@@ -281,7 +380,9 @@ feasibility_biotic = feasible_region(simulations_biotic)
 
 # %%
 
-compare_abiotic_biotic(stability_abiotic,
+compare_abiotic_biotic(simulations_abiotic,
+                       simulations_biotic,
+                       stability_abiotic,
                        feasibility_abiotic,
                        stability_biotic,
                        feasibility_biotic,
