@@ -1150,7 +1150,7 @@ def community_dynamics_df(communities : list,
 
             # extract model parameters
         parameter_df = pd.DataFrame.from_dict({parameter : \
-                                               np.concatenate([np.repeat(getattr(community, parameter),
+                                               np.concatenate([np.repeat(getattr(community, parameter, None),
                                                                          len(community.ODE_sols))
                                                                for community in communities])
                                                for parameter in parameters})

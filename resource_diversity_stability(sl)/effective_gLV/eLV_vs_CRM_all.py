@@ -125,16 +125,15 @@ def Stability_Plot(df_eLV_ar,
                         for df in [df_CRM, df_eLV_ar, df_eLV_phi_R]]
     
     titles = ["Consumer-resource model",
-              "Consumer-only model\n(inc. extinct resources)",
-              "Reconstructed gLV\n(mean and variance in\n" + \
-                  r'$A_{ii}$' + " and " + r'$A_{ij}$' + " only"]
+              "Consumer-only model",
+              "Consumer-only model\n(inc. extinct resources)"]
     
     sns.set_style('ticks')
 
     fig, axs = plt.subplots(1, 3,
                             sharex=True, sharey=True,
                             layout='constrained',
-                            figsize=(7, 2.6))
+                            figsize=(6.9, 2.6))
     
     for i, (stability_pivot, title, ax) in enumerate(zip(reversed(stability_pivots),
                                                          reversed(titles),
@@ -195,6 +194,11 @@ def Stability_Plot(df_eLV_ar,
                   weight = 'bold')
     fig.supylabel('avg. total consumption coeff., ' + r'$\mu_c$',
                   fontsize = 10, weight = 'bold')
+    
+    plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/M_vs_mu_c_eLVs.png",
+                bbox_inches='tight')
+    plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/M_vs_mu_c_eLVs.svg",
+                bbox_inches='tight')
         
     plt.show()
     
@@ -236,6 +240,14 @@ def population_dynamics():
         
     stable_eLV = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/" +\
                                         "resource_diversity_stability/simulations/eLV/M_vs_mu_c/" +  
+                                        "simulations_225_0.6444.pkl")
+        
+    chaotic_eLV_ar = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/" +
+                                         "resource_diversity_stability/simulations/eLV/M_vs_mu_c(all_resource)/" + 
+                                         "simulations_75_1.9333.pkl")
+        
+    stable_eLV_ar = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/" +\
+                                        "resource_diversity_stability/simulations/eLV/M_vs_mu_c(all_resource)/" +  
                                         "simulations_225_0.6444.pkl")
                  
     def indices_and_cmaps(M):
@@ -279,29 +291,50 @@ def population_dynamics():
         return ax
     
     i_c_rp = [indices_and_cmaps(M) for M in example_M]
-    i_c_rp = [i_c_sublist for _ in range(3) 
+    i_c_rp = [i_c_sublist for _ in range(4) 
               for i_c_sublist in i_c_rp]
     
     fig, axs = plt.subplot_mosaic([['CRM_chaoticC',
                                     'CRM_stableC',
+                                    'eLV_chaoticC_ar',
+                                    'eLV_stableC_ar',
                                     'eLV_chaoticC',
                                     'eLV_stableC'],
                                    ['CRM_chaoticR',
                                     'CRM_stableR',
                                     '.',
+                                    '.',
+                                    '.',
                                     '.']],
                                     layout='constrained',
                                     sharex=True,
                                     sharey=True,
-                                    figsize=(5, 2.6))
-
+                                    figsize=(6.9, 2.4))
+    
+    
+    def find_chaos(communities):
+    
+        for community in communities:
+            
+            if community.max_lyapunov_exponent > 0:
+                
+                return community
+            
+        return community
+    
+    ac_chaotic_eLV_ar = find_chaos(chaotic_eLV_ar)
+    ac_chaotic_eLV = find_chaos(chaotic_eLV)
+                
     for ax, simulation, i_c_rp_M, title in \
         zip(axs.values(),
-            [chaotic_CRM[2], stable_CRM[4],
-             chaotic_eLV[2], stable_eLV[4],
-             chaotic_CRM[2], stable_CRM[4]],
+            [chaotic_CRM[0], stable_CRM[0],
+             ac_chaotic_eLV_ar, stable_eLV_ar[0],
+             ac_chaotic_eLV, stable_eLV[0],
+             chaotic_CRM[0], stable_CRM[0]],
             i_c_rp,
-            ['consumer', 'consumer', 'consumer', 'consumer',
+            ['consumer', 'consumer',
+             'consumer', 'consumer',
+             'consumer', 'consumer',
              'resource', 'resource']):
         
         plot_dynamics(ax, simulation, i_c_rp_M, title)
@@ -310,7 +343,7 @@ def population_dynamics():
 
 # %%
 
-df_eLV_ar = read_eLV_data("eLV/M_vs_mu_c")
+df_eLV_ar = read_eLV_data("eLV/M_vs_mu_c(all_resource)")
 
 # %%
 
@@ -318,9 +351,8 @@ df_eLV_phiR = read_eLV_data("eLV/M_vs_mu_c")
 
 # %%
 
-df_CRM = read_eLV_data("eLV/M_vs_mu_c") 
-#generate_simulation_df("C:/Users/jamil/Documents/PhD/Data/" \
-#                                + 'resource_diversity_stability/simulations/M_vs_mu_c')
+df_CRM = generate_simulation_df("C:/Users/jamil/Documents/PhD/Data/" \
+                              + 'resource_diversity_stability/simulations/M_vs_mu_c')
 
     
 # %%
