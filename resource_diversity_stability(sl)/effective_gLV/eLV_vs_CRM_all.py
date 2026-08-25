@@ -123,12 +123,6 @@ def Stability_Plot(df_eLV_ar,
                                   columns = 'M',
                                   index = 'mu_c')[0]
                         for df in [df_CRM, df_eLV_ar, df_eLV_phi_R]]
-    
-    titles = ["Consumer-resource model",
-              "Consumer-only model\n(inc. extinct resources)",
-              "Reconstructed gLV\n(mean and variance in\n" + \
-                  r'$A_{ii}$' + " and " + r'$A_{ij}$' + " only"]
-    
     sns.set_style('ticks')
 
     fig, axs = plt.subplots(1, 3,
@@ -137,7 +131,6 @@ def Stability_Plot(df_eLV_ar,
                             figsize=(7, 2.6))
     
     for i, (stability_pivot, title, ax) in enumerate(zip(reversed(stability_pivots),
-                                                         reversed(titles),
                                                          reversed(axs))):
         
         if i == 0:
@@ -310,7 +303,7 @@ def population_dynamics():
 
 # %%
 
-df_eLV_ar = read_eLV_data("eLV/M_vs_mu_c")
+df_eLV_ar = read_eLV_data("eLV/M_vs_mu_c(all_resource)")
 
 # %%
 
@@ -318,9 +311,8 @@ df_eLV_phiR = read_eLV_data("eLV/M_vs_mu_c")
 
 # %%
 
-df_CRM = read_eLV_data("eLV/M_vs_mu_c") 
-#generate_simulation_df("C:/Users/jamil/Documents/PhD/Data/" \
-#                                + 'resource_diversity_stability/simulations/M_vs_mu_c')
+df_CRM =generate_simulation_df("C:/Users/jamil/Documents/PhD/Data/" \
+                                + 'resource_diversity_stability/simulations/M_vs_mu_c')
 
     
 # %%
