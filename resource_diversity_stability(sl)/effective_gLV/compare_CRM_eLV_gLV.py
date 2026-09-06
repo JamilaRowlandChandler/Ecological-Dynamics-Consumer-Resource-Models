@@ -22,6 +22,11 @@ import os
 import sys
 from typing import Literal, Union
 from matplotlib import pyplot as plt
+import seaborn as sns
+
+from matplotlib.colors import LinearSegmentedColormap
+import matplotlib.patheffects as patheffects
+
 
 os.chdir('C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/resource_diversity_stability(sl)/effective_gLV')
 
@@ -235,21 +240,176 @@ def compare_CRM_eLV_gLV(CRM_filepath : str,
 
 # %%
 
-# example usage (guarded so importing this module never runs it):
+def _lyapunov_exponent(community):
 
-if __name__ == "__main__":
+    '''
 
-     CRM_community, eLV_community, gLV_community = compare_CRM_eLV_gLV(
-         "M_vs_mu_c/simulations_250_1.0.pkl",
-         cavity_phi_R=True,
-         empirical=True)
-     
+    eLV/gLV communities store this as max_lyapunov_exponent, raw CRM
+    communities as lyapunov_exponent.
+
+    '''
+
+    return getattr(community, 'max_lyapunov_exponent',
+                   getattr(community, 'lyapunov_exponent', None))
+
+def _first_chaotic(communities):
+
+    for community in communities:
+
+        if _lyapunov_exponent(community) > 0:
+
+            return community
+
+    return communities[0]
+
+def _first_stable(communities):
+
+    for community in communities:
+
+        if _lyapunov_exponent(community) <= 0:
+
+            return community
+
+    return communities[0]
+
+def _has_resource_dynamics(community):
+
+    '''
+
+    True if community.ODE_sols track resource abundances as well as
+    species abundances (raw CRM communities) rather than species alone
+    (eLV/gLV communities).
+
+    '''
+
+    return community.ODE_sols[0].y.shape[0] > community.no_species
+
+def _indices_and_cmap(M):
+
+    colour_index = np.arange(M)
+    np.random.shuffle(colour_index)
+
+    cmap = LinearSegmentedColormap.from_list('custom YlGBl',
+                                             ['#e9a100ff','#1fb200ff',
+                                              '#1f5a00ff','#00e9e9ff','#001256fd'],
+                                               N = M)
+
+    return colour_index, cmap
+
+def _plot_dynamics(ax, simulation, colour_index_cmap, title):
+
+    data = simulation.ODE_sols[0]
+
+    colour_index, cmap = colour_index_cmap
+    var_pos = np.arange(len(colour_index))
+
+    if title == "resource":
+
+        var_pos += len(colour_index)
+
+    for i, v in zip(colour_index, var_pos):
+
+        ax.plot(data.t, data.y[v,:].T, color = 'black', linewidth = 0.5)
+        ax.plot(data.t, data.y[v,:].T, color = cmap(i), linewidth = 0.45)
+
+        ax.set_title(title, fontsize = 9, y = 0.85)
+
+    return ax
+
+def population_dynamics(communities,
+                        savepath = None):
+
+    '''
+
+    Plot example chaotic/stable population dynamics for any number of
+    datasets, side by side. Datasets that track resource abundances (raw
+    CRM communities) additionally get a resource-dynamics row; datasets
+    that don't (eLV/gLV communities) don't.
+
+    Parameters
+    ----------
+    datasets : list of (str, str) tuples
+        (title, directory) pairs. Each directory must contain
+        chaotic_file/stable_file - pickled lists of communities (one file =
+        one (M, mu_c) combination, with ODE_sols already simulated).
+    chaotic_file : str, optional
+        Filename (within each dataset's directory) to search for a
+        community with a chaotic (positive) Lyapunov exponent. The default
+        is "simulations_75_1.9333.pkl".
+    stable_file : str, optional
+        Filename (within each dataset's directory) to search for a
+        community with a stable (non-positive) Lyapunov exponent. The
+        default is "simulations_225_0.6444.pkl".
+    example_M : (int, int), optional
+        Resource pool sizes corresponding to chaotic_file/stable_file
+        respectively (used to build consistent colour maps across
+        datasets). The default is (75, 225).
+    savepath : str, optional
+        If given, save the figure to savepath + '.png'/'.svg'. The default
+        is None (figure is not saved to file).
+
+    '''
+
+    n = len(communities)
+
+    colour_index_cmap_by_M = [_indices_and_cmap(community.no_resources) 
+                              for community in communities]
+
+    fig, axs = plt.subplots(1, n,
+                            layout='constrained',
+                            sharex=True,
+                            sharey=True,
+                            figsize=(2.3 * n, 2.3))
+    
+    for (ax, community, c_i_cmap) in zip(axs,
+                                         communities, 
+                                         colour_index_cmap_by_M):
+        
+        _plot_dynamics(ax,
+                       community,
+                       c_i_cmap,
+                      'consumer')
+        
+    sns.despine()
+
+    if savepath is not None:
+
+        plt.savefig(savepath + ".png", bbox_inches='tight')
+        plt.savefig(savepath + ".svg", bbox_inches='tight')
+
+    plt.show()
+
 # %%
 
-fig, (ax1, ax2) = plt.subplots(1, 2)
+# example usage (guarded so importing this module never runs it):
 
-ax1.plot(eLV_community.ODE_sols[0].t,
-         eLV_community.ODE_sols[0].y.T)
+#if __name__ == "__main__":
+communities_s = compare_CRM_eLV_gLV("M_vs_mu_c/simulations_250_0.4.pkl",
+                                    cavity_phi_R=True,
+                                    empirical=True)
 
-ax2.plot(gLV_community.ODE_sols[0].t,
-         gLV_community.ODE_sols[0].y.T)
+# %%
+
+population_dynamics(communities_s,
+                    "C:/Users/jamil/Documents/PhD/Figures/" + \
+                        "resource_diversity_stability/compare_CRM_eLV_gLV_s")
+
+# %%
+
+communities_c = compare_CRM_eLV_gLV("M_vs_mu_c/simulations_250_1.0.pkl",
+                                    cavity_phi_R=True,
+                                    empirical=True)
+
+population_dynamics(communities_c,
+                    "C:/Users/jamil/Documents/PhD/Figures/" + \
+                        "resource_diversity_stability/compare_CRM_eLV_gLV_c")
+    
+# %%
+
+communities_c2 = compare_CRM_eLV_gLV("M_vs_mu_c/simulations_75_1.9333.pkl",
+                                    cavity_phi_R=True,
+                                    empirical=True)
+
+population_dynamics(communities_c2,
+                    "C:/Users/jamil/Documents/PhD/Figures/" + \
+                        "resource_diversity_stability/compare_CRM_eLV_gLV_c2")   

@@ -1541,38 +1541,62 @@ def eLV_gLV_df_from_communities(communities : list):
 
     n = len(communities)
 
-    data = {'no_species' : [community.no_species for community in communities],
-           'Max. lyapunov exponent' : [community.max_lyapunov_exponent
-                                       for community in communities],
-           'corr_violate' : [getattr(community, "corr_violate", False)
-                             for community in communities],
-           'Divergence' : [community.ODE_sols[0].t[-1]
-                           for community in communities]}
+    mixed_data = {'no_species' : [community.no_species for community in communities],
+                  'Max. lyapunov exponent' : [community.max_lyapunov_exponent
+                                              for community in communities],
+                  'corr_violate' : [getattr(community, "corr_violate", False)
+                                    for community in communities],
+                  'Divergence' : [community.ODE_sols[0].t[-1]
+                                  for community in communities]}
 
     # interaction statistics from calculate_interaction_stats()
-    for stat in _ELV_GLV_INTERACTION_STATS:
+    
+    interactions_stats = {key: [getattr(community,
+                                        key,
+                                        np.nan) for community in communities]
+                          for stat in _ELV_GLV_INTERACTION_STATS
+                          for key in (stat, stat + "_est")}
+    
+    comm_stats = {key : [getattr(community, key, np.nan)[0]
+                         for community in communities]
+                  for key in ["species_survival_fraction",
+                              "species_avg_abundance",
+                              "species_abundance_fluctuations"]}
+    
+    carried_atr = {key : [getattr(community, key, np.nan)
+                       for community in communities]
+                   for key in _ELV_GLV_CARRIED_ATTRIBUTES}
+    
+    
+    
+    #for stat in _ELV_GLV_INTERACTION_STATS:
 
-        data[stat] = [getattr(community, stat, np.nan)
-                      for community in communities]
+    #    data[stat] = [getattr(community, stat, np.nan)
+    #                  for community in communities]
+        
+    #    data[stat + "_est"] = [getattr(community, stat + "_est", np.nan)
+    #                           for community in communities]
 
     # community properties from calculate_community_properties() - a list
     # per community (one entry per initial condition/ODE_sol), so take the
     # first (communities in this pipeline are always run with a single
     # initial condition, no_init_conds/no_init_cond = 1)
-    for prop in ["species_survival_fraction", "species_avg_abundance",
-                "species_abundance_fluctuations"]:
+    #for prop in ["species_survival_fraction", "species_avg_abundance",
+    #            "species_abundance_fluctuations"]:
 
-        data[prop] = [getattr(community, prop)[0]
-                     if hasattr(community, prop) else np.nan
-                     for community in communities]
+    #    data[prop] = [getattr(community, prop)[0]
+    #                 if hasattr(community, prop) else np.nan
+    #                 for community in communities]
 
     # carried-over resource/consumption statistics, where present (eLV_SL/
     # eLV_ES only - gLV communities won't have these unless explicitly
     # copied over, e.g. by gLV_dynamics()/gLV_from_averaged_stats())
-    for attribute in _ELV_GLV_CARRIED_ATTRIBUTES:
+    #for attribute in _ELV_GLV_CARRIED_ATTRIBUTES:
 
-        data[attribute] = [getattr(community, attribute, np.nan)
-                           for community in communities]
+    #    data[attribute] = [getattr(community, attribute, np.nan)
+    #                       for community in communities]
+    
+    data = mixed_data | interactions_stats | comm_stats | carried_atr
 
     return pd.DataFrame(data)
 

@@ -324,18 +324,3 @@ for i, es in enumerate(example_sensitivities):
         
         break
 
-# %%
-
-def stability_threshold(x):
-    
-    return x['rho']**2 - x['Species packing']
-
-simulations_hlow['Stability condition'] = \
-    simulations_hlow['rho']**2 - simulations_hlow['Species packing']
-
-
-A = pd.pivot_table(simulations_hlow,
-                   index = 'rho',
-                   columns = 'sigma_c',
-                   values = 'Stability condition',
-                   aggfunc='mean')

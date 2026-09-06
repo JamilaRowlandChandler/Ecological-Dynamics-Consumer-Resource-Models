@@ -50,7 +50,12 @@ def average_eLV_statistics(eLV_communities : list,
                                                             "rho_C",
                                                             "rho_1idx"]],
                                                None] =
-                           ["rho_D", "rho_R", "rho_C", "rho_1idx"]):
+                           ["rho_D", "rho_R", "rho_C", "rho_1idx"],
+                           include_sigma : Union[list[Literal["sigma_r",
+                                                              "sigma_Aij",
+                                                              "sigma_Aii"]],
+                                                 []] = 
+                           ["sigma_r", "sigma_Aij", "sigma_Aii"]):
 
     '''
 
@@ -73,20 +78,29 @@ def average_eLV_statistics(eLV_communities : list,
         Averaged statistics, keyed by attribute name.
 
     '''
-
-    stat_keys = ["mu_r", "sigma_r", "mu_Aij", "sigma_Aij", "mu_Aii", "sigma_Aii"]
+    
+    complete_stats = ["mu_r", "sigma_r",
+                      "mu_Aij", "sigma_Aij",
+                      "mu_Aii", "sigma_Aii",
+                      "rho_D", "rho_R", "rho_C", "rho_1idx",
+                      "rho_r_Aij", "rho_Aii_Aij"]
+    
+    included_stats = ["mu_r", "mu_Aij", "mu_Aii"]
 
     if include_rho is not None:
 
-        stat_keys += list(include_rho)
+        included_stats += list(np.concatenate([include_rho,
+                                               ["rho_r_Aij", "rho_Aii_Aij"]]))
 
-        # correlations between A_ij and r, and A_ij and A_ii
-        stat_keys += ["rho_r_Aij", "rho_Aii_Aij"]
 
-    averaged_stats = {key : np.mean([getattr(eLV_community, key)
+    included_stats += include_sigma        
+    
+    averaged_stats = {key : (np.mean([getattr(eLV_community, key)
                                      for eLV_community in eLV_communities])
-                      for key in stat_keys}
-
+                             if key in included_stats
+                             else float(0))
+                      for key in complete_stats}
+    
     # carry over (averaged) resource/consumption statistics for bookkeeping
     for attribute in CARRIED_ATTRIBUTES:
 
@@ -99,12 +113,6 @@ def average_eLV_statistics(eLV_communities : list,
 
 def gLV_from_averaged_stats(averaged_stats : dict,
                             no_species : int,
-                            include_rho : Union[list[Literal["rho_D",
-                                                             "rho_R",
-                                                             "rho_C",
-                                                             "rho_1idx"]],
-                                                None] =
-                            ["rho_D", "rho_R", "rho_C", "rho_1idx"],
                             empirical : bool = True):
 
     '''
@@ -132,23 +140,35 @@ def gLV_from_averaged_stats(averaged_stats : dict,
         Simulated gLV community.
 
     '''
+    
+    #if include_rho is not None:
 
-    if include_rho is not None:
-
-        rhos = {rho_key : averaged_stats[rho_key] for rho_key in include_rho}
+    #    rhos = {rho_key : averaged_stats[rho_key] for rho_key in include_rho}
 
         # correlations between A_ij and r, and A_ij and A_ii
-        rhos["rho_r_Aij"] = averaged_stats["rho_r_Aij"]
-        rhos["rho_Aii_Aij"] = averaged_stats["rho_Aii_Aij"]
+    #    rhos["rho_r_Aij"] = averaged_stats["rho_r_Aij"]
+    #    rhos["rho_Aii_Aij"] = averaged_stats["rho_Aii_Aij"]
 
-        interaction_args = dict(mu = averaged_stats["mu_Aij"],
-                                sigma = averaged_stats["sigma_Aij"],
-                                rhos = rhos)
+    interaction_args = dict(mu = averaged_stats["mu_Aij"],
+                            sigma = averaged_stats["sigma_Aij"],
+                            rhos = dict(zip(["rho_D",
+                                             "rho_R",
+                                             "rho_C",
+                                             "rho_1idx",
+                                             "rho_r_Aij",
+                                             "rho_Aii_Aij"],
+                                            map(averaged_stats.get,
+                                                ["rho_D",
+                                                 "rho_R",
+                                                 "rho_C",
+                                                 "rho_1idx",
+                                                 "rho_r_Aij",
+                                                 "rho_Aii_Aij"]))))
 
-    else:
+    #else:
 
-        interaction_args = dict(mu = averaged_stats["mu_Aij"],
-                                sigma = averaged_stats["sigma_Aij"])
+    #    interaction_args = dict(mu = averaged_stats["mu_Aij"],
+    #                            sigma = averaged_stats["sigma_Aij"])
         
     gLV_community = gLV(no_species)
     gLV_community.model_specific_rates(growth_method='normal',
@@ -194,6 +214,11 @@ def gLV_communities_from_averaged_eLV(eLV_communities : list,
                                                                        "rho_1idx"]],
                                                           None] =
                                       ["rho_D", "rho_R", "rho_C", "rho_1idx"],
+                                      include_sigma : Union[list[Literal["sigma_r",
+                                                                         "sigma_Aij",
+                                                                         "sigma_Aii"]],
+                                                            []] = 
+                                      ["sigma_r", "sigma_Aij", "sigma_Aii"],
                                       empirical : bool = True):
 
     '''
@@ -221,12 +246,15 @@ def gLV_communities_from_averaged_eLV(eLV_communities : list,
 
     '''
 
-    averaged_stats = average_eLV_statistics(eLV_communities, include_rho)
+    averaged_stats = average_eLV_statistics(eLV_communities,
+                                            include_rho,
+                                            include_sigma)
 
     # assumes every eLV community in the file has the same species pool size
     no_species = eLV_communities[0].no_species
 
-    return [gLV_from_averaged_stats(averaged_stats, no_species, include_rho,
+    return [gLV_from_averaged_stats(averaged_stats,
+                                    no_species,
                                     empirical)
             for _ in tqdm(range(n), leave = False, position = 0, total = n)]
 
@@ -241,6 +269,11 @@ def gLV_M_averaged(gLV_directory : str,
                                                     "rho_1idx"]],
                                        None] =
                    ["rho_D", "rho_R", "rho_C", "rho_1idx"],
+                   include_sigma : Union[list[Literal["sigma_r",
+                                                      "sigma_Aij",
+                                                      "sigma_Aii"]],
+                                         []] = 
+                   ["sigma_r", "sigma_Aij", "sigma_Aii"],
                    empirical : bool = True):
 
     '''
@@ -284,6 +317,7 @@ def gLV_M_averaged(gLV_directory : str,
         gLV_communities = gLV_communities_from_averaged_eLV(eLV_communities,
                                                              n,
                                                              include_rho,
+                                                             include_sigma,
                                                              empirical)
 
         # save gLV interaction statistics as a csv (v3 method), rather than
@@ -330,35 +364,62 @@ def gLV_M_averaged(gLV_directory : str,
 
 if __name__ == "__main__":
 
-    gLV_directories = [#"M_vs_mu_c(averaged)",
-                       #"M_vs_mu_c_drc(averaged)",
-                       #"M_vs_mu_c_dr(averaged)",
-                       #"M_vs_mu_c_d(averaged)",
-                       "M_vs_mu_c_norho(averaged)"]
+    gLV_directories = ["M_vs_mu_c(averaged)",
+                       "M_vs_mu_c_drc(averaged)",
+                       "M_vs_mu_c_dr(averaged)",
+                       "M_vs_mu_c_d(averaged)",
+                       "M_vs_mu_c_rhoAij(averaged)"]
 
-    incl_rhos = [#["rho_D", "rho_R", "rho_C", "rho_1idx"],
-                 #["rho_D", "rho_R", "rho_C"],
-                 #["rho_D", "rho_R"],
-                 #["rho_D"],
-                 None]
+    incl_rhos = [["rho_D", "rho_R", "rho_C", "rho_1idx"],
+                 ["rho_D", "rho_R", "rho_C"],
+                 ["rho_D", "rho_R"],
+                 ["rho_D"],
+                 {}]
 
     for gLV_directory, include_rho in zip(gLV_directories, incl_rhos):
 
          gLV_M_averaged(eLV_directory="M_vs_mu_c",
                         gLV_directory=gLV_directory,
-                        n=40,
+                        n=20,
                         include_rho=include_rho)
 
     gLV_directories_ar = ["M_vs_mu_c(averaged, all_resource)",
                           "M_vs_mu_c_drc(averaged, all_resource)",
                           "M_vs_mu_c_dr(averaged, all_resource)",
                           "M_vs_mu_c_d(averaged, all_resource)",
-                          "M_vs_mu_c_norho(averaged, all_resource)"]
+                          "M_vs_mu_c_rhoAij(averaged, all_resource)"]
 
     for gLV_directory, include_rho in zip(gLV_directories_ar, incl_rhos):
 
          gLV_M_averaged(eLV_directory="M_vs_mu_c(all_resource)",
                         gLV_directory=gLV_directory,
-                        n=40,
+                        n=20,
                         include_rho=include_rho)
          
+# %%
+    
+gLV_M_averaged(eLV_directory="M_vs_mu_c",
+               gLV_directory="M_vs_mu_c_norho(averaged)",
+               n=20,
+               include_rho=None)
+
+gLV_M_averaged(eLV_directory="M_vs_mu_c",
+               gLV_directory="M_vs_mu_c_rho_nosigma_r(averaged)",
+               n=20,
+               include_rho=None,
+               include_sigma=["sigma_Aij",
+                              "sigma_Aii"]) 
+
+gLV_M_averaged(eLV_directory="M_vs_mu_c(all_resource)",
+               gLV_directory="M_vs_mu_c_norho(averaged, all_resource)",
+               n=20,
+               include_rho=None)
+
+# %%
+
+gLV_M_averaged(eLV_directory="M_vs_mu_c(all_resource)_sub",
+               gLV_directory="M_vs_mu_c_norho_sigma_r(averaged, all_resource)",
+               n=20,
+               include_rho=None,
+               include_sigma=["sigma_Aij",
+                              "sigma_Aii"]) 

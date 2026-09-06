@@ -23,7 +23,7 @@ os.chdir('C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Con
 
 sys.path.insert(0, "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/" + \
                     "resource_diversity_stability(sl)")
-from complete_simulation_functions import generate_simulation_df, le_pivot_r
+from complete_simulation_functions import generate_simulation_df, le_pivot_r, agg_pivot
 
 # %%
 
@@ -77,10 +77,15 @@ def read_eLV_data(directory):
                               else 0
                               for gLV_community in egLV_communities],
                  'Divergence' : [gLV_community.ODE_sols[0].t[-1]
-                              for gLV_community in egLV_communities]
+                              for gLV_community in egLV_communities],
+                 'species_survival_fraction' : [getattr(gLV_community,
+                                                        "species_survival_fraction",
+                                                        [np.nan])[0]
+                                                for gLV_community in egLV_communities],
+                 
                  })
 
-        return df[_READ_ELV_DATA_COLUMNS]
+        return df
 
     def read_csv(filepath):
 
@@ -92,7 +97,7 @@ def read_eLV_data(directory):
         df['M'] = df['no_resources']
         df['mu_c'] = np.round(df['no_resources'] * df['mu_c'], 4)
 
-        return df[_READ_ELV_DATA_COLUMNS]
+        return df
 
     egLV_df = pd.concat([read_csv(os.path.join(directory, file))
                          if file.endswith('.csv')
@@ -156,9 +161,34 @@ def load_stability_dataset(directory):
 
 # %%
 
+def survival_fraction_pivot(df : pd.DataFrame):
+
+    '''
+
+    pivot_func for plot_ablation_heatmaps(): mean species_survival_fraction
+    (mu_c vs M), via agg_pivot().
+
+    species_survival_fraction may not be available for every dataframe -
+    the base eLV pipeline (read_pickled_eLV_directory(), eLV_M() in
+    all_mu_c_vs_M_egLV.py) never calls calculate_community_properties(), so
+    that column is all-NaN there, and agg_pivot()'s mean will silently
+    produce NaN cells (left blank by seaborn) rather than raising.
+
+    '''
+
+    return agg_pivot(df, values = 'species_survival_fraction',
+                     index = 'mu_c', columns = 'M')[0]
+
+# %%
+
 def Stability_Plot(dfs,
                    titles,
                    mu_c_max = 220,
+                   pivot_func = None,
+                   cbar_label : str = "P(stability)",
+                   vmin : float = 0,
+                   vmax : float = 1,
+                   cmap : str = "Purples_r",
                    savepath = None):
 
     '''
@@ -186,15 +216,17 @@ def Stability_Plot(dfs,
         raise ValueError("dfs and titles must be the same length.")
 
     n = len(dfs)
-
-    resource_pool_sizes = np.unique(dfs[0]['M'])
+    
+    resource_pool_sizes = np.unique(dfs[0]['M']).astype(int)
     mu_cs = np.unique(dfs[0].loc[dfs[0]['mu_c'] < mu_c_max, 'mu_c'])
 
     ######################## Phase diagram ######################################
+    
+    if pivot_func is None:
 
-    stability_pivots = [le_pivot_r(df.loc[df['mu_c'] < mu_c_max, :],
-                                  columns = 'M',
-                                  index = 'mu_c')[0]
+        pivot_func = lambda df: le_pivot_r(df, index = 'mu_c', columns = 'M')[0]
+
+    stability_pivots = [pivot_func(df.loc[df['mu_c'] < mu_c_max, :])
                         for df in dfs]
 
     sns.set_style('ticks')
@@ -214,10 +246,10 @@ def Stability_Plot(dfs,
 
         subfig = sns.heatmap(stability_pivot,
                              ax = ax,
-                             vmin = 0,
-                             vmax = 1,
+                             vmin = vmin,
+                             vmax = vmax,
                              cbar = (i == n - 1),
-                             cmap = 'Purples_r')
+                             cmap = cmap)
 
         subfig.axhline(0, 0, 1, color = 'black', linewidth = 2)
         subfig.axhline(stability_pivot.shape[0], 0, 1,
@@ -244,7 +276,7 @@ def Stability_Plot(dfs,
                      verticalalignment = 'top')
 
     cbar = axs[-1].collections[0].colorbar
-    cbar.set_label(label = 'Probability(stability)',
+    cbar.set_label(label = cbar_label,
                    size = '8', horizontalalignment = 'center',
                    verticalalignment = 'top')
     cbar.ax.tick_params(labelsize = 10)
@@ -277,21 +309,21 @@ def _lyapunov_exponent(community):
 
 def _first_chaotic(communities):
 
-    for community in communities:
+    for i, community in enumerate(communities):
 
         if _lyapunov_exponent(community) > 0:
 
-            return community
+            return i
 
     return communities[0]
 
 def _first_stable(communities):
 
-    for community in communities:
+    for i, community in enumerate(communities):
 
-        if _lyapunov_exponent(community) <= 0:
+        if _lyapunov_exponent(community) < 0:
 
-            return community
+            return i
 
     return communities[0]
 
@@ -336,6 +368,8 @@ def _plot_dynamics(ax, simulation, colour_index_cmap, title):
         ax.plot(data.t, data.y[v,:].T, color = cmap(i), linewidth = 0.45)
 
         ax.set_title(title, fontsize = 9, y = 0.85)
+        ax.tick_params(axis='both', which='both', labelsize=8)
+        #ax.tick_params(axis='y', which='minor', labelsize=8)
 
     return ax
 
@@ -380,16 +414,20 @@ def population_dynamics(datasets,
 
     loaded = []
 
-    for title, directory in datasets:
+    for file_i, (title, directory) in enumerate(datasets):
 
         chaotic_communities = pd.read_pickle(os.path.join(directory, chaotic_file))
         stable_communities = pd.read_pickle(os.path.join(directory, stable_file))
+        
+        if file_i == 0:
 
-        chaotic_community = _first_chaotic(chaotic_communities)
-        stable_community = _first_stable(stable_communities)
+            chaos_idx = _first_chaotic(chaotic_communities)
+            stable_idx = _first_stable(stable_communities)
 
-        loaded.append((title, chaotic_community, stable_community,
-                      _has_resource_dynamics(chaotic_community)))
+        loaded.append((title,
+                       chaotic_communities[chaos_idx],
+                       stable_communities[stable_idx],
+                      _has_resource_dynamics(chaotic_communities[chaos_idx])))
 
     colour_index_cmap_by_M = {M : _indices_and_cmap(M) for M in example_M}
 
@@ -414,26 +452,34 @@ def population_dynamics(datasets,
                                   layout='constrained',
                                   sharex=True,
                                   sharey=True,
-                                  figsize=(2.3 * n, 2.4))
+                                  figsize=(1.6 * n, 1.75))
 
     for i, (title, chaotic_community, stable_community, has_resources) in enumerate(loaded):
 
-        _plot_dynamics(axs[f"d{i}_chaoticC"], chaotic_community,
-                      colour_index_cmap_by_M[example_M[0]], 'consumer')
+        _plot_dynamics(axs[f"d{i}_chaoticC"], 
+                       chaotic_community,
+                      colour_index_cmap_by_M[example_M[0]],
+                      'consumer')
         sns.despine(ax = axs[f"d{i}_chaoticC"])
 
-        _plot_dynamics(axs[f"d{i}_stableC"], stable_community,
-                      colour_index_cmap_by_M[example_M[1]], 'consumer')
+        _plot_dynamics(axs[f"d{i}_stableC"],
+                       stable_community,
+                      colour_index_cmap_by_M[example_M[1]],
+                      'consumer')
         sns.despine(ax = axs[f"d{i}_stableC"])
 
         if has_resources:
 
-            _plot_dynamics(axs[f"d{i}_chaoticR"], chaotic_community,
-                          colour_index_cmap_by_M[example_M[0]], 'resource')
+            _plot_dynamics(axs[f"d{i}_chaoticR"],
+                           chaotic_community,
+                          colour_index_cmap_by_M[example_M[0]],
+                          'resource')
             sns.despine(ax = axs[f"d{i}_chaoticR"])
 
-            _plot_dynamics(axs[f"d{i}_stableR"], stable_community,
-                          colour_index_cmap_by_M[example_M[1]], 'resource')
+            _plot_dynamics(axs[f"d{i}_stableR"],
+                           stable_community,
+                          colour_index_cmap_by_M[example_M[1]],
+                          'resource')
             sns.despine(ax = axs[f"d{i}_stableR"])
 
     if savepath is not None:
@@ -451,9 +497,16 @@ def population_dynamics(datasets,
 
 base = "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/"
 
+# %%
+
 df_CRM = load_stability_dataset(base + "M_vs_mu_c")
 df_eLV_phiR = load_stability_dataset(base + "eLV/M_vs_mu_c")
 df_eLV_ar = load_stability_dataset(base + "eLV/M_vs_mu_c(all_resource)")
+
+df_CRM.rename(columns={"phi_N" : "species_survival_fraction"},
+              inplace=True)
+
+# %%
 
 Stability_Plot([df_CRM, df_eLV_ar, df_eLV_phiR],
                ["Consumer-resource model",
@@ -464,7 +517,83 @@ Stability_Plot([df_CRM, df_eLV_ar, df_eLV_phiR],
     
 # %%
 
+Stability_Plot([df_CRM, df_eLV_ar, df_eLV_phiR],
+               ["Consumer-resource model",
+                "Consumer-only model",
+                "Consumer-only model\n(inc. extinct resources)"],
+               pivot_func = survival_fraction_pivot,
+               cmap='Greens_r',
+               vmax=np.max(np.concatenate([df.loc[:, 'species_survival_fraction'].to_numpy() 
+                                           for df in [df_CRM, df_eLV_phiR]])),
+               cbar_label = "Mean species survival fraction",
+               savepath = "C:/Users/jamil/Documents/PhD/Figures/" + \
+                   "resource_diversity_stability/M_vs_mu_c_eLVs_sf")   
+    
+# %%
+
 population_dynamics([("consumer", base + "M_vs_mu_c"),
                      ("consumer", base + "eLV/M_vs_mu_c(all_resource)"),
-                     ("consumer", base + "eLV/M_vs_mu_c"),
-                     ("consumer", base + "M_vs_mu_c")])
+                     ("consumer", base + "eLV/M_vs_mu_c")],
+                    savepath = "C:/Users/jamil/Documents/PhD/Figures/" + \
+                        "resource_diversity_stability/M_vs_mu_c_eLVs_dyn")
+
+# %%
+
+gLV_dfs = {subdirectory : load_stability_dataset(base + "gLV/surviving_resource/" + subdirectory)
+           for subdirectory in os.listdir(base + "gLV/surviving_resource")}
+
+gLV_dfs_ar = {subdirectory : load_stability_dataset(base + "gLV/all_resource/" + subdirectory)
+              for subdirectory in os.listdir(base + "gLV/all_resource")}
+
+# %%
+
+Stability_Plot(list(gLV_dfs.values()),
+               [s.split("(")[0].split("M_vs_mu_c")[1] 
+                for s in list(gLV_dfs.keys())],
+               vmin=0.75,
+               savepath = "C:/Users/jamil/Documents/PhD/Figures/" + \
+                   "resource_diversity_stability/M_vs_mu_c_gLVs")
+
+Stability_Plot(list(gLV_dfs_ar.values()),
+               [s.split("(")[0].split("M_vs_mu_c")[1] 
+                for s in list(gLV_dfs_ar.keys())],
+               savepath = "C:/Users/jamil/Documents/PhD/Figures/" + \
+                   "resource_diversity_stability/M_vs_mu_c_gLVs_all_resource")
+    
+ # %%
+
+Stability_Plot(list(gLV_dfs.values()),
+               [s.split("(")[0].split("M_vs_mu_c")[1] 
+                for s in list(gLV_dfs.keys())],
+               pivot_func = survival_fraction_pivot,
+               cmap='Greens_r',
+               vmax=np.max(np.concatenate([df.loc[:, 'species_survival_fraction'].to_numpy() 
+                                           for df in gLV_dfs.values()])),
+               cbar_label = "Mean species survival fraction",
+               savepath = "C:/Users/jamil/Documents/PhD/Figures/" + \
+                   "resource_diversity_stability/M_vs_mu_c_gLVs_sf")   
+    
+    
+ # %%
+
+Stability_Plot([df_CRM, df_eLV_phiR, gLV_dfs['M_vs_mu_c_rho_nosigma_r(averaged)']],
+               ["Consumer-resource model",
+                "Consumer-only model\n(inc. extinct resources)",
+                "reconstructed gLV"],
+               savepath = "C:/Users/jamil/Documents/PhD/Figures/" + \
+                   "resource_diversity_stability/M_vs_mu_c_eLV_gLV")
+    
+# %%
+
+Stability_Plot([df_CRM, df_eLV_phiR, gLV_dfs['M_vs_mu_c_rho_nosigma_r(averaged)']],
+               ["Consumer-resource model",
+                "Consumer-only model\n(inc. extinct resources)",
+                "reconstructed gLV"],
+               pivot_func = survival_fraction_pivot,
+               cmap='Greens_r',
+               vmax=np.max(np.concatenate([df.loc[:, 'species_survival_fraction'].to_numpy() 
+                                           for df in [df_CRM, df_eLV_phiR, gLV_dfs['M_vs_mu_c_rho_nosigma_r(averaged)']]])),
+               cbar_label = "Mean species survival fraction",
+               savepath = "C:/Users/jamil/Documents/PhD/Figures/" + \
+                   "resource_diversity_stability/M_vs_mu_c_eLV_gLV_sr")
+        

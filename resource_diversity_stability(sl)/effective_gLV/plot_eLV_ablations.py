@@ -223,7 +223,8 @@ def plot_ablation_heatmaps(ablation_dfs : dict,
                            vmax : float = 1,
                            mu_c_max : Union[float, None] = None,
                            ncols : int = 5,
-                           figsize : Union[tuple, None] = None):
+                           figsize : Union[tuple, None] = None,
+                           savepath : Union[str, None] = None):
 
     '''
 
@@ -274,7 +275,7 @@ def plot_ablation_heatmaps(ablation_dfs : dict,
 
     if figsize is None:
 
-        figsize = (2.6 * ncols, 2.6 * nrows)
+        figsize = (2.3 * ncols, 2.31 * nrows)
 
     sns.set_style('ticks')
 
@@ -309,9 +310,9 @@ def plot_ablation_heatmaps(ablation_dfs : dict,
         subfig.axvline(pivot.shape[1], 0, 1, color = 'black', linewidth = 2)
 
         ax.set_xticks(np.arange(0.5, len(resource_pool_sizes) + 0.5, 2),
-                     labels = resource_pool_sizes[::2], fontsize = 8, rotation = 0)
+                     labels = resource_pool_sizes[::2], fontsize = 10, rotation = 0)
         ax.set_yticks(np.arange(0.5, len(mu_cs) + 0.5, 2),
-                     labels = np.round(mu_cs[::2], 1), fontsize = 8)
+                     labels = np.round(mu_cs[::2], 0).astype(int), fontsize = 10)
         ax.set_xlabel('')
         ax.set_ylabel('')
         ax.invert_yaxis()
@@ -330,6 +331,11 @@ def plot_ablation_heatmaps(ablation_dfs : dict,
 
     fig.supxlabel('resource pool size, ' + r'$M$', fontsize = 12, weight = 'bold')
     fig.supylabel('avg. total consumption coeff., ' + r'$\mu_c$', fontsize = 12, weight = 'bold')
+    
+    if savepath is not None:
+
+        plt.savefig(savepath + ".png", bbox_inches='tight')
+        plt.savefig(savepath + ".svg", bbox_inches='tight')
 
     plt.show()
 
@@ -339,17 +345,30 @@ def plot_ablation_heatmaps(ablation_dfs : dict,
 
 # example usage (guarded so importing this module never runs it):
 
-# if __name__ == "__main__":
-#
-#     ablation_dfs = read_all_ablations(
-#         "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV_ablations/M_vs_mu_c",
-#         eLV_directory = "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV/M_vs_mu_c")
-#
+ablation_dfs = read_all_ablations(
+    "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV_ablations/M_vs_mu_c",
+    eLV_directory = "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/eLV/M_vs_mu_c")
+ 
+# %%
+
 #     # probability(stability)
-#     fig, axs = plot_ablation_heatmaps(ablation_dfs)
-#
+fig, axs = plot_ablation_heatmaps(ablation_dfs[1:],
+                                  mu_c_max=210,
+                                 savepath = "C:/Users/jamil/Documents/PhD/Figures/" + \
+                                     "resource_diversity_stability/M_vs_mu_c_ablations_stability")
+ 
+# %%
+
 #     # mean species survival fraction (NaN/blank for 'original' - not
 #     # available for the base eLV pipeline, see survival_fraction_pivot())
-#     fig, axs = plot_ablation_heatmaps(ablation_dfs,
-#                                       pivot_func = survival_fraction_pivot,
-#                                       cbar_label = "Mean species survival fraction")
+
+
+fig, axs = plot_ablation_heatmaps(ablation_dfs,
+                                  pivot_func = survival_fraction_pivot,
+                                  cmap='Greens_r',
+                                  vmax=np.max(np.concatenate([df.loc[:, 'species_survival_fraction'].to_numpy() 
+                                                              for df in ablation_dfs.values()])),
+                                  cbar_label = "Mean species survival fraction",
+                                  mu_c_max=210,
+                                 savepath = "C:/Users/jamil/Documents/PhD/Figures/" + \
+                                     "resource_diversity_stability/M_vs_mu_c_ablations_diversity")

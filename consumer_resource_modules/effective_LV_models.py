@@ -61,8 +61,8 @@ class eLVMethods(DifferentialEquationsInterface_LV,
 
         ### growth rates ###
 
-        self.mu_r = np.mean(self.r)
-        self.sigma_r = np.std(self.r)
+        self.mu_r_est = np.mean(self.r)
+        self.sigma_r_est = np.std(self.r)
 
         ### interaction moments ###
 
@@ -72,10 +72,10 @@ class eLVMethods(DifferentialEquationsInterface_LV,
 
         inter_species_interactions = A[mask].reshape(S, S - 1)
 
-        self.mu_Aii = np.mean(self_inhibition)
-        self.sigma_Aii = np.std(self_inhibition)
-        self.mu_Aij = np.mean(inter_species_interactions)
-        self.sigma_Aij = np.std(inter_species_interactions)
+        self.mu_Aii_est = np.mean(self_inhibition)
+        self.sigma_Aii_est = np.std(self_inhibition)
+        self.mu_Aij_est = np.mean(inter_species_interactions)
+        self.sigma_Aij_est = np.std(inter_species_interactions)
 
         ### within-A correlations ###
 
@@ -122,15 +122,27 @@ class eLVMethods(DifferentialEquationsInterface_LV,
         def growth_self_inhibition_correlation(r, Aii):
 
             return pearsonr(r, Aii)[0]
-
-        self.rho_D = diagonal_correlation(A)
-        self.rho_R = row_correlation(B, p, q)
-        self.rho_C = column_correlation(C, p, q)
-        self.rho_1idx = one_index_correlation(B, C)
-
-        self.rho_r_Aij = growth_interaction_correlation(self.r, B)
-        self.rho_Aii_Aij = self_inhibition_interaction_correlation(self_inhibition, B)
-        self.rho_r_Aii = growth_self_inhibition_correlation(self.r, self_inhibition)
+        
+        if getattr(self, "rho_D", np.nan) != 0 : self.rho_D_est = diagonal_correlation(A) 
+        else: self.rho_D_est = 0
+        
+        if getattr(self, "rho_R", np.nan) != 0 : self.rho_R_est = row_correlation(B, p, q)
+        else: self.rho_R_est = 0
+        
+        if getattr(self, "rho_C", np.nan) != 0 : self.rho_C_est = column_correlation(C, p, q)
+        else: self.rho_C_est = 0
+        
+        if getattr(self, "rho_1idx", np.nan) != 0 : self.rho_1idx_est = one_index_correlation(B, C)
+        else: self.rho_1idx_est = 0
+        
+        if self.sigma_r == 0 or self.sigma_Aij == 0 : self.rho_r_Aij_est = 0.0 
+        else: self.rho_r_Aij_est = growth_interaction_correlation(self.r, B)
+        
+        if self.sigma_Aii == 0 or self.sigma_Aij == 0 : self.rho_Aii_Aij_est = 0
+        else: self.rho_Aii_Aij_est = self_inhibition_interaction_correlation(self_inhibition, B)
+        
+        if self.sigma_r == 0 or self.sigma_Aii == 0 : self.rho_r_Aii_est = 0
+        else: self.rho_r_Aii_est = growth_self_inhibition_correlation(self.r, self_inhibition)
 
         ### summary statistics ###
 
@@ -138,9 +150,9 @@ class eLVMethods(DifferentialEquationsInterface_LV,
 
         self.interaction_statistics = dict(Aii=self_inhibition,
                                            sum_j_Aij=total_interact_per_species,
-                                           mu_Aij_tot=self.mu_Aij * \
+                                           mu_Aij_tot=self.mu_Aij_est * \
                                                np.float64(self.no_species),
-                                           sigma_Aij_tot=self.sigma_Aij * \
+                                           sigma_Aij_tot=self.sigma_Aij_est * \
                                                np.sqrt(np.float64(self.no_species)))
                                            
     #####################################################
@@ -804,6 +816,12 @@ class gLV(eLVMethods, ParametersInterface):
                                          interaction_args,
                                          'Aij',
                                          (self.no_species, self.no_species))
+            
+            
+            for rho_str in ["rho_D", "rho_R", "rho_C", "rho_1idx"]:
+                
+                setattr(self, rho_str, 0.0)
+            
         else:
 
             self.__correlated_interactions(interaction_args['mu'],
@@ -833,6 +851,10 @@ class gLV(eLVMethods, ParametersInterface):
                                          self_inhibition_args,
                                          'Aii',
                                          (self.no_species, ))
+            
+            for rho_str in ["rho_r_Aij", "rho_Aii_Aij", "rho_r_Aii"]:
+                
+                setattr(self, rho_str, 0.0)
 
         self.interaction_matrix = self.Aij
         np.fill_diagonal(self.interaction_matrix, self.Aii)
@@ -952,7 +974,7 @@ class gLV(eLVMethods, ParametersInterface):
         # are ratios of covariances, and uniform scaling cancels).
 
         if empirical:
-            print("empirical i")
+ 
             mask = ~np.eye(S, dtype=bool)
             Z_offdiag = Z[mask]
             Z_mean = Z_offdiag.mean()
@@ -968,6 +990,11 @@ class gLV(eLVMethods, ParametersInterface):
 
         self.Aij = mu + sigma * Z
         self.corr_violate = getattr(self, 'corr_violate', False)
+        
+        for name, attr in zip(["mu_Aij", "sigma_Aij", "rho_D", "rho_R", "rho_C", "rho_1idx"],
+                              [mu, sigma, rho_D, rho_R, rho_C, rho_1idx]):
+            
+            setattr(self, name, attr)
 
     def __correlated_rates(self,
                            growth_args,
@@ -1062,15 +1089,11 @@ class gLV(eLVMethods, ParametersInterface):
             rm_repeated = np.repeat(row_means, S - 1)
             corr_factor = np.corrcoef(rm_repeated, Z[mask])[0, 1]
             
-            print('empirical')
-
         else:
 
             c = (1 + (S - 2) * rho_R) / (S - 1)
             row_means_unit = row_means / np.sqrt(max(c, 1e-20))
             corr_factor = np.sqrt(max(c, 1e-20))
-            
-            print('theoretical')
 
         # =====================================================
         # Loading r onto row means
@@ -1109,8 +1132,14 @@ class gLV(eLVMethods, ParametersInterface):
         # The implied corr(r, Aii) = beta_r * beta_Aii, which emerges
         # naturally from both loading on the same signal. No additional
         # correlation is imposed.
+        
+        for name, attr in zip(["mu_r", "sigma_r", "mu_Aii", "sigma_Aii"],
+                              [r_mean, sigma_r, Aii_mean, sigma_Aii]):
+            
+            setattr(self, name, attr)
 
         # --- clean up temporary storage ---
+        
 
         del self._Z, self._rho_R
 

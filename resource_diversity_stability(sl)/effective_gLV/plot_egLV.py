@@ -250,6 +250,83 @@ def eLV_interact_stats_plot(competition_df, filename_save,
     
 # %%
 
+def eLV_interact_stats_plot_simple(competition_df,
+                                   filename_save):
+    
+    #breakpoint()
+    
+    df_mu = pd.melt(competition_df[["M", "mu_Aii", "mu_Aij"]],
+                    "M")
+
+    df_sigma = pd.melt(competition_df[["M", "sigma_Aii", "sigma_Aij", "sigma_Aij_tot"]],
+                       "M")
+    
+    df_mu = df_mu.groupby(['M', 'variable'])['value'].apply('mean').to_frame()
+    df_mu.reset_index(inplace = True)
+    df_mu['value'] = np.log10(df_mu['value'])
+    
+    df_sigma = df_sigma.groupby(['M', 'variable'])['value'].apply('mean').to_frame()
+    df_sigma.reset_index(inplace = True)
+    df_sigma['value'] = np.log10(df_sigma['value'])
+    
+    ############################
+    
+    fig, axs = plt.subplots(1, 2, figsize = (4.8, 2.6), sharex = True,
+                            layout = 'tight')
+    
+    colour_palette = list(np.array(sns.husl_palette())[[0, 3, 4]])
+    
+    sns.lineplot(data = df_mu,
+                 x = 'M', y = 'value', hue = "variable",
+                 ax = axs[0], linewidth = 3,
+                 palette = ['black', 'black'],
+                 zorder = 10, err_style="bars")
+    
+    sns.lineplot(data = df_mu,
+                 x = 'M', y = 'value', hue = "variable",
+                 ax = axs[0], linewidth = 2.5,
+                 palette = colour_palette,
+                 zorder = 10, err_style="bars")
+            
+    
+    sns.lineplot(data = df_sigma,
+                 x = 'M', y = 'value',
+                 ax = axs[1], linewidth = 3, hue = "variable",
+                 palette = ['black', 'black', 'black'],
+                 zorder = 10, err_style="bars")
+    
+    sns.lineplot(data = df_sigma,
+                 x = 'M', y = 'value', hue = "variable",
+                 ax = axs[1], linewidth = 2.5,
+                 palette = colour_palette, zorder = 10, err_style="bars")
+    
+    fig.supxlabel('resource pool size, ' + r'$M$', fontsize = 10, weight = 'bold')
+    
+    for ax in axs:
+        
+        ax.set_xticks(np.unique(df_mu['M'].to_numpy())[::2],
+                      labels = np.unique(df_mu['M'].to_numpy())[::2],
+                      fontsize = 10, rotation = 0)
+    
+        ax.yaxis.set_tick_params(labelsize = 10)
+    
+        ax.set_xlabel('', fontsize = 10, weight = 'bold')
+        ax.set_ylabel('', fontsize = 10, weight = 'bold')
+    
+        sns.despine(ax = ax)
+        ax.legend_.remove()
+    
+    plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/" + \
+                filename_save + ".png", #self_limit_stability_egLV_all_resources.png
+                bbox_inches='tight', dpi = 400)
+    plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/" + \
+                filename_save + ".svg",
+                bbox_inches='tight')
+    
+    plt.show()
+    
+# %%
+
 def read_eLV_data(subdirectory):
        
     directory = "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/egLV/" + \
@@ -302,3 +379,14 @@ eLV_interact_stats_plot(competition_145_all_df,
                         "self_limit_interact_stats_egLV_all_resources_145")
 eLV_interact_stats_plot(competition_190_all_df,
                         "self_limit_interact_stats_egLV_all_resources_190")
+
+# %%
+
+eLV_interact_stats_plot_simple(competition_145_df,
+                               "self_limit_interact_stats_egLV_145_simple")
+eLV_interact_stats_plot_simple(competition_190_df,
+                               "self_limit_interact_stats_egLV_190_simple")
+eLV_interact_stats_plot_simple(competition_145_all_df,
+                               "self_limit_interact_stats_egLV_all_resources_145_simple")
+eLV_interact_stats_plot_simple(competition_190_all_df,
+                               "self_limit_interact_stats_egLV_all_resources_190_simple")
