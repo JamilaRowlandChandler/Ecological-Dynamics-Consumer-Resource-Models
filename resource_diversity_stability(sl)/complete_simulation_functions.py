@@ -753,7 +753,8 @@ class ReloadedODEs:
 
 def generate_simulation_df(directory : str,
                            model : str = "Self-limiting resource supply",
-                           method : Literal["v1", "v2"] = "v2"):
+                           method : Literal["v1", "v2"] = "v2",
+                           extra_parameters : list = []):
 
     '''
 
@@ -784,7 +785,7 @@ def generate_simulation_df(directory : str,
     # list, to avoid it drifting out of sync with the actual raw community
     # attributes)
     parameters = extract_growth_consumption_parms() + \
-        model_specific_parameters(model)
+        model_specific_parameters(model) + extra_parameters
 
     # load data and create dataframe
     df = CRM_df(directory, parameters, method)

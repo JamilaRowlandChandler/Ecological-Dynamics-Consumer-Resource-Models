@@ -82,11 +82,21 @@ class DifferentialEquationsInterface(ABC, InitialConditionsInterface):
             
             return ODE_sols
         
-    @abstractmethod
-    def simulation(self):
+        @abstractmethod
+        def simulation(self):
+            
+            pass
         
-        pass
-    
+        @abstractmethod
+        def model(self):
+            
+            pass
+        
+        @abstractmethod
+        def jacobian(self):
+            
+            pass
+        
 class DifferentialEquationsInterface_LV(ABC, InitialConditionsInterface_LV):
     
     def simulate_community(self,

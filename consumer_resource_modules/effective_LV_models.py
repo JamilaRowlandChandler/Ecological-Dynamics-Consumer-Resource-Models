@@ -161,24 +161,7 @@ class eLVMethods(DifferentialEquationsInterface_LV,
                    t_end : float,
                    initial_abundances : npt.NDArray,
                    assign : bool = True):
-        
-        def LV_dynamics(t, species, r, A):
-            
-            # change in consumer abundances over time
-            dNdt = species * (r - np.sum(A * species, axis = 1))
-        
-            return dNdt + 1e-8
-        
-        def LV_jacobian(t, species, r, A):
 
-            # growth term: r_i - sum_j A_ij * N_j  (shared with LV_dynamics)
-            growth = r - np.sum(A * species, axis=1)
-    
-            # J = diag(growth) - diag(species) @ A
-            J = np.diag(growth) - species[:, None] * A
-    
-            return J
-            
         def unbounded_growth(t, var, *args):
             
             
@@ -193,15 +176,36 @@ class eLVMethods(DifferentialEquationsInterface_LV,
                 
                 return 1 # the ode solver continues because the returned value is non-zero.
             
-        return solve_ivp(LV_dynamics,
+        return solve_ivp(self.model,
                          [0, t_end],
                          initial_abundances,
                          args = (self.r, self.interaction_matrix),
                          method = 'LSODA',
                          rtol = 1e-7, atol = 1e-9,
                          t_eval = np.linspace(0, t_end, 200),
-                         jac = LV_jacobian,
+                         jac = self.jacobian,
                          events = unbounded_growth)
+    
+    def model(self,
+              t, species,
+              r, A):
+        
+        # change in consumer abundances over time
+        dNdt = species * (r - np.sum(A * species, axis = 1))
+    
+        return dNdt + 1e-8
+    
+    def jacobian(self,
+                 t, species,
+                 r, A):
+
+        # growth term: r_i - sum_j A_ij * N_j  (shared with LV_dynamics)
+        growth = r - np.sum(A * species, axis=1)
+
+        # J = diag(growth) - diag(species) @ A
+        J = np.diag(growth) - species[:, None] * A
+
+        return J
 
     def decompose_eLV(self):
 

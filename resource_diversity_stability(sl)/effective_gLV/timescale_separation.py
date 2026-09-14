@@ -1,0 +1,193 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Sep 14 21:49:17 2026
+
+@author: jamil
+"""
+
+from __future__ import annotations
+
+import numpy as np
+import pandas as pd
+import os
+import sys
+from tqdm import tqdm
+from typing import Literal, Union
+import numpy.typing as npt
+from copy import deepcopy
+
+os.chdir('C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/resource_diversity_stability(sl)/effective_gLV')
+
+sys.path.insert(0, "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models" + \
+                    "/consumer_resource_modules")
+from models import Consumer_Resource_Model
+from community_level_properties import max_le, eigenspectrum
+    
+sys.path.insert(0, "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models" + \
+                    "/resource_diversity_stability(sl)")
+from simulation_functions import pickle_dump
+
+# %%
+
+def extract_parameters(base_community : Literal["SL_CRM"]) -> dict:
+    
+    parameters = {attr : getattr(base_community, 
+                                 attr, 
+                                 None)
+                  for attr in ['no_resources', 'mu_c', 'sigma_c',
+                               'mu_g', 'sigma_g',
+                               'consumption',
+                               'growth',
+                               'b', 'd']}
+    
+    return parameters
+
+# %%
+
+def separate_timescales(parameters : dict,
+                        epsilon : float) -> dict:
+    
+    separated_parameters = deepcopy(parameters)
+    
+    separated_parameters['epsilon'] = epsilon
+    separated_parameters['growth'] = epsilon * parameters['growth']
+    separated_parameters['d'] = epsilon * parameters['d']
+    
+    return separated_parameters
+
+# %%
+
+def separate_parameter_timescales(base_community : Literal["SL_CRM"],
+                                  epsilons : Union[list[float], npt.NDArray]):
+    
+    base_parameters = extract_parameters(base_community)
+    
+    parameters_sep_by_eps = [separate_timescales(base_parameters,
+                                                 epsilon)
+                             for epsilon in epsilons]
+    
+    return parameters_sep_by_eps
+
+# %%
+
+def resimulate_CRM_timescale(parameters : dict) -> None:
+    
+    M = parameters['no_resources']
+    
+    mu_c = parameters['mu_c']
+    sigma_c = parameters['sigma_c']
+    mu_y = parameters['mu_g']
+    sigma_y = parameters['sigma_g']
+    consumption = parameters['consumption']
+    growth = parameters['growth']
+    
+    intrinsic_resource_growth = parameters['b']
+    death = parameters['d']
+    
+    epsilon = parameters['epsilon']
+    
+    community = Consumer_Resource_Model("Self-limiting resource supply",
+                                        M,
+                                        M)
+    
+    community.growth_consumption_rates('user-supplied',
+                                       mu_c = mu_c/M,
+                                       sigma_c = sigma_c/np.sqrt(M),
+                                       mu_g = mu_y,
+                                       sigma_g = sigma_y,
+                                       consumption = consumption,
+                                       growth = growth)
+    community.model_specific_rates(death_method = "user-supplied",
+                                   death_args = {'d' : death},
+                                   resource_growth_method = "user-supplied",
+                                   resource_growth_args = {'b' : intrinsic_resource_growth})
+    
+    community.timescalar = epsilon
+        
+    # run simulations from randomly generated initial abundances
+    community.simulate_community(t_end = 7000,
+                                 no_init_cond = 2)
+       
+    # numerically estimate the max. lyapunov exponent
+    community.max_lyapunov_exponent = max_le(community,
+                                             community.ODE_sols[0].y[:, -1],
+                                             T = 1000,
+                                             perturbation = 1e-6)
+    
+    eigenspec_stats = [eigenspectrum(community,
+                                     ode_sol.y[:, -1])
+                       for ode_sol in community.ODE_sols]
+    
+    community.eigenvec_resource_mag = [eig_stat['magnitude_ratios']['resources'] 
+                                       for eig_stat in eigenspec_stats]
+    
+    return community
+    
+# %%
+
+def CRM_timescale_separation(CRM_directory : str,
+                             CRM_ts_directory : str,
+                             epsilons,
+                             resource_pool_sizes,
+                             mu_c):
+
+
+    def read_call_timescale_separate(full_CRM_directory : str,
+                                     full_CRM_ts_directory : str,
+                                     epsilons):
+        
+        # read in consumer-resource model (CRM) communities
+        CRM_communities = pd.read_pickle(full_CRM_directory)
+        
+        parameters_sep_by_eps = np.array([separate_parameter_timescales(CRM_community,
+                                                                        epsilons)
+                                          for CRM_community in CRM_communities]).flatten()
+        
+        CRM_ts_communites = [resimulate_CRM_timescale(parameters)
+                             for parameters in
+                             tqdm(parameters_sep_by_eps,
+                                  leave = True,
+                                  position = 1,
+                                  total = len(parameters_sep_by_eps))]
+        
+        pickle_dump(full_CRM_ts_directory,
+                    CRM_ts_communites)
+    
+    ###################################################################################
+    
+    full_CRM_directory = "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/" + \
+                           CRM_directory
+                           
+    full_CRM_ts_directory = "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/" + \
+                          CRM_ts_directory
+    
+    # make file directory for eLVs
+    if not os.path.exists(full_CRM_ts_directory):
+        
+        os.makedirs(full_CRM_ts_directory)
+            
+    # generate filenames based on mu_c
+    filenames = ["simulations_" + \
+                 str(M) + "_" + str(np.round(mu_c/M, 4)) + 
+                 ".pkl"
+                 for M in resource_pool_sizes]
+        
+    for filename in tqdm(filenames,
+                         leave = True,
+                         position = 0,
+                         total = len(filenames)):
+        
+        read_call_timescale_separate(full_CRM_directory + "/" + filename,
+                                     full_CRM_ts_directory + "/" + filename,
+                                     epsilons)
+
+# %%
+
+epsilons = 10.0**np.arange(-6.0, 1.0, 1.0)
+
+CRM_timescale_separation(CRM_directory = "M_vs_mu_c",
+                         CRM_ts_directory = "CRM_TS/M_vs_mu_c",
+                         epsilons = epsilons,
+                         resource_pool_sizes = np.arange(50, 275, 25),
+                         mu_c = 145)
+

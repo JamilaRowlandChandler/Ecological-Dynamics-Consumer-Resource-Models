@@ -76,7 +76,7 @@ def generate_parameters(rho_range, sigma_range, fixed_parameters):
 
 # %%
 
-rhos = np.arange(0.1, 1.1, 0.1)
+rhos = np.arange(1.0, 0.3, -0.1)
 sigmas = np.arange(2, 13, 1)
 mu = 50
 d = 1
@@ -87,7 +87,7 @@ system_size = 500
 # %%
 
 rho_sigma("Externally-supplied resources",
-          rhos,
+          np.arange(0.3, 0.0, -0.1), #rhos,
           sigmas,
           dict(mu_c = mu, mu_g = mu,
                d = d, b = b, o = o,
