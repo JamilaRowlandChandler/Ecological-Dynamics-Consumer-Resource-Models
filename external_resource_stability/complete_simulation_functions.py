@@ -127,7 +127,11 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
     Parameters
     ----------
     parameter_sets : list[dict]
-        List of parameter sets for the Consumer_Resource_Model class.
+        List of parameter sets for the Consumer_Resource_Model class. Each
+        parameter set may optionally include an 'epsilon' key (consumer-
+        resource timescale separation, passed to
+        community.timescale_separation()) - if absent, it falls back to
+        'epsilon' in simulation_kwargs, then to 1 (no separation).
     subdirectory : str
         Directory to save community data in.
     parms_for_filenames : list[str]
@@ -364,9 +368,16 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
     g_c_rates_args_list = growth_consumption_rates(parameter_sets,
                                                    model)
 
+    # consumer-resource timescale separation - unpacked per parameter set
+    # (falling back to a shared default from simulation_kwargs/**kwargs,
+    # then to 1, i.e. no separation, if neither is given)
+    epsilon_list = [parm_set.get('epsilon', complete_sim_kwargs.get('epsilon', 1))
+                    for parm_set in parameter_sets]
+
     # Iterate through the parameter space, creating and simulating community dynamics
-    for name, init_class, growth_consumption_rates_args, model_specific_rates_args in \
-        tqdm(zip(names_list, initialisation_list, g_c_rates_args_list, m_s_rates_args_list),
+    for name, init_class, growth_consumption_rates_args, model_specific_rates_args, epsilon in \
+        tqdm(zip(names_list, initialisation_list, g_c_rates_args_list, m_s_rates_args_list,
+                epsilon_list),
              position = 0, leave = True, total = len(names_list)):
 
         CRMs_create_and_save(subdirectory,
@@ -375,7 +386,7 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
                              growth_consumption_rates_args,
                              model_specific_rates_args,
                              save_method,
-                             **complete_sim_kwargs)
+                             **(complete_sim_kwargs | {'epsilon' : epsilon}))
 
 #%%
 
