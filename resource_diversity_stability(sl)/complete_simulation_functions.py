@@ -834,8 +834,7 @@ def generate_simulation_df(directory : str,
     # rename columns to useful names for our analysis (e.g., taking into account M-scaling)
     df.rename(columns = {'mu_c' : 'mu_c/M', 'sigma_c' : 'sigma_c/root_M',
                          'mu_g' : 'mu_y', 'sigma_g' : 'sigma_y',
-                         'no_resources' : 'M', 'no_species' : 'S',
-                         'timescalar' : 'epsilon'},
+                         'no_resources' : 'M', 'no_species' : 'S'},
                         inplace = True)
 
     # calculate actual mean and std. deviation in consumption coefficients
@@ -1066,13 +1065,6 @@ def parameter_rename_and_calc(df, model, gc_method):
             case 'growth function of consumption':
 
                 df = df.pipe(coupled_rue)
-
-    # 'timescalar' is the raw community attribute set by
-    # community.timescale_separation(epsilon) - rename to 'epsilon' for
-    # readability, consistent with the parameter name used elsewhere
-    if 'timescalar' in df.columns:
-
-        df.rename(columns = {'timescalar' : 'epsilon'}, inplace = True)
 
     return df
 
