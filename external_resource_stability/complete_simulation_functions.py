@@ -77,7 +77,7 @@ from json import dumps, loads
 sys.path.insert(0, 'C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/consumer_resource_modules')
 from models import Consumer_Resource_Model
 from effective_LV_models import eLV_SL, eLV_ES, gLV, Effective_LV_Model
-from community_level_properties import max_le
+from community_level_properties import max_le, eigenspectrum
 
 # %%
 
@@ -580,6 +580,13 @@ def consumer_resource_model_dynamics(init_class,
         community.lyapunov_exponent = max_le(community, community.ODE_sols[0].y[:, -1],
                                              T = 1000, perturbation = 1e-6)
 
+        eigenspec_stats = [eigenspectrum(community,
+                                         ode_sol.y[:, -1])
+                           for ode_sol in community.ODE_sols]
+
+        community.eigenvec_resource_mag = [eig_stat['magnitude_ratios']['resources']
+                                           for eig_stat in eigenspec_stats]
+
         return community
 
     # generate n communities, where n = no_communities
@@ -675,6 +682,13 @@ def complex_ecosystem_model_dynamics(init_class,
         community.calculate_community_properties()
         community.lyapunov_exponent = max_le(community, community.ODE_sols[0].y[:, -1],
                                              T = 1000, perturbation = 1e-6)
+
+        eigenspec_stats = [eigenspectrum(community,
+                                         ode_sol.y[:, -1])
+                           for ode_sol in community.ODE_sols]
+
+        community.eigenvec_resource_mag = [eig_stat['magnitude_ratios']['resources']
+                                           for eig_stat in eigenspec_stats]
 
         return community
 
@@ -828,7 +842,8 @@ def generate_simulation_df(directory : str,
     # rename columns to useful names for our analysis (e.g., taking into account M-scaling)
     df.rename(columns = {'mu_c' : 'mu_c/M', 'sigma_c' : 'sigma_c/root_M',
                          'mu_g' : 'mu_y', 'sigma_g' : 'sigma_y',
-                         'no_resources' : 'M', 'no_species' : 'S'},
+                         'no_resources' : 'M', 'no_species' : 'S',
+                         'timescalar' : 'epsilon'},
                         inplace = True)
 
     # calculate actual mean and std. deviation in consumption coefficients
@@ -939,7 +954,7 @@ def extract_trophic_level_parms(trophic_levels):
                 for i in np.arange(2, trophic_levels + 1)] + \
                 ['d_' + str(i) + "_val"
                  for i in np.arange(2, trophic_levels + 1)] + \
-                ['mu_A', 'sigma_A']
+                ['mu_A', 'sigma_A', 'timescalar']
 
     return poolsize_parms + m_parms
 
@@ -949,7 +964,7 @@ def extract_trophic_level_parms(trophic_levels):
 def extract_growth_consumption_parms():
 
     poolsize_parms = ['no_resources', 'no_species']
-    m_parms = ['mu_g', 'sigma_g', 'mu_c', 'sigma_c', 'rho', 'd_val']
+    m_parms = ['mu_g', 'sigma_g', 'mu_c', 'sigma_c', 'rho', 'd_val', 'timescalar']
 
     return poolsize_parms + m_parms
 
@@ -1059,6 +1074,13 @@ def parameter_rename_and_calc(df, model, gc_method):
             case 'growth function of consumption':
 
                 df = df.pipe(coupled_rue)
+
+    # 'timescalar' is the raw community attribute set by
+    # community.timescale_separation(epsilon) - rename to 'epsilon' for
+    # readability, consistent with the parameter name used elsewhere
+    if 'timescalar' in df.columns:
+
+        df.rename(columns = {'timescalar' : 'epsilon'}, inplace = True)
 
     return df
 
