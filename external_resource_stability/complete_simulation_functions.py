@@ -4,12 +4,20 @@ Created on Tue Aug 18 00:00:00 2026
 
 @author: jamil
 
-Combines resource_diversity_stability(sl)/simulation_functions.py and
-external_resource_stability/simulation_functions_new.py into a single module,
-using simulation_functions_new.py as the base (it is a strict superset -
-adds "Hybrid resource supply" model support, an explicit rho/all_positive
-passthrough for correlated growth-consumption rates, and a v3-save fix for
-non-trophic models) and correcting several bugs found while merging:
+Copied from resource_diversity_stability(sl)/complete_simulation_functions.py
+into external_resource_stability/ so it can be used as the simulation-driver
+module for this directory's externally-supplied-resource ("Externally-supplied
+resources"/ES_CRM, and its eLV_ES analogue) work in place of the older
+simulation_functions.py/simulation_functions_new.py here. All model
+dispatch (model_specific_args(), model_specific_parameters(),
+model_specific_emergent_properties(), Effective_LV_Model(), etc.) already
+branches on "Externally-supplied resources" as well as the self-limiting
+variants, and default `model` arguments below are now set to
+"Externally-supplied resources" for convenience in this directory.
+
+Original merge notes (resource_diversity_stability(sl)/simulation_functions.py
++ external_resource_stability/simulation_functions_new.py, merged and
+corrected), kept for provenance:
 
 - model_specific_args() in simulation_functions.py (the older file) passed
   M=.../S=... as kwargs to Consumer_Resource_Model, but SL_CRM/ES_CRM.__init__
@@ -107,7 +115,7 @@ def pickle_dump(filename : str, data : any):
 def CRM_across_parameter_space(parameter_sets : list[dict],
                                subdirectory : str,
                                parms_for_filenames : list[str],
-                               model = "Self-limiting resource supply",
+                               model = "Externally-supplied resources",
                                save_method : Literal['v1', 'v2', 'v3'] = 'v1',
                                **simulation_kwargs : dict[str, any]):
 
@@ -768,7 +776,7 @@ class ReloadedODEs:
 # %%
 
 def generate_simulation_df(directory : str,
-                           model : str = "Self-limiting resource supply",
+                           model : str = "Externally-supplied resources",
                            method : Literal["v1", "v2"] = "v2",
                            extra_parameters : list = []):
 

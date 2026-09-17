@@ -15,6 +15,11 @@ from typing import Literal, Union
 
 class ParametersInterface:
     
+    def timescale_separation(self,
+                             epsilon):
+        
+        self.timescalar = epsilon
+    
     # Public methods
     
     def growth_consumption_rates(self,

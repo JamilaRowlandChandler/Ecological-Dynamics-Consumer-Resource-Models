@@ -25,7 +25,7 @@ from community_level_properties import max_le, eigenspectrum
     
 sys.path.insert(0, "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models" + \
                     "/resource_diversity_stability(sl)")
-from simulation_functions import pickle_dump
+from complete_simulation_functions import pickle_dump, simulation_df_from_communities
 
 # %%
 
@@ -50,8 +50,8 @@ def separate_timescales(parameters : dict,
     separated_parameters = deepcopy(parameters)
     
     separated_parameters['epsilon'] = epsilon
-    separated_parameters['growth'] = epsilon * parameters['growth']
-    separated_parameters['d'] = epsilon * parameters['d']
+    #separated_parameters['growth'] = epsilon * parameters['growth']
+    #separated_parameters['d'] = epsilon * parameters['d']
     
     return separated_parameters
 
@@ -85,14 +85,16 @@ def resimulate_CRM_timescale(parameters : dict) -> None:
     death = parameters['d']
     
     epsilon = parameters['epsilon']
+    #growth = growth
+    #death = death
     
     community = Consumer_Resource_Model("Self-limiting resource supply",
                                         M,
                                         M)
     
     community.growth_consumption_rates('user-supplied',
-                                       mu_c = mu_c/M,
-                                       sigma_c = sigma_c/np.sqrt(M),
+                                       mu_c = mu_c,
+                                       sigma_c = sigma_c,
                                        mu_g = mu_y,
                                        sigma_g = sigma_y,
                                        consumption = consumption,
@@ -102,17 +104,19 @@ def resimulate_CRM_timescale(parameters : dict) -> None:
                                    resource_growth_method = "user-supplied",
                                    resource_growth_args = {'b' : intrinsic_resource_growth})
     
-    community.timescalar = epsilon
+    community.timescale_separation(epsilon)
         
     # run simulations from randomly generated initial abundances
     community.simulate_community(t_end = 7000,
                                  no_init_cond = 2)
+    
+    community.calculate_community_properties()
        
     # numerically estimate the max. lyapunov exponent
-    community.max_lyapunov_exponent = max_le(community,
-                                             community.ODE_sols[0].y[:, -1],
-                                             T = 1000,
-                                             perturbation = 1e-6)
+    community.lyapunov_exponent = max_le(community,
+                                         community.ODE_sols[0].y[:, -1],
+                                         T = 1000,
+                                         perturbation = 1e-6)
     
     eigenspec_stats = [eigenspectrum(community,
                                      ode_sol.y[:, -1])
@@ -129,7 +133,8 @@ def CRM_timescale_separation(CRM_directory : str,
                              CRM_ts_directory : str,
                              epsilons,
                              resource_pool_sizes,
-                             mu_c):
+                             mu_c,
+                             extra_name : str = ""):
 
 
     def read_call_timescale_separate(full_CRM_directory : str,
@@ -143,15 +148,22 @@ def CRM_timescale_separation(CRM_directory : str,
                                                                         epsilons)
                                           for CRM_community in CRM_communities]).flatten()
         
-        CRM_ts_communites = [resimulate_CRM_timescale(parameters)
-                             for parameters in
-                             tqdm(parameters_sep_by_eps,
-                                  leave = True,
-                                  position = 1,
-                                  total = len(parameters_sep_by_eps))]
+        CRM_ts_communities = [resimulate_CRM_timescale(parameters)
+                              for parameters in
+                              tqdm(parameters_sep_by_eps,
+                                   leave = True,
+                                   position = 1,
+                                   total = len(parameters_sep_by_eps))]
         
-        pickle_dump(full_CRM_ts_directory,
-                    CRM_ts_communites)
+        df = simulation_df_from_communities(CRM_ts_communities,
+                                            "Self-limiting resource supply",
+                                            "growth function of consumption",
+                                            extra_parameters = ["timescalar"])
+        
+        df.to_csv(full_CRM_ts_directory)
+        
+        #pickle_dump(full_CRM_ts_directory,
+        #            CRM_ts_communites)
     
     ###################################################################################
     
@@ -168,8 +180,7 @@ def CRM_timescale_separation(CRM_directory : str,
             
     # generate filenames based on mu_c
     filenames = ["simulations_" + \
-                 str(M) + "_" + str(np.round(mu_c/M, 4)) + 
-                 ".pkl"
+                 str(M) + "_" + str(np.round(mu_c/M, 4)) + extra_name
                  for M in resource_pool_sizes]
         
     for filename in tqdm(filenames,
@@ -177,17 +188,26 @@ def CRM_timescale_separation(CRM_directory : str,
                          position = 0,
                          total = len(filenames)):
         
-        read_call_timescale_separate(full_CRM_directory + "/" + filename,
-                                     full_CRM_ts_directory + "/" + filename,
+        read_call_timescale_separate(full_CRM_directory + "/" + filename + ".pkl",
+                                     full_CRM_ts_directory + "/" + filename + ".csv",
                                      epsilons)
 
 # %%
 
-epsilons = 10.0**np.arange(-6.0, 1.0, 1.0)
+epsilons = 10.0**np.arange(-5.0, 1.0, 1.0)
 
 CRM_timescale_separation(CRM_directory = "M_vs_mu_c",
                          CRM_ts_directory = "CRM_TS/M_vs_mu_c",
                          epsilons = epsilons,
-                         resource_pool_sizes = np.arange(50, 275, 25),
+                         resource_pool_sizes = np.arange(50, 150, 25), # np.arange(50, 275, 25),
                          mu_c = 145)
 
+# %%
+
+epsilons = np.arange(0.3, 1.1, 0.2)
+
+CRM_timescale_separation(CRM_directory = "M_vs_mu_c",
+                         CRM_ts_directory = "CRM_TS/small_separation",
+                         epsilons = epsilons,
+                         resource_pool_sizes = np.arange(50, 275, 25),
+                         mu_c = 145)
