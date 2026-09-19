@@ -24,7 +24,7 @@ file_directory_name = os.path.dirname(abspath)
 os.chdir(file_directory_name)
 
 sys.path.insert(0, file_directory_name.removesuffix("\\stability_transitions"))
-from complete_simulation_functions import CRM_across_parameter_space, le_pivot_r
+from complete_simulation_functions import CRM_across_parameter_space
 
 sys.path.insert(0,  file_directory_name.removesuffix("\\external_resource_stability\\stability_transitions") + \
                 "\\cavity_method_functions")
@@ -86,7 +86,7 @@ def generate_parameters(rho_range, epsilons, fixed_parameters):
 # %%
 
 rhos = np.arange(0.1, 1.1, 0.1)
-epsilons = 10.0**np.arange(-4.0, 0.0, 1.0)
+epsilons = 10.0**np.arange(-6.0, 0.0, 1.0) # 10.0**np.arange(-4.0, 0.0, 1.0)
 mu = 50
 sigma = 6
 d = 1
@@ -104,6 +104,34 @@ rho_epsilon("Externally-supplied resources",
                  d = d, b = b, o = o,
                  M = system_size, S = system_size),
           "external_resource_stability/simulations/rho_timescale_es",
+          no_communities = 20,
+          t_end = 1000,
+          no_init_conds = 1)
+
+# %% 
+
+rho_epsilon("Externally-supplied resources",
+            rhos,
+            epsilons,
+            dict(mu_c = mu, mu_g = mu,
+                 sigma_c = sigma, sigma_g = sigma,
+                 d = d, b = 10**-3, o = 10**-3,
+                 M = system_size, S = system_size),
+          "external_resource_stability/simulations/rho_timescale_es_smalldilution",
+          no_communities = 20,
+          t_end = 1000,
+          no_init_conds = 1)
+
+# %%
+
+rho_epsilon("Externally-supplied resources",
+            rhos,
+            epsilons,
+            dict(mu_c = mu, mu_g = mu,
+                 sigma_c = sigma, sigma_g = sigma,
+                 d = d, b = 10, o = 10,
+                 M = system_size, S = system_size),
+          "external_resource_stability/simulations/rho_timescale_es_largedilution",
           no_communities = 20,
           t_end = 1000,
           no_init_conds = 1)

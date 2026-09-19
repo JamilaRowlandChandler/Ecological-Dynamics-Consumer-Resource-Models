@@ -126,7 +126,7 @@ def resource_eigenvec_plot(eigennorm_pivot,
 
 def load_data_plot(data_directory : str,
                    fig_filename : str,
-                   logged : bool = True) -> None:
+                   logged : bool = True):
     
     base_data_directory = "C:/Users/jamil/Documents/PhD/Data/" \
                            + "resource_diversity_stability/simulations/"
@@ -154,11 +154,31 @@ def load_data_plot(data_directory : str,
     plt.savefig(full_fig_directory + ".svg",
                 bbox_inches='tight')
     
+    return df
+    
 # %%
 
-load_data_plot("CRM_TS/M_vs_mu_c",
-               "eigenvec_contr")
+df_ts = load_data_plot("CRM_TS/M_vs_mu_c",
+                       "eigenvec_contr")
     
-load_data_plot("CRM_TS/small_separation",
-               "eigenvec_contr_smaller",
-               logged=False)
+df_ts_s = load_data_plot("CRM_TS/small_separation",
+                         "eigenvec_contr_smaller",
+                         logged=False)
+
+# %%
+
+(df_ts[df_ts["M"] == 100]
+     .groupby('timescalar')[['Max. lyapunov exponent',
+                             'phi_N',
+                             'N_mean',
+                             'q_N']]
+     .apply('mean'))
+
+# %%
+
+(df_ts_s[df_ts_s["M"] == 75]
+         .groupby('timescalar')[['Max. lyapunov exponent',
+                                 'phi_N',
+                                 'N_mean',
+                                 'q_N']]
+         .apply('mean'))

@@ -133,7 +133,7 @@ def timescale_separation_eigenspec(CRM_directory : str,
         
         parameters_sep_by_eps = [separate_parameter_timescales(CRM_community,
                                                                epsilons)
-                                 for CRM_community in CRM_communities]
+                                 for CRM_community in CRM_communities[:10]]
         
         CRM_ts_eigenspec = [{str(parameters["epsilon"]) : resimulate_CRM_timescale(parameters)
                              for parameters in parameter_sets}
@@ -197,117 +197,171 @@ def absolute_eigenvec_contr_stats(community):
     
 # %%
 
-epsilons = 10.0**np.array([-5.0, 0.0])
+epsilons = np.array([10**-5, 10**-2, 0.1, 1.0])
 
 CRM_ts_eigenspec = timescale_separation_eigenspec(CRM_directory = "M_vs_mu_c",
                                                   epsilons = epsilons,
                                                   resource_pool_sizes = np.array([50, 250]),
                                                   mu_c = 145)
 
-
 # %%
 
-fig, axs = plt.subplots(1, 4,
-                       layout="constrained",
-                       figsize=(8, 2))
+def example_eigenspectr(idx,
+                        filename):
+    
+    def full_spectra(idx):
 
-for ax, data, title in zip(axs.flatten(),
-                           [val2
-                            for str1, val1 in CRM_ts_eigenspec.items()
-                            for str2, val2 in val1[2].items()],
-                           [str1 + "_" + str2 + "_" + str(np.round(val2.lyapunov_exponent, 5))
-                            for str1, val1 in CRM_ts_eigenspec.items()
-                            for str2, val2 in val1[2].items()]):
+        fig, axs = plt.subplots(2, len(CRM_ts_eigenspec["250"][0]),
+                               layout="constrained",
+                               figsize=(8, 4))
+        
+        for ax, data, title in zip(axs.flatten(),
+                                   [val2
+                                    for str1, val1 in CRM_ts_eigenspec.items()
+                                    for str2, val2 in val1[idx].items()],
+                                   [{'M' : float(str1),
+                                    'e' : np.abs(np.log10(float(str2))),
+                                    'max. le' : np.round(val2.lyapunov_exponent, 5)
+                                    }
+                                    for str1, val1 in CRM_ts_eigenspec.items()
+                                    for str2, val2 in val1[idx].items()]):
+            
+            
+            ax.scatter(data.eigenspec_stats[0]['eigenspectrum'].real,
+                       data.eigenspec_stats[0]['eigenspectrum'].imag,
+                       c='black',
+                       s=2)
+        
+            ax.axhline(0, color='grey', linewidth=0.5)
+            ax.axvline(0, color='grey', linewidth=0.5)
+            
+            ax.set_xlabel('')
+            ax.set_ylabel('')
+            
+            M, e, max_le = list(title.values())
+            stability = "\n(stable)" if max_le < 0 else "\n(unstable)"
+            
+            ax.set_title(r'$M = $' + f'${{{M}}}$, ' + \
+                         r'$1/\epsilon = $' + f'$10^{{{e}}}$, ' + \
+                         stability,
+                         fontsize=10)
+        
+        fig.supxlabel('Re(λ)', weight="bold", fontsize=10)
+        fig.supylabel('Im(λ)', weight="bold", fontsize=10)
+        
+        plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/" + \
+                    filename + ".png",
+                    bbox_inches='tight')
+        plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/" + \
+                    filename + ".svg",
+                    bbox_inches='tight')
+        
+        plt.show()
+        
+    def zoom_spectra(idx): 
+        
+        fig, axs = plt.subplots(2, len(CRM_ts_eigenspec["250"][0]),
+                               layout="constrained",
+                               figsize=(8, 4))
+        
+        for ax, data, title in zip(axs.flatten(),
+                                   [val2
+                                    for str1, val1 in CRM_ts_eigenspec.items()
+                                    for str2, val2 in val1[idx].items()],
+                                   [{'M' : float(str1),
+                                    'e' : np.abs(np.log10(float(str2))),
+                                    'max. le' : np.round(val2.lyapunov_exponent, 5)
+                                    }
+                                    for str1, val1 in CRM_ts_eigenspec.items()
+                                    for str2, val2 in val1[idx].items()]):
+            
+            
+            ax.scatter(data.eigenspec_stats[0]['eigenspectrum'].real,
+                       data.eigenspec_stats[0]['eigenspectrum'].imag,
+                       c='black',
+                       s=2)
+        
+            ax.axhline(0, color='grey', linewidth=0.5)
+            ax.axvline(0, color='grey', linewidth=0.5)
+            
+            ax.set_xlabel('')
+            ax.set_ylabel('')
+            
+            M, e, max_le = list(title.values())
+            stability = "\n(stable)" if max_le < 0 else "\n(unstable)"
+            
+            ax.set_title(r'$M = $' + f'${{{M}}}$, ' + \
+                         r'$1/\epsilon = $' + f'$10^{{{e}}}$, ' + \
+                         stability,
+                         fontsize=10)
+            
+            ax.set_xlim([-0.5, 0.5])
+            ax.set_ylim([-0.12, 0.12])
+        
+        fig.supxlabel('Re(λ)', weight="bold", fontsize=10)
+        fig.supylabel('Im(λ)', weight="bold", fontsize=10)
+        
+        plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/" + \
+                    filename + "_smallrange.png",
+                    bbox_inches='tight')
+        plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/" + \
+                    filename + "_smallrange.svg",
+                    bbox_inches='tight')
+        
+        plt.show()
+        
+    full_spectra(idx)
+    zoom_spectra(idx)
     
-    
-    ax.scatter(data.eigenspec_stats[0]['eigenspectrum'].real,
-               data.eigenspec_stats[0]['eigenspectrum'].imag,
-               c='black',
-               s=5)
+example_eigenspectr(4,
+                    "eigenspectrum_ts_chaos")
 
-    ax.axhline(0, color='grey', linewidth=0.5)
-    ax.axvline(0, color='grey', linewidth=0.5)
+example_eigenspectr(7,
+                    "eigenspectrum_ts_stable")
     
-    ax.set_xlabel('')
-    ax.set_ylabel('')
-    
-    ax.set_title(title, weight="bold", fontsize=10)
-
-fig.supxlabel('Re(λ)', weight="bold", fontsize=10)
-fig.supylabel('Im(λ)', weight="bold", fontsize=10)
-    
-plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/eigenspectrum_ts.png",
-            bbox_inches='tight')
-plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/eigenspectrum_ts.svg",
-            bbox_inches='tight')
-plt.show()
-
 # %%
 
-fig, axs = plt.subplots(1, 4,
-                       layout="constrained",
-                       figsize=(8, 2))
+def example_dynamics(idx : int) -> None:
 
-for ax, data, title in zip(axs.flatten(),
-                           [val2
-                            for str1, val1 in CRM_ts_eigenspec.items()
-                            for str2, val2 in val1[2].items()],
-                           [str1 + "_" + str2 + "_" + str(np.round(val2.lyapunov_exponent, 5))
-                            for str1, val1 in CRM_ts_eigenspec.items()
-                            for str2, val2 in val1[2].items()]):
+    fig, axs = plt.subplots(2, 4,
+                           layout="constrained",
+                           #sharex=True,
+                           figsize=(8.5, 3.5))
     
+    for ax, (epsilon, data) in zip(axs.flatten()[:4],
+                                   CRM_ts_eigenspec["50"][idx].items()):
+        
+        log_epsilon = np.abs(np.round(np.log10(float(epsilon)), 1))
+        
+        ax.plot(data.ODE_sols[0].t, data.ODE_sols[0].y[:50, :].T)
+        ax.set_title(f"$10^{{{log_epsilon}}}$" ,
+                     weight="bold",
+                     fontsize=10)
+        
+    for ax, (epsilon, data) in zip(axs.flatten()[4:],
+                                   CRM_ts_eigenspec["250"][idx].items()):
+        
+        log_epsilon = np.abs(np.round(np.log10(float(epsilon)), 1))
+        
+        ax.plot(data.ODE_sols[0].t, data.ODE_sols[0].y[:250, :].T)
+        ax.set_title("" ,
+                     weight="bold",
+                     fontsize=10)
     
-    ax.scatter(data.eigenspec_stats[0]['eigenspectrum'].real,
-               data.eigenspec_stats[0]['eigenspectrum'].imag,
-               c='black',
-               s=5)
-
-    ax.axhline(0, color='grey', linewidth=0.5)
-    ax.axvline(0, color='grey', linewidth=0.5)
+        
+    #ax.set_xlabel('')
+    #ax.set_ylabel('')
     
-    ax.set_xlabel('')
-    ax.set_ylabel('')
+    fig.supxlabel('time', weight="bold", fontsize=10)
+    fig.supylabel('abundance', weight="bold", fontsize=10)
     
-    ax.set_xlim([-0.15, 0.15])
-    ax.set_ylim([-0.075, 0.075])
+    plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/ts_example_chaos.png",
+                bbox_inches='tight')
+    plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/ts_example_chaos.svg",
+                bbox_inches='tight')
+    plt.show()
     
-    ax.set_title(title, weight="bold", fontsize=10)
-
-fig.supxlabel('Re(λ)', weight="bold", fontsize=10)
-fig.supylabel('Im(λ)', weight="bold", fontsize=10)
-
-plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/eigenspectrum_ts_smallrange.png",
-            bbox_inches='tight')
-plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/eigenspectrum_ts_smallrange.svg",
-            bbox_inches='tight')
-plt.show()
-
-# %%
-
-fig, axs = plt.subplots(1, 2,
-                       layout="constrained",
-                       #sharex=True,
-                       figsize=(5, 2))
-
-axs[0].plot(CRM_ts_eigenspec["50"][2][str(10.0**-5.0)].ODE_sols[0].t,
-            CRM_ts_eigenspec["50"][2][str(10.0**-5.0)].ODE_sols[0].y[:50, :].T)
-axs[0].set_title(r'$1 / \epsilon = 10^5$', weight="bold", fontsize=10)
-
-axs[1].plot(CRM_ts_eigenspec["50"][2][str(10.0**0.0)].ODE_sols[0].t,
-            CRM_ts_eigenspec["50"][2][str(10.0**0.0)].ODE_sols[0].y[:50, :].T)
-axs[1].set_title(r'$1 / \epsilon = 10^0$', weight="bold", fontsize=10)
-    
-#ax.set_xlabel('')
-#ax.set_ylabel('')
-
-fig.supxlabel('time', weight="bold", fontsize=10)
-fig.supylabel('abundance', weight="bold", fontsize=10)
-
-plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/ts_example_chaos.png",
-            bbox_inches='tight')
-plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/ts_example_chaos.svg",
-            bbox_inches='tight')
-plt.show()
+example_dynamics(8)
 
 # %%
 
@@ -325,7 +379,7 @@ compare_contributions = (eigenvec_contr_df[['M',
 
 def transform_timescalar(x):
     
-    log_x = np.log10(x)
+    log_x = np.abs(np.log10(x))
     log_x_str = f"$10^{{{log_x}}}$"
     
     return log_x_str

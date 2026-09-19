@@ -848,7 +848,7 @@ class ES_CRM(ParametersInterface, DifferentialEquationsInterface,
     def collate_parameters(self):
         
         return (self.no_species, self.growth, self.consumption,
-                self.d, self.b, self.o)
+                self.d, self.b, self.o, getattr(self, "timescalar", 1))
         
     #########################################################
                 
@@ -880,15 +880,20 @@ class ES_CRM(ParametersInterface, DifferentialEquationsInterface,
         # the ode solver stops when the event function is true (returns 0)
         return solve_ivp(self.model, [0, t_end], initial_abundance,
                          args = (self.no_species, self.growth, self.consumption,
-                                 self.d, self.b, self.o),
-                         method = 'LSODA', rtol = 1e-7, atol = 1e-9,
+                                 self.d, self.b, self.o,
+                                 getattr(self, "timescalar", 1)),
+                         method = 'LSODA',
+                         rtol = 1e-7,
+                         atol = np.concatenate([np.full(self.no_species, 10.0**-15),
+                                                np.full(self.no_resources, 10.0**-15)]),
                          t_eval = np.linspace(0, t_end, 200),
                          jac = self.jacobian,
                          events = unbounded_growth)
     
     def model(self,
               t, y,
-              S, G, C, D, B, O):
+              S, G, C, D, B, O,
+              e):
         
         '''
         
@@ -928,16 +933,20 @@ class ES_CRM(ParametersInterface, DifferentialEquationsInterface,
         
         # change in consumer abundances over time
         dNdt = species * (np.sum(G * resources, axis = 1) - D)
-    
+        
         # change in resource abundances over time
-        dRdt = (B - O * resources) - \
-            (resources * np.sum(C * species, axis=1))
+        dRdt = (1.0/e) * ((B - O * resources) - \
+                          (resources * np.sum(C * species, axis=1)))
             
-        return np.concatenate((dNdt, dRdt)) + 1e-8
+        if e > 1e-6: immigration = 1e-8 
+        else: immigration = 1e-12
+            
+        return np.concatenate((dNdt, dRdt)) + immigration
 
     def jacobian(self,
                  t, y,
-                 S, G, C, D, B, O):
+                 S, G, C, D, B, O,
+                 e):
         
         species, resources = y[:S], y[S:]
 
@@ -948,8 +957,8 @@ class ES_CRM(ParametersInterface, DifferentialEquationsInterface,
 
         J[:S, :S] = np.diag(growth_term)
         J[:S, S:] = G * species[:, np.newaxis]
-        J[S:, :S] = -C * resources[:, np.newaxis]
-        J[S:, S:] = np.diag(-O - consumption_term)
+        J[S:, :S] = (1.0 / e) * (-C * resources[:, np.newaxis])
+        J[S:, S:] = (1.0 / e) * (np.diag(-O - consumption_term))
 
         return J
 
