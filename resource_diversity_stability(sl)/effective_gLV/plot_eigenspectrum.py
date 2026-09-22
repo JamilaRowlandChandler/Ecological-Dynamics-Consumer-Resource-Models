@@ -14,6 +14,7 @@ everything it needs is already computed and saved to disk.
 
 import numpy as np
 import pandas as pd
+from typing import Literal
 from matplotlib import pyplot as plt
 
 # %%
@@ -322,44 +323,89 @@ example_eigenspectra_GC(7,
 
 # %%
 
-def example_dynamics(idx : int) -> None:
+def example_dynamics(idx : int,
+                     model : Literal['CRM', 'eLV'] = 'CRM') -> None:
 
     '''
 
-    Plot example CRM trajectories (across epsilons) for one of the saved
-    communities (idx) - only available for community indices that were
-    passed to save_example_trajectories() when ts_eigenspectrum.py was run.
+    Plot example trajectories for one of the saved communities (idx) - only
+    available for community indices that were passed to
+    save_example_trajectories() when ts_eigenspectrum.py (model = 'CRM') or
+    ts_eigenspectrum_eLV.py (model = 'eLV') was run.
+
+    For the CRM, resource dynamics are plotted above consumer dynamics (two
+    stacked rows per M, one column per epsilon), since the CRM's state
+    includes both. eLV_SL has no separate resource dynamics to split out, so
+    each M's full dynamics are instead plotted together in a single panel.
 
     '''
 
-    resource_pool_sizes = list(CRM_example_trajectories.keys())
+    match model:
 
-    fig, axs = plt.subplots(len(resource_pool_sizes), 4,
-                           layout="constrained",
-                           figsize=(8.5, 3.5 * len(resource_pool_sizes)))
+        case 'CRM':
 
-    for row, M in enumerate(resource_pool_sizes):
+            resource_pool_sizes = list(CRM_example_trajectories.keys())
 
-        for ax, (epsilon, (t, y)) in zip(axs[row],
-                                         CRM_example_trajectories[M][idx].items()):
+            fig, axs = plt.subplots(2 * len(resource_pool_sizes), 4,
+                                   layout="constrained",
+                                   figsize=(8.5, 3.5 * len(resource_pool_sizes)))
 
-            log_epsilon = np.abs(np.round(np.log10(float(epsilon)), 1))
+            for row_pair, M in enumerate(resource_pool_sizes):
 
-            ax.plot(t, y[:int(M), :].T)
-            ax.set_title(f"$10^{{{log_epsilon}}}$" if row == 0 else "",
-                         weight="bold",
-                         fontsize=10)
+                resource_axs = axs[2 * row_pair]
+                species_axs = axs[2 * row_pair + 1]
+
+                for ax_r, ax_s, (epsilon, (t, y)) in zip(resource_axs,
+                                                         species_axs,
+                                                         CRM_example_trajectories[M][idx].items()):
+
+                    log_epsilon = np.abs(np.round(np.log10(float(epsilon)), 1))
+
+                    ax_r.plot(t, y[int(M):, :].T)
+                    ax_s.plot(t, y[:int(M), :].T)
+
+                    if row_pair == 0:
+
+                        ax_r.set_title(f"$10^{{{log_epsilon}}}$",
+                                     weight="bold",
+                                     fontsize=10)
+
+                resource_axs[0].set_ylabel('resources', fontsize=9)
+                species_axs[0].set_ylabel('consumers', fontsize=9)
+
+            filename = "ts_example_chaos"
+
+        case 'eLV':
+
+            resource_pool_sizes = list(eLV_example_trajectories.keys())
+
+            fig, axs = plt.subplots(1, len(resource_pool_sizes),
+                                   layout="constrained",
+                                   figsize=(3.5 * len(resource_pool_sizes), 3.5))
+
+            for ax, M in zip(np.atleast_1d(axs), resource_pool_sizes):
+
+                t, y = eLV_example_trajectories[M][idx]
+
+                ax.plot(t, y.T)
+                ax.set_title(f"$M = {{{M}}}$",
+                             weight="bold",
+                             fontsize=10)
+
+            filename = "ts_eLV_example_chaos"
 
     fig.supxlabel('time', weight="bold", fontsize=10)
     fig.supylabel('abundance', weight="bold", fontsize=10)
 
-    plt.savefig(figure_directory + "/ts_example_chaos.png",
+    plt.savefig(figure_directory + "/" + filename + ".png",
                 bbox_inches='tight')
-    plt.savefig(figure_directory + "/ts_example_chaos.svg",
+    plt.savefig(figure_directory + "/" + filename + ".svg",
                 bbox_inches='tight')
     plt.show()
 
-example_dynamics(7)
+example_dynamics(7, model = 'CRM')
+
+example_dynamics(0, model = 'eLV')
 
 # %%
 
