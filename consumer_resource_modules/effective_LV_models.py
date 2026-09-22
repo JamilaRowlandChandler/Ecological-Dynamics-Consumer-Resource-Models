@@ -135,13 +135,16 @@ class eLVMethods(DifferentialEquationsInterface_LV,
         if getattr(self, "rho_1idx", np.nan) != 0 : self.rho_1idx_est = one_index_correlation(B, C)
         else: self.rho_1idx_est = 0
         
-        if self.sigma_r == 0 or self.sigma_Aij == 0 : self.rho_r_Aij_est = 0.0 
+        if np.round(self.sigma_r_est, 3) == 0 or \
+            np.round(self.sigma_Aij_est, 3) == 0 : self.rho_r_Aij_est = 0.0 
         else: self.rho_r_Aij_est = growth_interaction_correlation(self.r, B)
         
-        if self.sigma_Aii == 0 or self.sigma_Aij == 0 : self.rho_Aii_Aij_est = 0
+        if np.round(self.sigma_Aii_est, 3) == 0 or \
+            np.round(self.sigma_Aij_est, 3) == 0 : self.rho_Aii_Aij_est = 0
         else: self.rho_Aii_Aij_est = self_inhibition_interaction_correlation(self_inhibition, B)
         
-        if self.sigma_r == 0 or self.sigma_Aii == 0 : self.rho_r_Aii_est = 0
+        if np.round(self.sigma_r_est, 3) == 0 or \
+            np.round(self.sigma_Aii_est, 3) == 0 : self.rho_r_Aii_est = 0
         else: self.rho_r_Aii_est = growth_self_inhibition_correlation(self.r, self_inhibition)
 
         ### summary statistics ###
