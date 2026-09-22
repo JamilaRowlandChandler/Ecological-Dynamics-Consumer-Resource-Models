@@ -37,8 +37,48 @@ from complete_simulation_functions import pickle_dump
 
 # %%
 
+def cavity_phi_R_for_community(sces : Union[pd.DataFrame, None],
+                               CRM_community : Literal["SL_CRM"]):
+
+    '''
+
+    Look up the cavity-predicted resource survival fraction (phi_R) for a
+    CRM community's (mu_c, M) from a self-consistency-equations dataframe -
+    the same lookup as eLV()/eLV_M() in all_mu_c_vs_M_egLV.py.
+
+    Parameters
+    ----------
+    sces : pd.DataFrame or None
+        Self-consistency-equations dataframe, e.g. as pickled at
+        .../self_consistency_equations/<CRM_directory>.pkl. If None, no
+        lookup is performed (cavity_phi_R is treated as unavailable, i.e.
+        all resources are assumed to survive).
+    CRM_community : SL_CRM
+        CRM community to look up the matching (mu_c, M) row for.
+
+    Returns
+    -------
+    cavity_phi_R : npt.NDArray or None
+        The matching row's phi_R (as a length-1 array), or None if sces was
+        not supplied.
+
+    '''
+
+    if sces is None:
+
+        return None
+
+    return sces.loc[np.where((sces["mu_c"] ==
+                              np.round(CRM_community.mu_c * CRM_community.no_resources, 4)) & \
+                             (sces["M"] == CRM_community.no_resources)),
+                    "phi_R"].to_numpy()
+
+# %%
+
 def elv_from_CRM_community(CRM_community : Literal["SL_CRM"],
-                           cavity_phi_R : Union[float, None] = None):
+                           sces : Union[pd.DataFrame, None] = None):
+
+    cavity_phi_R = cavity_phi_R_for_community(sces, CRM_community)
 
     eLV_community = eLV_SL(no_species = CRM_community.no_species,
                            no_resources = CRM_community.no_resources)
@@ -71,15 +111,45 @@ def elv_from_CRM_community(CRM_community : Literal["SL_CRM"],
 def eLV_eigenspec_from_CRM(CRM_directory : str,
                            resource_pool_sizes,
                            mu_c,
-                           cavity_phi_R : Union[float, None] = None):
+                           all_resource_survive : bool = False):
 
+    '''
 
-    def read_call_elv_from_crm(full_CRM_directory : str):
+    Derive/resimulate eLV_SL communities from CRM communities (see
+    elv_from_CRM_community()).
+
+    Parameters
+    ----------
+    CRM_directory : str
+        Directory (relative to
+        C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/)
+        containing the pickled CRM communities, e.g. "M_vs_mu_c".
+    resource_pool_sizes : array-like
+        Resource pool sizes (M) to load, used to build filenames.
+    mu_c : float
+        Mean consumption rate (unscaled by M), used to build filenames.
+    all_resource_survive : bool, optional
+        If False (the default), the cavity-predicted resource survival
+        fraction (phi_R) is looked up from
+        .../self_consistency_equations/<CRM_directory>.pkl (matching
+        eLV_M()'s behaviour in all_mu_c_vs_M_egLV.py) and used to restrict
+        eLV interactions to surviving resources only. If True, no lookup is
+        performed and all resources are assumed to survive.
+
+    Returns
+    -------
+    eLV_eigenspec : dict
+        {M : [community, ...]}.
+
+    '''
+
+    def read_call_elv_from_crm(full_CRM_directory : str,
+                               sces : Union[pd.DataFrame, None]):
 
         # read in consumer-resource model (CRM) communities
         CRM_communities = pd.read_pickle(full_CRM_directory)
 
-        eLV_communities = [elv_from_CRM_community(CRM_community, cavity_phi_R)
+        eLV_communities = [elv_from_CRM_community(CRM_community, sces)
                           for CRM_community in tqdm(CRM_communities,
                                                     leave = True,
                                                     position = 1,
@@ -92,12 +162,23 @@ def eLV_eigenspec_from_CRM(CRM_directory : str,
     full_CRM_directory = "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/" + \
                            CRM_directory
 
+    # look up the cavity-predicted resource survival fraction, unless the
+    # caller has explicitly opted out of it
+    if all_resource_survive:
+
+        sces = None
+
+    else:
+
+        sces = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/self_consistency_equations/" + \
+                              CRM_directory + ".pkl")
+
     # generate filenames based on mu_c
     filenames = [full_CRM_directory + "/simulations_" + \
                  str(M) + "_" + str(np.round(mu_c/M, 4)) + ".pkl"
                  for M in resource_pool_sizes]
 
-    eLV_eigenspec = {str(M) : read_call_elv_from_crm(filename)
+    eLV_eigenspec = {str(M) : read_call_elv_from_crm(filename, sces)
                      for filename, M in zip(filenames, resource_pool_sizes)}
 
     return eLV_eigenspec
