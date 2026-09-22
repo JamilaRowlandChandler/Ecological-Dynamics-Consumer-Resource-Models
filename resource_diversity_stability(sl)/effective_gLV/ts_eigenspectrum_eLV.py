@@ -31,6 +31,10 @@ sys.path.insert(0, "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dy
 from effective_LV_models import eLV_SL
 from community_level_properties import max_le, eigenspectrum
 
+sys.path.insert(0, "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models" + \
+                    "/resource_diversity_stability(sl)")
+from complete_simulation_functions import pickle_dump
+
 # %%
 
 def elv_from_CRM_community(CRM_community : Literal["SL_CRM"],
@@ -148,6 +152,70 @@ def eigenspectrum_matrix(community):
 
 # %%
 
+def save_eigenspec_stats(CRM_ts_eLV : dict,
+                         filepath : str) -> None:
+
+    '''
+
+    Save just the eigenspectrum stats (and max. lyapunov exponent) for every
+    community in CRM_ts_eLV - a lightweight pickle that leaves out the much
+    larger ODE_sols trajectories.
+
+    Parameters
+    ----------
+    CRM_ts_eLV : dict
+        {M : [community, ...]}, as returned by eLV_eigenspec_from_CRM().
+    filepath : str
+        Full filepath (including filename and extension) to save to.
+
+    Returns
+    -------
+    None.
+
+    '''
+
+    eigenspec_stats = {M : [dict(eigenspec_stats = community.eigenspec_stats,
+                                 lyapunov_exponent = community.lyapunov_exponent)
+                            for community in communities]
+                       for M, communities in CRM_ts_eLV.items()}
+
+    pickle_dump(filepath, eigenspec_stats)
+
+# %%
+
+def save_example_trajectories(CRM_ts_eLV : dict,
+                              community_indices : list[int],
+                              filepath : str) -> None:
+
+    '''
+
+    Save (t, y) from ODE_sols[0] for a chosen subset of communities, as a
+    pickle.
+
+    Parameters
+    ----------
+    CRM_ts_eLV : dict
+        {M : [community, ...]}, as returned by eLV_eigenspec_from_CRM().
+    community_indices : list[int]
+        Indices into each M's list of communities (i.e. into CRM_ts_eLV[M])
+        to save trajectories for.
+    filepath : str
+        Full filepath (including filename and extension) to save to.
+
+    Returns
+    -------
+    None.
+
+    '''
+
+    example_trajectories = {M : {idx : (communities[idx].ODE_sols[0].t, communities[idx].ODE_sols[0].y)
+                                 for idx in community_indices}
+                            for M, communities in CRM_ts_eLV.items()}
+
+    pickle_dump(filepath, example_trajectories)
+
+# %%
+
 CRM_ts_eLV = eLV_eigenspec_from_CRM(CRM_directory = "M_vs_mu_c",
                                     resource_pool_sizes = np.array([50, 250]),
                                     mu_c = 145)
@@ -156,3 +224,18 @@ CRM_ts_eLV = eLV_eigenspec_from_CRM(CRM_directory = "M_vs_mu_c",
 
 GC_eigenspec_eLV = {M : [eigenspectrum_matrix(community) for community in communities]
                     for M, communities in CRM_ts_eLV.items()}
+
+# %%
+
+eigenspec_directory = "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/CRM_TS/eigenspectra"
+
+if not os.path.exists(eigenspec_directory):
+
+    os.makedirs(eigenspec_directory)
+
+save_eigenspec_stats(CRM_ts_eLV,
+                     eigenspec_directory + "/M_vs_mu_c_eLV_eigenspec_stats.pkl")
+
+save_example_trajectories(CRM_ts_eLV,
+                          community_indices = [0],
+                          filepath = eigenspec_directory + "/M_vs_mu_c_eLV_example_trajectories.pkl")
