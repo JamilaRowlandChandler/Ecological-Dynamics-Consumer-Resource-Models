@@ -46,12 +46,7 @@ def elv_from_CRM_community(CRM_community : Literal["SL_CRM"],
     eLV_community.elv_from_crm(CRM_community, cavity_phi_R)
     eLV_community.generate_elv_parameters()
 
-    # note: calculate_interaction_stats() is not called here - it relies on
-    # sigma_r/sigma_Aii/sigma_Aij attributes that are only set when r/Aii/Aij
-    # are drawn from prescribed distributions (e.g. gLV communities built
-    # directly from parameters). eLV_SL's r/interaction_matrix are derived
-    # deterministically from the underlying CRM's growth/consumption rates,
-    # so those attributes are never set.
+    eLV_community.calculate_interaction_stats()
 
     # run simulations from randomly generated initial abundances
     eLV_community.simulate_community(t_end = 7000,

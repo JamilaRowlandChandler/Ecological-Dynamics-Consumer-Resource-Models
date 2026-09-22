@@ -69,7 +69,8 @@ def separate_parameter_timescales(base_community : Literal["SL_CRM"],
 
 # %%
 
-def resimulate_CRM_timescale(parameters : dict) -> None:
+def resimulate_CRM_timescale(parameters : dict,
+                             fast_variable : str) -> None:
     
     M = parameters['no_resources']
     
@@ -101,7 +102,13 @@ def resimulate_CRM_timescale(parameters : dict) -> None:
                                    resource_growth_method = "user-supplied",
                                    resource_growth_args = {'b' : intrinsic_resource_growth})
     
-    community.timescale_separation(epsilon)
+    if fast_variable == "resources":
+    
+        community.timescale_separation(epsilon_r = epsilon)
+        
+    elif fast_variable == "species":
+        
+        community.timescale_separation(epsilon_s = epsilon)
         
     # run simulations from randomly generated initial abundances
     community.simulate_community(t_end = 7000,
@@ -124,9 +131,12 @@ def resimulate_CRM_timescale(parameters : dict) -> None:
 # %%
 
 def timescale_separation_eigenspec(CRM_directory : str,
-                                   epsilons,
-                                   resource_pool_sizes,
-                                   mu_c):
+                                   epsilons : Union[list(float), npt.NDArray],
+                                   resource_pool_sizes : Union[list(float),
+                                                               npt.NDArray],
+                                   mu_c : Union[list(float), npt.NDArray],
+                                   fast_variable : Literal['resources',
+                                                           'species'] = 'resources'):
 
 
     def read_call_timescale_separate(full_CRM_directory : str,
@@ -139,7 +149,8 @@ def timescale_separation_eigenspec(CRM_directory : str,
                                                                epsilons)
                                  for CRM_community in CRM_communities[7:9]]
         
-        CRM_ts_eigenspec = [{str(parameters["epsilon"]) : resimulate_CRM_timescale(parameters)
+        CRM_ts_eigenspec = [{str(parameters["epsilon"]) : resimulate_CRM_timescale(parameters,
+                                                                                   fast_variable)
                              for parameters in parameter_sets}
                             for parameter_sets in tqdm(parameters_sep_by_eps,
                                                        leave=True,

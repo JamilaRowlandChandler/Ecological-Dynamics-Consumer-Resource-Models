@@ -16,8 +16,8 @@ from typing import Literal, Union
 class ParametersInterface:
     
     def timescale_separation(self,
-                             epsilon_r,
-                             epsilon_s):
+                             epsilon_r : float = 1.0,
+                             epsilon_s : float = 1.0):
         
         self.timescalar_r = epsilon_r
         self.timescelar_s = epsilon_s

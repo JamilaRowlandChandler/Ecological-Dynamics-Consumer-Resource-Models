@@ -50,8 +50,6 @@ def separate_timescales(parameters : dict,
     separated_parameters = deepcopy(parameters)
     
     separated_parameters['epsilon'] = epsilon
-    #separated_parameters['growth'] = epsilon * parameters['growth']
-    #separated_parameters['d'] = epsilon * parameters['d']
     
     return separated_parameters
 
@@ -70,7 +68,9 @@ def separate_parameter_timescales(base_community : Literal["SL_CRM"],
 
 # %%
 
-def resimulate_CRM_timescale(parameters : dict) -> None:
+def resimulate_CRM_timescale(parameters : dict,
+                             fast_variable : Literal["resources",
+                                                     "consumers"]) -> None:
     
     M = parameters['no_resources']
     
@@ -85,8 +85,6 @@ def resimulate_CRM_timescale(parameters : dict) -> None:
     death = parameters['d']
     
     epsilon = parameters['epsilon']
-    #growth = growth
-    #death = death
     
     community = Consumer_Resource_Model("Self-limiting resource supply",
                                         M,
@@ -104,7 +102,13 @@ def resimulate_CRM_timescale(parameters : dict) -> None:
                                    resource_growth_method = "user-supplied",
                                    resource_growth_args = {'b' : intrinsic_resource_growth})
     
-    community.timescale_separation(epsilon)
+    if fast_variable == "resources":
+    
+        community.timescale_separation(epsilon_r = epsilon)
+        
+    elif fast_variable == "species":
+        
+        community.timescale_separation(epsilon_s = epsilon)
         
     # run simulations from randomly generated initial abundances
     community.simulate_community(t_end = 7000,
@@ -134,7 +138,9 @@ def CRM_timescale_separation(CRM_directory : str,
                              epsilons,
                              resource_pool_sizes,
                              mu_c,
-                             extra_name : str = ""):
+                             extra_name : str = "",
+                             fast_variable : Literal["resources",
+                                                     "species"] = "resources"):
 
 
     def read_call_timescale_separate(full_CRM_directory : str,
@@ -148,7 +154,8 @@ def CRM_timescale_separation(CRM_directory : str,
                                                                         epsilons)
                                           for CRM_community in CRM_communities]).flatten()
         
-        CRM_ts_communities = [resimulate_CRM_timescale(parameters)
+        CRM_ts_communities = [resimulate_CRM_timescale(parameters,
+                                                       fast_variable)
                               for parameters in
                               tqdm(parameters_sep_by_eps,
                                    leave = True,
@@ -161,9 +168,6 @@ def CRM_timescale_separation(CRM_directory : str,
                                             extra_parameters = ["timescalar"])
         
         df.to_csv(full_CRM_ts_directory)
-        
-        #pickle_dump(full_CRM_ts_directory,
-        #            CRM_ts_communites)
     
     ###################################################################################
     
