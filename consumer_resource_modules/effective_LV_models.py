@@ -207,6 +207,10 @@ class eLVMethods(DifferentialEquationsInterface_LV,
 
         return J
 
+    def collate_parameters(self):
+
+        return (self.r, self.interaction_matrix)
+
     def decompose_eLV(self):
 
         '''
