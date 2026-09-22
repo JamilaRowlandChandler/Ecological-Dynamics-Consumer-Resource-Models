@@ -309,13 +309,9 @@ CRM_ts_eigenspec = timescale_separation_eigenspec(CRM_directory = "M_vs_mu_c",
                                                   resource_pool_sizes = np.array([50, 250]),
                                                   mu_c = 145)
 
-# %%
-
 GC_eigenspec = {M : [eigenspectrum_matrix(community_dict['1.0'])
                      for community_dict in communities]
                 for M, communities in CRM_ts_eigenspec.items()}
-
-# %%
 
 eigenspec_directory = "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/CRM_TS/eigenspectra"
 
@@ -329,3 +325,8 @@ save_eigenspec_stats(CRM_ts_eigenspec,
 save_example_trajectories(CRM_ts_eigenspec,
                           community_indices = [7, 8],
                           filepath = eigenspec_directory + "/M_vs_mu_c_example_trajectories.pkl")
+
+# %%
+
+pickle_dump(eigenspec_directory + "/M_vs_mu_c_eigenspec_stats_GC.pkl",
+            GC_eigenspec)

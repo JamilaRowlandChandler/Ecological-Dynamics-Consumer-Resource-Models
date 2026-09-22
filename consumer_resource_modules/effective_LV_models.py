@@ -469,7 +469,7 @@ class eLV_SL(eLVMethods, ParametersInterface):
         
         # extract only surviving resources that species can interact through
         
-        if cavity_phi_R and isinstance(CRM_community, SL_CRM):
+        if cavity_phi_R:
             
             self.suriving_resources(CRM_community, cavity_phi_R) 
         

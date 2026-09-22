@@ -390,12 +390,9 @@ match source:
                                                  resource_pool_sizes = np.array([50, 250]),
                                                  mu_c = 145)
 
-# %%
 
 GC_eigenspec_eLV = {M : [eigenspectrum_matrix(community) for community in communities]
                     for M, communities in CRM_ts_eLV.items()}
-
-# %%
 
 eigenspec_directory = "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/CRM_TS/eigenspectra"
 
@@ -405,6 +402,11 @@ if not os.path.exists(eigenspec_directory):
 
 save_eigenspec_stats(CRM_ts_eLV,
                      eigenspec_directory + "/M_vs_mu_c_eLV_eigenspec_stats.pkl")
+
+# %%
+
+pickle_dump(eigenspec_directory + "/M_vs_mu_c_eLV_eigenspec_stats_GC.pkl",
+            GC_eigenspec_eLV)
 
 # %%
 

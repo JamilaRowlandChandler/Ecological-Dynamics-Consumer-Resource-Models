@@ -22,15 +22,17 @@ eigenspec_directory = "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stab
 figure_directory = "C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability"
 
 CRM_eigenspec_stats = pd.read_pickle(eigenspec_directory + "/M_vs_mu_c_eigenspec_stats.pkl")
+GC_eigenspec_stats = pd.read_pickle(eigenspec_directory + "/M_vs_mu_c_eigenspec_stats_GC.pkl")
 CRM_example_trajectories = pd.read_pickle(eigenspec_directory + "/M_vs_mu_c_example_trajectories.pkl")
 
 eLV_eigenspec_stats = pd.read_pickle(eigenspec_directory + "/M_vs_mu_c_eLV_eigenspec_stats.pkl")
+eLV_GC_eigenspec_stats = pd.read_pickle(eigenspec_directory + "/M_vs_mu_c_eLV_eigenspec_stats_GC.pkl")
 eLV_example_trajectories = pd.read_pickle(eigenspec_directory + "/M_vs_mu_c_eLV_example_trajectories.pkl")
 
 # %%
 
-def example_eigenspectr(idx : int,
-                        filename : str) -> None:
+def example_eigenspectra(idx : int,
+                         filename : str) -> None:
 
     '''
 
@@ -126,7 +128,7 @@ def example_eigenspectr(idx : int,
 
         fig, axs = plt.subplots(2, int(len(eigenspectra)/2),
                                layout="constrained",
-                               figsize=(8.5, 4))
+                               figsize=(1.7*int(len(eigenspectra)/2), 4))
 
         for ax, data, title in zip(axs.flatten(),
                                    eigenspectra,
@@ -146,16 +148,16 @@ def example_eigenspectr(idx : int,
             ax.set_title(title,
                          fontsize=10)
 
-            ax.set_xlim([-0.3, 0.12])
+            ax.set_xlim([-0.3, 0.13])
             ax.set_ylim([-0.11, 0.11])
 
         fig.supxlabel('Re(λ)', weight="bold", fontsize=10)
         fig.supylabel('Im(λ)', weight="bold", fontsize=10)
 
-        axs[0, int(len(eigenspectra)/2)-1].set_ylim([-0.75, 0.75])
-        axs[0, int(len(eigenspectra)/2)-1].set_xlim([-7, 7])
-        axs[1, int(len(eigenspectra)/2)-1].set_ylim([-0.75, 0.75])
-        axs[1, int(len(eigenspectra)/2)-1].set_xlim([-7, 7])
+        #axs[0, int(len(eigenspectra)/2)-1].set_ylim([-0.75, 0.75])
+        #axs[0, int(len(eigenspectra)/2)-1].set_xlim([-7, 7])
+        #axs[1, int(len(eigenspectra)/2)-1].set_ylim([-0.75, 0.75])
+        #axs[1, int(len(eigenspectra)/2)-1].set_xlim([-7, 7])
 
         plt.savefig(figure_directory + "/" + filename + "_smallrange.png",
                     bbox_inches='tight')
@@ -170,11 +172,153 @@ def example_eigenspectr(idx : int,
     full_spectra(eigenspectra, titles)
     zoom_spectra(eigenspectra, titles)
 
-example_eigenspectr(1,
-                    "eigenspectrum_ts_chaos")
+example_eigenspectra(8,
+                     "eigenspectrum_ts_chaos")
 
-example_eigenspectr(0,
-                    "eigenspectrum_ts_stable")
+example_eigenspectra(7,
+                     "eigenspectrum_ts_stable")
+
+# %%
+
+def example_eigenspectra_GC(idx : int,
+                            filename : str) -> None:
+
+    '''
+
+    Plot the leading eigenspectrum for each (M, epsilon) combination, for
+    one of the saved communities (idx), alongside the corresponding eLV_SL
+    community's eigenspectrum (the CRM's epsilon -> 0 limit) as a final
+    reference panel.
+
+    '''
+
+    def collate_eigenspectra(idx):
+
+        eigenspectra = [[GC_eigenspec_stats[M][idx]['eigenspectrum'],
+                        eLV_GC_eigenspec_stats[M][idx]['eigenspectrum']]
+                        for M in GC_eigenspec_stats.keys()]
+
+        return [eig_spec
+                for eig_spec_M in eigenspectra
+                for eig_spec in eig_spec_M]
+
+    def collate_titles(idx):
+
+        def format_title_from_dict(title_data):
+
+            model, M, max_le = list(title_data.values())
+            stability = "\n(stable)" if max_le < 0 else "\n(unstable)"
+
+            title = model + "," + \
+                    r'$M = $' + f'${{{M}}}$, ' + \
+                    stability
+
+            return title
+
+        titles_data = [[{'model' : r'$-GC^T$',
+                         'M' : float(M),
+                       'max. le' : np.round(CRM_eigenspec_stats[M][idx]["1.0"]['lyapunov_exponent'], 5)
+                        },
+                        {'model' : r'$-A^T$',
+                         'M' : float(M),
+                         'max. le' : np.round(eLV_eigenspec_stats[M][idx]['lyapunov_exponent'], 5)
+                         }]
+                      for M in CRM_eigenspec_stats.keys()]
+        
+        titles_data_flat = [title_data 
+                            for titles_data_M in titles_data
+                            for title_data in titles_data_M]
+        
+        titles = [format_title_from_dict(title_data)
+                  for title_data in titles_data_flat]
+
+        return titles
+
+    def full_spectra(eigenspectra,
+                     titles):
+
+        fig, axs = plt.subplots(2, 2,
+                               layout="constrained",
+                               figsize=(3.4, 4))
+
+        for ax, data, title in zip(axs.flatten(),
+                                   eigenspectra,
+                                   titles):
+
+            ax.scatter(data.real,
+                       data.imag,
+                       c='black',
+                       s=2)
+
+            ax.axhline(0, color='grey', linewidth=0.5)
+            ax.axvline(0, color='grey', linewidth=0.5)
+
+            ax.set_xlabel('')
+            ax.set_ylabel('')
+
+            ax.set_title(title,
+                         fontsize=10)
+
+        fig.supxlabel('Re(λ)', weight="bold", fontsize=10)
+        fig.supylabel('Im(λ)', weight="bold", fontsize=10)
+
+        plt.savefig(figure_directory + "/" + filename + ".png",
+                    bbox_inches='tight')
+        plt.savefig(figure_directory + "/" + filename + ".svg",
+                    bbox_inches='tight')
+
+        plt.show()
+
+    def zoom_spectra(eigenspectra,
+                     titles):
+
+        fig, axs = plt.subplots(2, 2,
+                               layout="constrained",
+                               figsize=(3.4, 4))
+
+        for ax, data, title in zip(axs.flatten(),
+                                   eigenspectra,
+                                   titles):
+
+            ax.scatter(data.real,
+                       data.imag,
+                       c='black',
+                       s=2)
+
+            ax.axhline(0, color='grey', linewidth=0.5)
+            ax.axvline(0, color='grey', linewidth=0.5)
+
+            ax.set_xlabel('')
+            ax.set_ylabel('')
+
+            ax.set_title(title,
+                         fontsize=10)
+
+            ax.set_xlim([-6, 0.7])
+            ax.set_ylim([-1.1, 1.1])
+
+        fig.supxlabel('Re(λ)', weight="bold", fontsize=10)
+        fig.supylabel('Im(λ)', weight="bold", fontsize=10)
+        
+        plt.savefig(figure_directory + "/" + filename + "_smallrange.png",
+                    bbox_inches='tight')
+        plt.savefig(figure_directory + "/" + filename + "_smallrange.svg",
+                    bbox_inches='tight')
+
+        plt.show()
+
+    eigenspectra = collate_eigenspectra(idx)
+    titles = collate_titles(idx)
+    
+    full_spectra(eigenspectra, titles)
+    zoom_spectra(eigenspectra, titles)
+
+example_eigenspectra_GC(8,
+                        "eigenspectrum_GC_chaos")
+
+example_eigenspectra_GC(7,
+                        "eigenspectrum_GC_stable")
+
 
 # %%
 
@@ -215,7 +359,7 @@ def example_dynamics(idx : int) -> None:
                 bbox_inches='tight')
     plt.show()
 
-example_dynamics(0)
+example_dynamics(7)
 
 # %%
 
