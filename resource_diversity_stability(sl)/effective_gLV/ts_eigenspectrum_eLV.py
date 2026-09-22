@@ -104,6 +104,86 @@ def eLV_eigenspec_from_CRM(CRM_directory : str,
 
 # %%
 
+def eLV_eigenspec_from_existing(eLV_directory : str,
+                                resource_pool_sizes,
+                                mu_c,
+                                community_indices : list[int] = [7, 8]):
+
+    '''
+
+    Load already-simulated eLV_SL communities from disk (e.g. as saved by
+    eLV_M() in all_mu_c_vs_M_egLV.py, under
+    .../simulations/eLV/M_vs_mu_c/) and compute their eigenspectra, rather
+    than deriving/resimulating eLV_SL communities from CRM communities (see
+    eLV_eigenspec_from_CRM() for that).
+
+    Parameters
+    ----------
+    eLV_directory : str
+        Directory (relative to
+        C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/)
+        containing the pickled eLV_SL communities, e.g. "eLV/M_vs_mu_c".
+    resource_pool_sizes : array-like
+        Resource pool sizes (M) to load, used to build filenames.
+    mu_c : float
+        Mean consumption rate (unscaled by M), used to build filenames -
+        matches the naming convention of eLV_M()/CRMs_create_and_save().
+    community_indices : list[int], optional
+        Indices into each file's list of pre-simulated eLV_SL communities to
+        use. The default is [7, 8], matching the community indices used by
+        eLV_eigenspec_from_CRM()/timescale_separation_eigenspec().
+
+    Returns
+    -------
+    eLV_eigenspec : dict
+        {M : [community, ...]}.
+
+    '''
+
+    def read_existing_eLV(full_eLV_directory : str):
+
+        # read in already-simulated eLV_SL communities
+        eLV_communities = [pd.read_pickle(full_eLV_directory)[idx]
+                          for idx in community_indices]
+
+        for eLV_community in eLV_communities:
+
+            # reuse the already-computed max. lyapunov exponent if present,
+            # otherwise fall back to computing it - keeps the attribute name
+            # consistent with elv_from_CRM_community()'s output
+            eLV_community.lyapunov_exponent = \
+                getattr(eLV_community, "max_lyapunov_exponent", None)
+
+            if eLV_community.lyapunov_exponent is None:
+
+                eLV_community.lyapunov_exponent = max_le(eLV_community,
+                                                         eLV_community.ODE_sols[0].y[:, -1],
+                                                         T = 1000,
+                                                         perturbation = 1e-6)
+
+            eLV_community.eigenspec_stats = [eigenspectrum(eLV_community,
+                                                            ode_sol.y[:, -1])
+                                             for ode_sol in eLV_community.ODE_sols]
+
+        return eLV_communities
+
+    ###################################################################################
+
+    full_eLV_directory = "C:/Users/jamil/Documents/PhD/Data/resource_diversity_stability/simulations/" + \
+                           eLV_directory
+
+    # generate filenames based on mu_c
+    filenames = [full_eLV_directory + "/simulations_" + \
+                 str(M) + "_" + str(np.round(mu_c/M, 4)) + ".pkl"
+                 for M in resource_pool_sizes]
+
+    eLV_eigenspec = {str(M) : read_existing_eLV(filename)
+                     for filename, M in zip(filenames, resource_pool_sizes)}
+
+    return eLV_eigenspec
+
+# %%
+
 def absolute_eigenvec_contribution(eigenspecs):
 
     df = pd.DataFrame([absolute_eigenvec_contr_stats(community)
@@ -211,9 +291,25 @@ def save_example_trajectories(CRM_ts_eLV : dict,
 
 # %%
 
-CRM_ts_eLV = eLV_eigenspec_from_CRM(CRM_directory = "M_vs_mu_c",
-                                    resource_pool_sizes = np.array([50, 250]),
-                                    mu_c = 145)
+# source = 'CRM' derives/resimulates eLV_SL communities from CRM communities
+# (see eLV_eigenspec_from_CRM()). source = 'existing' instead loads already-
+# simulated eLV_SL communities from disk and just computes their eigenspectra
+# (see eLV_eigenspec_from_existing()) - much faster if they're already there.
+source = 'CRM'
+
+match source:
+
+    case 'CRM':
+
+        CRM_ts_eLV = eLV_eigenspec_from_CRM(CRM_directory = "M_vs_mu_c",
+                                            resource_pool_sizes = np.array([50, 250]),
+                                            mu_c = 145)
+
+    case 'existing':
+
+        CRM_ts_eLV = eLV_eigenspec_from_existing(eLV_directory = "eLV/M_vs_mu_c",
+                                                 resource_pool_sizes = np.array([50, 250]),
+                                                 mu_c = 145)
 
 # %%
 

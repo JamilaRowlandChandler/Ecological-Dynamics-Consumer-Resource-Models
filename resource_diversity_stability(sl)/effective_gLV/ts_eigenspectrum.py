@@ -131,10 +131,10 @@ def resimulate_CRM_timescale(parameters : dict,
 # %%
 
 def timescale_separation_eigenspec(CRM_directory : str,
-                                   epsilons : Union[list(float), npt.NDArray],
-                                   resource_pool_sizes : Union[list(float),
+                                   epsilons : Union[list[float], npt.NDArray],
+                                   resource_pool_sizes : Union[list[float],
                                                                npt.NDArray],
-                                   mu_c : Union[list(float), npt.NDArray],
+                                   mu_c : Union[list[float], npt.NDArray],
                                    fast_variable : Literal['resources',
                                                            'species'] = 'resources'):
 
