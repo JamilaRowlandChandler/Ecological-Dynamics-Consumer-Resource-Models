@@ -147,7 +147,7 @@ def timescale_separation_eigenspec(CRM_directory : str,
         
         parameters_sep_by_eps = [separate_parameter_timescales(CRM_community,
                                                                epsilons)
-                                 for CRM_community in CRM_communities[7:9]]
+                                 for CRM_community in CRM_communities]
         
         CRM_ts_eigenspec = [{str(parameters["epsilon"]) : resimulate_CRM_timescale(parameters,
                                                                                    fast_variable)
@@ -327,5 +327,5 @@ save_eigenspec_stats(CRM_ts_eigenspec,
                      eigenspec_directory + "/M_vs_mu_c_eigenspec_stats.pkl")
 
 save_example_trajectories(CRM_ts_eigenspec,
-                          community_indices = [0],
+                          community_indices = [7, 8],
                           filepath = eigenspec_directory + "/M_vs_mu_c_example_trajectories.pkl")

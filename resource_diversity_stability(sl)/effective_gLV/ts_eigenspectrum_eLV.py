@@ -80,10 +80,10 @@ def eLV_eigenspec_from_CRM(CRM_directory : str,
         CRM_communities = pd.read_pickle(full_CRM_directory)
 
         eLV_communities = [elv_from_CRM_community(CRM_community, cavity_phi_R)
-                          for CRM_community in tqdm(CRM_communities[7:9],
+                          for CRM_community in tqdm(CRM_communities,
                                                     leave = True,
                                                     position = 1,
-                                                    total = len(CRM_communities[7:9]))]
+                                                    total = len(CRM_communities))]
 
         return eLV_communities
 
@@ -106,8 +106,7 @@ def eLV_eigenspec_from_CRM(CRM_directory : str,
 
 def eLV_eigenspec_from_existing(eLV_directory : str,
                                 resource_pool_sizes,
-                                mu_c,
-                                community_indices : list[int] = [7, 8]):
+                                mu_c):
 
     '''
 
@@ -143,8 +142,7 @@ def eLV_eigenspec_from_existing(eLV_directory : str,
     def read_existing_eLV(full_eLV_directory : str):
 
         # read in already-simulated eLV_SL communities
-        eLV_communities = [pd.read_pickle(full_eLV_directory)[idx]
-                          for idx in community_indices]
+        eLV_communities = pd.read_pickle(full_eLV_directory)
 
         for eLV_community in eLV_communities:
 
@@ -295,7 +293,7 @@ def save_example_trajectories(CRM_ts_eLV : dict,
 # (see eLV_eigenspec_from_CRM()). source = 'existing' instead loads already-
 # simulated eLV_SL communities from disk and just computes their eigenspectra
 # (see eLV_eigenspec_from_existing()) - much faster if they're already there.
-source = 'CRM'
+source = 'existing'
 
 match source:
 
@@ -326,6 +324,8 @@ if not os.path.exists(eigenspec_directory):
 
 save_eigenspec_stats(CRM_ts_eLV,
                      eigenspec_directory + "/M_vs_mu_c_eLV_eigenspec_stats.pkl")
+
+# %%
 
 save_example_trajectories(CRM_ts_eLV,
                           community_indices = [0],
