@@ -194,7 +194,9 @@ class SL_CRM(ParametersInterface,
     def collate_parameters(self):
         
         return (self.no_species, self.growth, self.consumption,
-                self.d, self.b, getattr(self, 'timescalar', 1))
+                self.d, self.b,
+                getattr(self, 'timescalar_r', 1),
+                getattr(self, 'timescalar_s', 1),)
     
     #####################################################################
     
@@ -224,13 +226,16 @@ class SL_CRM(ParametersInterface,
         # the ode solver stops when the event function is true (returns 0)
         return solve_ivp(self.model, [0, t_end], initial_abundance,
                          args = (self.no_species, self.growth, self.consumption,
-                                 self.d, self.b, getattr(self, "timescalar", 1)),
+                                 self.d, self.b,
+                                 getattr(self, "timescalar_r", 1),
+                                 getattr(self, "timescalar_s", 1)),
                          method = 'LSODA',
                          rtol = 1e-7,
                         # atol= 1e-9,
                          atol = np.concatenate([np.full(self.no_species, 10.0**-15),
                                                 np.full(self.no_resources, 10.0**-15)]),
-                         first_step=np.min([getattr(self, "timescalar", 1e-4),
+                         first_step=np.min([getattr(self, "timescalar_r", 1e-4),
+                                            getattr(self, "timescalar_s", 1e-4),
                                             1e-4]),
                          t_eval = np.linspace(0, t_end, 200),
                          jac = self.jacobian,
@@ -240,7 +245,7 @@ class SL_CRM(ParametersInterface,
     def model(self,
               t, y,
               S, G, C, D, B,
-              e):
+              e_r, e_s):
         
         '''
         
@@ -279,13 +284,13 @@ class SL_CRM(ParametersInterface,
         species, resources = y[:S], y[S:]
         
         # change in consumer abundances over time
-        dNdt = species * (np.sum(G * resources, axis = 1) - D)
+        dNdt = (1.0/e_s) * (species * (np.sum(G * resources, axis = 1) - D))
         
         # change in resource abundances over time
-        dRdt = (1.0/e) * ((resources * (B - resources)) - \
-                          (resources * np.sum(C * species, axis=1)))
+        dRdt = (1.0/e_r) * ((resources * (B - resources)) - \
+                            (resources * np.sum(C * species, axis=1)))
             
-        if e > 1e-6: immigration = 1e-8 
+        if e_r or e_s > 1e-6: immigration = 1e-8 
         else: immigration = 1e-12
             
         return np.concatenate((dNdt, dRdt)) + immigration
@@ -293,7 +298,7 @@ class SL_CRM(ParametersInterface,
     def jacobian(self,
                  t, y,
                  S, G, C, D, B,
-                 e):
+                 e_r, e_s):
 
         species, resources = y[:S], y[S:]
 
@@ -302,10 +307,10 @@ class SL_CRM(ParametersInterface,
 
         J = np.zeros((y.size, y.size))
 
-        J[:S, :S] = np.diag(growth_term)
-        J[:S, S:] = G * species[:, np.newaxis]
-        J[S:, :S] = (1.0 / e) * (-C * resources[:, np.newaxis])
-        J[S:, S:] = (1.0 / e) * (np.diag(B - 2*resources - consumption_term))
+        J[:S, :S] = (1.0 / e_s) * (np.diag(growth_term))
+        J[:S, S:] = (1.0 / e_s) * (G * species[:, np.newaxis])
+        J[S:, :S] = (1.0 / e_r) * (-C * resources[:, np.newaxis])
+        J[S:, S:] = (1.0 / e_r) * (np.diag(B - 2*resources - consumption_term))
         
         return J
     

@@ -10,12 +10,7 @@ import pandas as pd
 import seaborn as sns
 import os
 import sys
-
 from matplotlib import pyplot as plt
-
-from matplotlib.colors import LinearSegmentedColormap
-from matplotlib.patches import Rectangle
-import matplotlib.patheffects as patheffects
 
 os.chdir('C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/resource_diversity_stability(sl)/effective_gLV')
 

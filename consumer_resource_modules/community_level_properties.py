@@ -384,13 +384,6 @@ def max_le(community : Union["SL_CRM", "SL_SI_CRM", "SL_TL_CRM", "ES_CRM",
                                          T,
                                          perturbation)
     
-    #if (original_traj.y.shape[1] != perturbed_traj.y.shape[1]) or \
-    #    original_traj.y.shape[1] == 1 or perturbed_traj.y.shape[1] == 1:
-        
-    #    max_lyapunov_exponent = np.nan
-        
-    #else:
-    
     try:
         
         # Calculated the new separation between the original and perturbated trajectory (d1)
@@ -416,7 +409,7 @@ def trajectory(community : Union["SL_CRM", "SL_SI_CRM", "ES_CRM"],
                T : float,
                perturbation : float):
 
-# Set initial conditions of the original and perturbated trajectory
+    # Set initial conditions of the original and perturbated trajectory
     original_conditions = deepcopy(initial_conditions)
     
     perturbed_conditions = deepcopy(initial_conditions)
@@ -444,7 +437,7 @@ def trajectory_multi_trophic(community : "SL_TL_CRM",
                              T : float,
                              perturbation : float):
 
-# Set initial conditions of the original and perturbated trajectory
+    # Set initial conditions of the original and perturbated trajectory
     original_conditions = deepcopy(initial_conditions)
 
     perturbed_conditions = deepcopy(initial_conditions)
@@ -536,6 +529,88 @@ def calculate_max_le(original_traj : npt.NDArray,
 def eigenspectrum(community, 
                   abundances):
     
+    community_params = community.collate_parameters()
+    
+    jac_eval = community.jacobian(0, 
+                                  abundances,
+                                  *community_params)
+
+    T, Z = schur(jac_eval, output='complex')
+    eigenvalues = np.diag(T)
+    
+    leading_eig_idx = np.argmax(eigenvalues.real)
+    leading_val = eigenvalues[leading_eig_idx]
+    leading_vec = Z[:, leading_eig_idx]
+    
+    eigenstats = dict(eigenspectrum = eigenvalues,
+                      leading_val = leading_val,
+                      leading_vec = leading_vec)
+    
+    if (model_type := type(community).__name__) not in ["eLV_SL", "eLV_ES", "gLV"]:
+        
+        match model_type:
+    
+            case CRM if CRM in ["SL_CRM", "SL_SI_CRM", "ES_CRM", "Hybrid_CRM"]:
+                
+                pool_sizes = np.concatenate([[0],
+                                             [community.no_species,
+                                              community.no_resources]])
+        
+            case "SL_TL_CRM":
+                
+                pool_sizes = np.concatenate([[0],
+                                             np.cumsum(community.pool_sizes)])
+                
+        mag_ratios = pool_vec_magnitude(leading_vec,
+                                        pool_sizes)
+        
+        eigenstats["magnitude_ratios"] = mag_ratios
+                
+    return eigenstats
+
+# %%
+
+def pool_vec_magnitude(vector,
+                       pool_sizes):
+    
+    def pool_vec(vector,
+                 pool_idx):
+        
+        subvec = np.zeros(len(vector))
+        subvec[pool_idx[0] : pool_idx[1]] = np.abs(vector[pool_idx[0] : pool_idx[1]]) # .real
+        
+        return subvec
+    
+    def mag_ratio(x, y):
+        
+        return x/(x + y + 1e-15)
+    
+    subvectors = np.vstack([pool_vec(vector,
+                                     [pool_sizes[i],
+                                      pool_sizes[i+1]])
+                            for i in range(len(pool_sizes) - 1)])
+    
+    subvector_magnitude = np.linalg.vector_norm(subvectors,
+                                                axis = 1)
+    
+    sv_mg_x, sv_mg_y = np.meshgrid(subvector_magnitude, 
+                                   subvector_magnitude)
+    
+    mag_ratios = mag_ratio(sv_mg_x,
+                           sv_mg_y)
+    
+    mag_ratios_dict = dict(species = mag_ratios[1, 0],
+                           resources = mag_ratios[0, 1])
+    
+    return mag_ratios_dict
+
+# %%
+
+'''
+
+def eigenspectrum(community, 
+                  abundances):
+    
     def pool_vec_magnitude(vector,
                            pool_sizes):
         
@@ -587,22 +662,16 @@ def eigenspectrum(community,
     leading_val = eigenvalues[leading_eig_idx]
     leading_vec = Z[:, leading_eig_idx]
     
-    #eigenvalues, eigenvectors = eig(jac_reduced)
-    
-    #leading_eig_idx = np.argmax(eigenvalues.real)
-    #leading_val = eigenvalues[leading_eig_idx]
-    #leading_vec = eigenvectors[:, leading_eig_idx]
-    
     if hasattr(community, "no_resources"):
         
-        original_sizes = [community.no_species, community.no_resources]
+        pool_sizes = np.concatenate([[0],
+                                     [community.no_species,
+                                      community.no_resources]])
         
-    else:
+    elif hasattr(community, "trophic_levels"):
         
-        original_sizes = community.pool_sizes
-
-
-    original_bounds = np.concatenate([[0], np.cumsum(original_sizes)])
+        pool_sizes = np.concatenate([[0],
+                                     np.cumsum(community.pool_sizes)])
         
     #surviving_sizes = [np.sum((survivors >= original_bounds[k]) & 
     #                          (survivors < original_bounds[k + 1]))
@@ -611,7 +680,7 @@ def eigenspectrum(community,
     #pool_sizes = np.concatenate([[0],
     #                             np.cumsum(surviving_sizes)])
     
-    pool_sizes = original_bounds
+    #pool_sizes = original_bounds
     
     mag_ratios = pool_vec_magnitude(leading_vec,
                                     pool_sizes)
@@ -620,6 +689,8 @@ def eigenspectrum(community,
                 leading_val = leading_val,
                 leading_vec = leading_vec,
                 magnitude_ratios = mag_ratios)
+
+'''
     
 # %%
 
