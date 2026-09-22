@@ -164,8 +164,7 @@ def CRM_timescale_separation(CRM_directory : str,
         
         df = simulation_df_from_communities(CRM_ts_communities,
                                             "Self-limiting resource supply",
-                                            "growth function of consumption",
-                                            extra_parameters = ["timescalar"])
+                                            "growth function of consumption")
         
         df.to_csv(full_CRM_ts_directory)
     

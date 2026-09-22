@@ -20,7 +20,7 @@ class ParametersInterface:
                              epsilon_s : float = 1.0):
         
         self.timescalar_r = epsilon_r
-        self.timescelar_s = epsilon_s
+        self.timescalar_s = epsilon_s
     
     # Public methods
     
