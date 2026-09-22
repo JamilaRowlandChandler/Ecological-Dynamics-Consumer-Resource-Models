@@ -945,7 +945,7 @@ def extract_trophic_level_parms(trophic_levels):
                 for i in np.arange(2, trophic_levels + 1)] + \
                 ['d_' + str(i) + "_val"
                  for i in np.arange(2, trophic_levels + 1)] + \
-                ['mu_A', 'sigma_A', 'timescalar']
+                ['mu_A', 'sigma_A', 'timescalar_r', 'timescalar_s']
 
     return poolsize_parms + m_parms
 
@@ -955,7 +955,7 @@ def extract_trophic_level_parms(trophic_levels):
 def extract_growth_consumption_parms():
 
     poolsize_parms = ['no_resources', 'no_species']
-    m_parms = ['mu_g', 'sigma_g', 'mu_c', 'sigma_c', 'rho', 'd_val', 'timescalar']
+    m_parms = ['mu_g', 'sigma_g', 'mu_c', 'sigma_c', 'rho', 'd_val', 'timescalar_r', 'timescalar_s']
 
     return poolsize_parms + m_parms
 
