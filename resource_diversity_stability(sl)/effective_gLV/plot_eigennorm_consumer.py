@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Mon Sep 14 23:04:18 2026
+Created on Tue Sep 22 20:41:20 2026
 
 @author: jamil
 """
@@ -24,7 +24,7 @@ def resource_eigennorm_pivot(df):
     
     return pd.pivot_table(data=df,
                           columns='M',
-                          index='timescalar_r',
+                          index='timescalar_s',
                           values='eigenvec_resource_mag',
                           aggfunc='mean')
 
@@ -135,10 +135,12 @@ def load_data_plot(data_directory : str,
     df = pd.concat([pd.read_csv(full_data_directory + "/" + filename)
                                for filename in os.listdir(full_data_directory)])
     
+    breakpoint()
+    
     eigennorm_pivot = resource_eigennorm_pivot(df)
     stable_pivot = le_pivot_r(df,
                               columns='M',
-                              index='timescalar_r')[0]
+                              index='timescalar_s')[0]
     
     fig, axs = resource_eigenvec_plot(eigennorm_pivot,
                                       stable_pivot,
@@ -153,11 +155,11 @@ def load_data_plot(data_directory : str,
     
 # %%
 
-df_ts = load_data_plot("CRM_TS/M_vs_mu_c",
-                       "eigenvec_contr")
+df_ts = load_data_plot("CRM_TS/Fast_Consumer/M_vs_mu_c",
+                       "eigenvec_contr_fastconsumer")
     
-df_ts_s = load_data_plot("CRM_TS/small_separation",
-                         "eigenvec_contr_smaller",
+df_ts_s = load_data_plot("CRM_TS/Fast_Consumer/small_separation",
+                         "eigenvec_contr_smaller_fastconsumer",
                          logged=False)
 
 # %%

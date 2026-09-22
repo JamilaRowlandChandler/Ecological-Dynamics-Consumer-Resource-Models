@@ -411,5 +411,5 @@ pickle_dump(eigenspec_directory + "/M_vs_mu_c_eLV_eigenspec_stats_GC.pkl",
 # %%
 
 save_example_trajectories(CRM_ts_eLV,
-                          community_indices = [0],
+                          community_indices = [7, 8],
                           filepath = eigenspec_directory + "/M_vs_mu_c_eLV_example_trajectories.pkl")

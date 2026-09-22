@@ -13,8 +13,9 @@ everything it needs is already computed and saved to disk.
 """
 
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
-from typing import Literal
+from typing import Literal, Union
 from matplotlib import pyplot as plt
 
 # %%
@@ -323,7 +324,7 @@ example_eigenspectra_GC(7,
 
 # %%
 
-def example_dynamics(idx : int,
+def example_dynamics(idx : Union[list[int], npt.NDArray],
                      model : Literal['CRM', 'eLV'] = 'CRM') -> None:
 
     '''
@@ -350,14 +351,15 @@ def example_dynamics(idx : int,
                                    layout="constrained",
                                    figsize=(8.5, 3.5 * len(resource_pool_sizes)))
 
-            for row_pair, M in enumerate(resource_pool_sizes):
+            for row_pair, (M, idx_M) in enumerate(zip(resource_pool_sizes,
+                                                      idx)):
 
                 resource_axs = axs[2 * row_pair]
                 species_axs = axs[2 * row_pair + 1]
 
                 for ax_r, ax_s, (epsilon, (t, y)) in zip(resource_axs,
                                                          species_axs,
-                                                         CRM_example_trajectories[M][idx].items()):
+                                                         CRM_example_trajectories[M][idx_M].items()):
 
                     log_epsilon = np.abs(np.round(np.log10(float(epsilon)), 1))
 
@@ -383,9 +385,9 @@ def example_dynamics(idx : int,
                                    layout="constrained",
                                    figsize=(3.5 * len(resource_pool_sizes), 3.5))
 
-            for ax, M in zip(np.atleast_1d(axs), resource_pool_sizes):
+            for ax, M, idx_M in zip(np.atleast_1d(axs), resource_pool_sizes, idx):
 
-                t, y = eLV_example_trajectories[M][idx]
+                t, y = eLV_example_trajectories[M][idx_M]
 
                 ax.plot(t, y.T)
                 ax.set_title(f"$M = {{{M}}}$",
@@ -403,9 +405,9 @@ def example_dynamics(idx : int,
                 bbox_inches='tight')
     plt.show()
 
-example_dynamics(7, model = 'CRM')
+example_dynamics([8, 8], model = 'CRM')
 
-example_dynamics(0, model = 'eLV')
+example_dynamics([8, 8], model = 'eLV')
 
 # %%
 
