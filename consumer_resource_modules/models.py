@@ -1590,7 +1590,7 @@ class LB_CRM(ParametersInterface, DifferentialEquationsInterface,
             (dNdt and dRdt)
 
         '''
-
+        
         # separate species and resource abundances
         species, resources = y[:S], y[S:]
 

@@ -232,9 +232,9 @@ community_df = simulation_df_from_communities([community, community],
 
 S = 100
 M = 100
-mu = 6
-sigma = 1
-rho = 0.5
+mu = 50
+sigma = 3
+rho = 1.0
 
 community = Consumer_Resource_Model("MiCRM", S, M)
 
@@ -251,7 +251,7 @@ community.model_specific_rates(death_method = 'constant',
                                outflux_method = 'constant',
                                outflux_args = {'o' : 1},
                                leakage_method = 'constant',
-                               leakage_args = {'l' : 0.8},
+                               leakage_args = {'l' : 0.5},
                                energy_method = 'constant',
                                energy_args = {'w' : 1},
                                metabolic_method = 'dirichlet',
@@ -280,22 +280,22 @@ print("MiCRM: max. Lyapunov exponent =", community.lyapunov_exponent)
 
 # %% LB_CRM - single community
 
-S = 100
+S = 90
 M = 100
-mu = 6
-sigma = 1
-rho = 0.5
+mu = 50
+sigma = 3.0
+rho = 1.0
 
 community = Consumer_Resource_Model("Leached biomolecules", S, M)
 
 community.growth_consumption_rates('coupled by rho',
                                    mu_c = mu/M,
                                    sigma_c = sigma/np.sqrt(M),
-                                   mu_g = mu/M,
+                                   mu_g = 2*mu/M,
                                    sigma_g = sigma/np.sqrt(M),
                                    rho = rho)
 community.model_specific_rates(death_method = 'constant',
-                               death_args = {'d' : 1},
+                               death_args = {'d' : 0.001},
                                leach_method = 'constant',
                                leach_args = {'l' : 1},
                                production_method = 'bernoulli',

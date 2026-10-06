@@ -523,7 +523,9 @@ class ParametersInterface:
             binary parameters.
 
         '''
-        return (np.random.rand(*dims) < c/dims[-1]).astype(float)
+        return np.random.binomial(1,
+                                  c/self.no_resources,
+                                  dims[0]*dims[1]).reshape(dims)
     
     def __dirichlet_parameters(self, s, dims):
         
