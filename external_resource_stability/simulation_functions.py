@@ -148,32 +148,6 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
                                             outflux_args = {'o' : parm_set['o']})
                                        for parm_set in parameter_sets]
                 
-            case "MiCRM":
-                
-                m_s_rates_args_list = [dict(death_method = 'constant',
-                                            death_args =  {'d' : parm_set['d']},
-                                            influx_method = 'constant',
-                                            influx_args = {'b' : parm_set['b']},
-                                            outflux_method = 'constant',
-                                            outflux_args = {'o' : parm_set['o']},
-                                            leakage_method = 'constant',
-                                            leakage_args = {'l' : parm_set['l']},
-                                            energy_method = 'constant',
-                                            energy_args = {'w' : parm_set['w']},
-                                            metabolic_method = 'dirichlet',
-                                            metabolic_args = {'s' : parm_set['s']})
-                                       for parm_set in parameter_sets]
-                
-            case "Leached biomolecules":
-                
-                m_s_rates_args_list = [dict(death_method = 'constant',
-                                            death_args =  {'d' : parm_set['d']},
-                                            leach_method = 'constant',
-                                            leach_args = {'l' : parm_set['l']},
-                                            production_method = 'bernoulli',
-                                            production_args = {'c' : parm_set['c']})
-                                       for parm_set in parameter_sets]
-                
         return m_s_rates_args_list
     
     # make list of filenames
@@ -405,8 +379,6 @@ def save_models(communities : list,
         all_models = {"SL_CRM" : "Self-limiting resource supply",
                       "SL_SI_CRM" : "Self-limiting resource supply, self-inhibition",
                       "ES_CRM" : "Externally-supplied resources",
-                      "MiCRM" : "MiCRM",
-                      "LB_CRM" : "Leached biomolecules",
                       "ES_Tox_CRM" : "Externally-supplied resources, toxins",
                       "eLV" : "eLV"}
         

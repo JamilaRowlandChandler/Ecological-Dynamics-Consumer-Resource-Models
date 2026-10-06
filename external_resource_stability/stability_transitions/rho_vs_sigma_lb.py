@@ -17,7 +17,7 @@ file_directory_name = os.path.dirname(abspath)
 os.chdir(file_directory_name)
 
 sys.path.insert(0, file_directory_name.removesuffix("\\stability_transitions"))
-from simulation_functions import CRM_across_parameter_space
+from complete_simulation_functions import CRM_across_parameter_space
 
 sys.path.insert(0,  file_directory_name.removesuffix("\\external_resource_stability\\stability_transitions") + \
                 "\\cavity_method_functions")
@@ -37,6 +37,7 @@ def rho_sigma(rho_range,
                                subdirectory,
                                ['rho', 'sigma_M'],
                                model = 'Leached biomolecules',
+                               save_method = 'v3',
                                **kwargs)
                     
 # %%
