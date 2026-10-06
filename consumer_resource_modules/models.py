@@ -82,6 +82,14 @@ def Consumer_Resource_Model(model : Literal["Self-limiting resource supply",
             
             instance = Hybrid_CRM(no_species, no_resources)
             
+        case "MiCRM":
+            
+            instance = MiCRM(no_species, no_resources)
+            
+        case "Leached biomolecules":
+            
+            instance = LB_CRM(no_species, no_resources)
+            
         case _:
             
             raise Exception('You have not selected an exisiting model.\n' + \
@@ -1150,3 +1158,470 @@ class Hybrid_CRM(ParametersInterface, DifferentialEquationsInterface,
             
         return np.concatenate((dNdt, dRdt)) + 1e-8
     
+
+
+
+# %%
+
+class MiCRM(ParametersInterface, DifferentialEquationsInterface,
+            CommunityPropertiesInterface):
+
+    '''
+
+    Microbial consumer-resource model (MiCRM) with cross-feeding. Consumers
+    leak a fraction of consumed resources, which are converted into other
+    resources by a metabolic matrix (see Marsland et al., 2020).
+
+    '''
+
+    def __init__(self, no_species, no_resources):
+
+        self.no_species = no_species
+        self.no_resources = no_resources
+
+    def model_specific_rates(self,
+                             death_method :
+                                 Literal['normal', 'constant', 'user-supplied']
+                                 = 'constant',
+                             death_args : Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
+                                                TypedDict('constant', {'d' : float}),
+                                                TypedDict('user-supplied', {'d' : npt.NDArray})]
+                             = {'d' : 1},
+                             influx_method:
+                                 Literal['normal', 'constant', 'user-supplied']
+                                 = 'constant',
+                             influx_args : Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
+                                                TypedDict('constant', {'b' : float}),
+                                                TypedDict('user-supplied', {'b' : npt.NDArray})]
+                             = {'b' : 1},
+                             outflux_method:
+                                 Literal['normal', 'constant', 'user-supplied']
+                                 = 'constant',
+                             outflux_args : Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
+                                                TypedDict('constant', {'o' : float}),
+                                                TypedDict('user-supplied', {'o' : npt.NDArray})]
+                             = {'o' : 1},
+                             leakage_method:
+                                 Literal['normal', 'constant', 'user-supplied']
+                                 = 'constant',
+                             leakage_args : Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
+                                                  TypedDict('constant', {'l' : float}),
+                                                  TypedDict('user-supplied', {'l' : npt.NDArray})]
+                             = {'l' : 0.8},
+                             energy_method:
+                                 Literal['normal', 'constant', 'user-supplied']
+                                 = 'constant',
+                             energy_args : Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
+                                                 TypedDict('constant', {'w' : float}),
+                                                 TypedDict('user-supplied', {'w' : npt.NDArray})]
+                             = {'w' : 1},
+                             metabolic_method:
+                                 Literal['dirichlet', 'user-supplied']
+                                 = 'dirichlet',
+                             metabolic_args : Union[TypedDict('dirichlet', {'s' : float}),
+                                                    TypedDict('user-supplied', {'D' : npt.NDArray})]
+                             = {'s' : 0.05}):
+
+        '''
+
+        Generate parameters specific to the MiCRM - consumer death
+        (maintenance) rates, resource influx and outflux rates, resource
+        leakage fractions, resource energy contents and the metabolic matrix.
+
+        Parameters
+        ----------
+        death_method : str
+            Method used to generate death rates. Options are:
+                'normal' : normally distributed parameters
+                'constant' : death rates are fixed
+                'user-supplied' : supply your own death rates
+        death_args : dict
+            Arguments for death_method.
+            If 'normal', {'mu': mean, 'sigma' : standard deviation}
+            If 'constant', {'d' : val}
+            If 'used-supplied', {'d' : array_of_vals}
+        influx_method, outflux_method, leakage_method, energy_method : str
+            Methods used to generate resource influx rates (b), resource
+            outflux rates (o), leakage fractions (l) and resource energy
+            contents (w). Options are the same as death_method, but named
+            'b', 'o', 'l' and 'w' respectively.
+        influx_args, outflux_args, leakage_args, energy_args : dict
+            Arguments for the respective methods. Options are the same as
+            death_args.
+        metabolic_method : str
+            Method used to generate the metabolic matrix D, where D[a, b] is
+            the fraction of leaked resource b converted into resource a.
+            Options are:
+                'dirichlet' : columns are sampled from a Dirichlet
+                distribution with sparsity s, {'s' : sparsity}
+                'user-supplied' : {'D' : matrix}
+            Columns of D should sum to 1 (mass conservation).
+        metabolic_args : dict
+            Arguments for metabolic_method.
+
+        Returns
+        -------
+        None.
+
+        '''
+
+        # labels used to assign parameters as object attributes
+        p_labels = ['d', 'b', 'o', 'l', 'w', 'D']
+
+        # dimensions of each set of parameters
+        dims_list = [(self.no_species, ), (self.no_resources, ),
+                     (self.no_resources, ), (self.no_resources, ),
+                     (self.no_resources, ),
+                     (self.no_resources, self.no_resources)]
+
+        # generate parameters used the other_parameter_methods method
+        for p_method, p_args, p_label, dims in \
+            zip([death_method, influx_method, outflux_method,
+                 leakage_method, energy_method, metabolic_method],
+                [death_args, influx_args, outflux_args,
+                 leakage_args, energy_args, metabolic_args],
+                p_labels, dims_list):
+
+                self.other_parameter_methods(p_method, p_args, p_label, dims)
+
+    def collate_parameters(self):
+
+        return (self.no_species, self.growth, self.consumption,
+                self.d, self.b, self.o, self.l, self.w, self.D,
+                getattr(self, "timescalar", 1))
+
+    #########################################################
+
+    def simulation(self,
+                   t_end : float,
+                   initial_abundance : npt.NDArray):
+
+        '''
+
+        Simulate community dynamics
+
+        Parameters
+        ----------
+        t_end : float
+            Simulation end time.
+        initial_abundance : np.ndarray
+            Initial abundances of species and resources.
+
+        Returns
+        -------
+        Bunch object produced by scipy.integrate.solve_ivp
+            Simulation.
+
+        '''
+
+        unbounded_growth.terminal = True
+
+        # call the ODE solver with the unbounded growth event function
+        # the ode solver stops when the event function is true (returns 0)
+        return solve_ivp(self.model, [0, t_end], initial_abundance,
+                         args = self.collate_parameters(),
+                         method = 'LSODA',
+                         rtol = 1e-7,
+                         atol = np.concatenate([np.full(self.no_species, 10.0**-15),
+                                                np.full(self.no_resources, 10.0**-15)]),
+                         t_eval = np.linspace(0, t_end, 200),
+                         jac = self.jacobian,
+                         events = unbounded_growth)
+
+    def model(self,
+              t, y,
+              S, G, C, D, B, O, L, W, DM,
+              e):
+
+        '''
+
+        ODE for the MiCRM
+
+        Parameters
+        ----------
+        t : float
+            time
+        y : np.ndarray
+            consumer and resource abundances at time t
+        S : int
+            species pool size (used to separate y into species and resource
+                               abundances)
+        G : np.ndarray
+            matrix of consumer growth rates (species x resources)
+        C : np.ndarray
+            matrix of resource consumption rates (resources x species)
+        D : np.ndarray
+            consumer death rates
+        B : np.ndarray
+            resource influx rates
+        O : np.ndarray
+            resource outflux rates
+        L : np.ndarray
+            resource leakage fractions
+        W : np.ndarray
+            resource energy contents
+        DM : np.ndarray
+            metabolic matrix (resources x resources)
+        e : float
+            timescale of the resource dynamics relative to consumers
+
+        Returns
+        -------
+        np.ndarray
+            Rate of change in species and resource abundances over time
+            (dNdt and dRdt)
+
+        '''
+
+        # separate species and resource abundances
+        species, resources = y[:S], y[S:]
+
+        # change in consumer abundances over time
+        dNdt = species * (G @ ((1 - L) * W * resources) - D)
+
+        # consumption flux of each resource
+        consumption_flux = resources * (C @ species)
+
+        # change in resource abundances over time
+        dRdt = (1.0/e) * ((B - O * resources) - consumption_flux \
+                          + (DM @ (W * L * consumption_flux))/W)
+
+        if e > 1e-6: immigration = 1e-8
+        else: immigration = 1e-12
+
+        return np.concatenate((dNdt, dRdt)) + immigration
+
+    def jacobian(self,
+                 t, y,
+                 S, G, C, D, B, O, L, W, DM,
+                 e):
+
+        species, resources = y[:S], y[S:]
+
+        consumption_term = C @ species
+
+        # (M x M) operator mapping consumption flux to net resource change
+        flux_operator = (DM * (W * L)[np.newaxis, :])/W[:, np.newaxis] \
+                        - np.eye(self.no_resources)
+
+        J = np.zeros((y.size, y.size))
+
+        J[:S, :S] = np.diag(G @ ((1 - L) * W * resources) - D)
+        J[:S, S:] = (G * ((1 - L) * W)[np.newaxis, :]) * species[:, np.newaxis]
+        J[S:, :S] = (1.0 / e) * (flux_operator @ (C * resources[:, np.newaxis]))
+        J[S:, S:] = (1.0 / e) * (flux_operator * consumption_term[np.newaxis, :]
+                                 - np.diag(O))
+
+        return J
+
+# %%
+
+class LB_CRM(ParametersInterface, DifferentialEquationsInterface,
+             CommunityPropertiesInterface):
+
+    '''
+
+    Consumer-resource model where consumers produce and leach essential
+    biomolecules (e.g., amino acids) that they cannot consume themselves.
+
+        dR_a/dt = sum_i l_ia P_ia N_i - sum_i c_ia (1 - P_ia) N_i R_a
+        dN_i/dt = N_i (sum_a g_ia (1 - P_ia) R_a - d_i)
+
+    '''
+
+    def __init__(self, no_species, no_resources):
+
+        self.no_species = no_species
+        self.no_resources = no_resources
+
+    def model_specific_rates(self,
+                             death_method :
+                                 Literal['normal', 'constant', 'user-supplied']
+                                 = 'constant',
+                             death_args : Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
+                                                TypedDict('constant', {'d' : float}),
+                                                TypedDict('user-supplied', {'d' : npt.NDArray})]
+                             = {'d' : 1},
+                             leach_method:
+                                 Literal['normal', 'constant', 'user-supplied']
+                                 = 'constant',
+                             leach_args : Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
+                                                TypedDict('constant', {'l' : float}),
+                                                TypedDict('user-supplied', {'l' : npt.NDArray})]
+                             = {'l' : 1},
+                             production_method:
+                                 Literal['bernoulli', 'user-supplied']
+                                 = 'bernoulli',
+                             production_args : Union[TypedDict('bernoulli', {'c' : float}),
+                                                     TypedDict('user-supplied', {'P' : npt.NDArray})]
+                             = {'c' : 1}):
+
+        '''
+
+        Generate parameters specific to the leached-biomolecule CRM - consumer
+        death rates, leach rates and the production matrix.
+
+        Parameters
+        ----------
+        death_method : str
+            Method used to generate death rates. Options are:
+                'normal' : normally distributed parameters
+                'constant' : death rates are fixed
+                'user-supplied' : supply your own death rates
+        death_args : dict
+            Arguments for death_method.
+            If 'normal', {'mu': mean, 'sigma' : standard deviation}
+            If 'constant', {'d' : val}
+            If 'used-supplied', {'d' : array_of_vals}
+        leach_method : str
+            Method used to generate leach rates l (species x resources).
+            Options are the same as death_method, but named 'l' rather than 'd'.
+        leach_args : dict
+            Arguments for leach_method. Options are the same as death_args.
+        production_method : str
+            Method used to generate the binary production matrix P
+            (species x resources). Options are:
+                'bernoulli' : P_ia ~ Bernoulli(c/M), so each consumer produces
+                c resources on average, {'c' : expected no. produced resources}
+                'user-supplied' : {'P' : binary matrix}
+        production_args : dict
+            Arguments for production_method.
+
+        Returns
+        -------
+        None.
+
+        '''
+
+        # labels used to assign parameters as object attributes
+        p_labels = ['d', 'l', 'P']
+
+        # dimensions of each set of parameters
+        dims_list = [(self.no_species, ),
+                     (self.no_species, self.no_resources),
+                     (self.no_species, self.no_resources)]
+
+        # generate parameters used the other_parameter_methods method
+        for p_method, p_args, p_label, dims in \
+            zip([death_method, leach_method, production_method],
+                [death_args, leach_args, production_args],
+                p_labels, dims_list):
+
+                self.other_parameter_methods(p_method, p_args, p_label, dims)
+
+    def collate_parameters(self):
+
+        return (self.no_species, self.growth, self.consumption,
+                self.d, self.l, self.P, getattr(self, "timescalar", 1))
+
+    #########################################################
+
+    def simulation(self,
+                   t_end : float,
+                   initial_abundance : npt.NDArray):
+
+        '''
+
+        Simulate community dynamics
+
+        Parameters
+        ----------
+        t_end : float
+            Simulation end time.
+        initial_abundance : np.ndarray
+            Initial abundances of species and resources.
+
+        Returns
+        -------
+        Bunch object produced by scipy.integrate.solve_ivp
+            Simulation.
+
+        '''
+
+        unbounded_growth.terminal = True
+
+        # call the ODE solver with the unbounded growth event function
+        # the ode solver stops when the event function is true (returns 0)
+        return solve_ivp(self.model, [0, t_end], initial_abundance,
+                         args = self.collate_parameters(),
+                         method = 'LSODA',
+                         rtol = 1e-7,
+                         atol = np.concatenate([np.full(self.no_species, 10.0**-15),
+                                                np.full(self.no_resources, 10.0**-15)]),
+                         t_eval = np.linspace(0, t_end, 200),
+                         jac = self.jacobian,
+                         events = unbounded_growth)
+
+    def model(self,
+              t, y,
+              S, G, C, D, L, P,
+              e):
+
+        '''
+
+        ODE for the CRM with leached biomolecules
+
+        Parameters
+        ----------
+        t : float
+            time
+        y : np.ndarray
+            consumer and resource abundances at time t
+        S : int
+            species pool size (used to separate y into species and resource
+                               abundances)
+        G : np.ndarray
+            matrix of consumer growth rates (species x resources)
+        C : np.ndarray
+            matrix of resource consumption rates (resources x species)
+        D : np.ndarray
+            consumer death rates
+        L : np.ndarray
+            matrix of leach rates (species x resources)
+        P : np.ndarray
+            binary production matrix (species x resources)
+        e : float
+            timescale of the resource dynamics relative to consumers
+
+        Returns
+        -------
+        np.ndarray
+            Rate of change in species and resource abundances over time
+            (dNdt and dRdt)
+
+        '''
+
+        # separate species and resource abundances
+        species, resources = y[:S], y[S:]
+
+        # change in consumer abundances over time
+        dNdt = species * (((1 - P) * G) @ resources - D)
+
+        # change in resource abundances over time
+        dRdt = (1.0/e) * ((L * P).T @ species \
+                          - resources * (((1 - P) * C.T).T @ species))
+
+        if e > 1e-6: immigration = 1e-8
+        else: immigration = 1e-12
+
+        return np.concatenate((dNdt, dRdt)) + immigration
+
+    def jacobian(self,
+                 t, y,
+                 S, G, C, D, L, P,
+                 e):
+
+        species, resources = y[:S], y[S:]
+
+        # growth and consumption restricted to non-produced resources
+        G_np = (1 - P) * G
+        C_np = (1 - P) * C.T
+
+        J = np.zeros((y.size, y.size))
+
+        J[:S, :S] = np.diag(G_np @ resources - D)
+        J[:S, S:] = G_np * species[:, np.newaxis]
+        J[S:, :S] = (1.0 / e) * ((L * P).T - C_np.T * resources[:, np.newaxis])
+        J[S:, S:] = (1.0 / e) * np.diag(-(C_np.T @ species))
+
+        return J

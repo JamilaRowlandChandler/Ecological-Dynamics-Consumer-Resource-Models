@@ -369,7 +369,8 @@ def max_le(community : Union["SL_CRM", "SL_SI_CRM", "SL_TL_CRM", "ES_CRM",
                                                           T,
                                                           perturbation)
             
-        case CRM if CRM in ["SL_CRM", "SL_SI_CRM", "ES_CRM", "Hybrid_CRM"]:
+        case CRM if CRM in ["SL_CRM", "SL_SI_CRM", "ES_CRM", "Hybrid_CRM",
+                                    "MiCRM", "LB_CRM"]:
             
             original_traj, perturbed_traj = trajectory(community,
                                                        initial_conditions,
@@ -550,7 +551,8 @@ def eigenspectrum(community,
         
         match model_type:
     
-            case CRM if CRM in ["SL_CRM", "SL_SI_CRM", "ES_CRM", "Hybrid_CRM"]:
+            case CRM if CRM in ["SL_CRM", "SL_SI_CRM", "ES_CRM", "Hybrid_CRM",
+                                    "MiCRM", "LB_CRM"]:
                 
                 pool_sizes = np.concatenate([[0],
                                              [community.no_species,
