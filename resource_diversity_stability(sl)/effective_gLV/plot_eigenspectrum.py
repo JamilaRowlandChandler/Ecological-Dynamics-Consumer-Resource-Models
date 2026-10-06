@@ -17,6 +17,7 @@ import numpy.typing as npt
 import pandas as pd
 from typing import Literal, Union
 from matplotlib import pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap
 
 # %%
 
@@ -47,8 +48,8 @@ def example_eigenspectra(idx : int,
 
     def collate_eigenspectra(idx):
 
-        eigenspectra = [[community_data['eigenspec_stats'][0]['eigenspectrum']
-                         for community_data in communities[idx].values()] + \
+        eigenspectra = [list(reversed([community_data['eigenspec_stats'][0]['eigenspectrum']
+                                       for community_data in communities[idx].values()])) + \
                         [eLV_eigenspec_stats[M][idx]['eigenspec_stats'][0]['eigenspectrum']]
                         for M, communities in CRM_eigenspec_stats.items()]
 
@@ -82,8 +83,8 @@ def example_eigenspectra(idx : int,
                       else "\n(unstable)")
                      for M in CRM_eigenspec_stats.keys()]
 
-        titles = [[format_title_from_dict(title_data)
-                   for title_data in titles_data_M] + [eLV_title]
+        titles = [list(reversed([format_title_from_dict(title_data)
+                                 for title_data in titles_data_M])) + [eLV_title]
                   for titles_data_M, eLV_title in zip(titles_data, eLV_titles)]
 
         return [title
@@ -155,11 +156,6 @@ def example_eigenspectra(idx : int,
 
         fig.supxlabel('Re(λ)', weight="bold", fontsize=10)
         fig.supylabel('Im(λ)', weight="bold", fontsize=10)
-
-        #axs[0, int(len(eigenspectra)/2)-1].set_ylim([-0.75, 0.75])
-        #axs[0, int(len(eigenspectra)/2)-1].set_xlim([-7, 7])
-        #axs[1, int(len(eigenspectra)/2)-1].set_ylim([-0.75, 0.75])
-        #axs[1, int(len(eigenspectra)/2)-1].set_xlim([-7, 7])
 
         plt.savefig(figure_directory + "/" + filename + "_smallrange.png",
                     bbox_inches='tight')
@@ -325,7 +321,7 @@ example_eigenspectra_GC(7,
 # %%
 
 def example_dynamics(idx : Union[list[int], npt.NDArray],
-                     model : Literal['CRM', 'eLV'] = 'CRM') -> None:
+                     filename_suffix : str = "") -> None:
 
     '''
 
@@ -340,74 +336,127 @@ def example_dynamics(idx : Union[list[int], npt.NDArray],
     each M's full dynamics are instead plotted together in a single panel.
 
     '''
+    
+    def sort_rows_by_mean_desc(arr):
+        
+        row_means = arr.mean(axis=1)
+        order = np.argsort(row_means)[::-1]
+        
+        ordered_arr = arr[order, :]
+        
+        #return order, ordered_arr
+        return np.arange(arr.shape[0]), arr
+        
+    def colour_map(length):
+        
+        colour_index = np.arange(length)
+        np.random.shuffle(colour_index)
 
-    match model:
+        cmap = LinearSegmentedColormap.from_list('custom YlGBl',
+                                                 ['#e9a100ff','#1fb200ff',
+                                                  '#1f5a00ff','#00e9e9ff','#001256fd'],
+                                                   N = length)
+        
+        shuffled_colours = cmap(np.arange(length))[colour_index]
+    
+        shuffled_cmap = LinearSegmentedColormap.from_list('custom_YlGBl_shuffled',
+                                                          shuffled_colours,
+                                                          N = length)
 
-        case 'CRM':
+        return shuffled_cmap
+    
+    def ordered_arr_cmap(arr, cmap):
+        
+        order, ordered_arr = sort_rows_by_mean_desc(arr)
+        
+        ordered_colours = cmap(np.arange(arr.shape[0]))[order]
+        #ordered_cmap = LinearSegmentedColormap.from_list('custom_YlGBl_ordered',
+        #                                                 ordered_colours,
+        #                                                 N = len(order))
+        return ordered_arr, ordered_colours
 
-            resource_pool_sizes = list(CRM_example_trajectories.keys())
+    resource_pool_sizes = list(CRM_example_trajectories.keys())
 
-            fig, axs = plt.subplots(2 * len(resource_pool_sizes), 4,
-                                   layout="constrained",
-                                   figsize=(8.5, 3.5 * len(resource_pool_sizes)))
+    fig, axs = plt.subplots(2 * len(resource_pool_sizes),
+                            5,
+                           layout="constrained",
+                           #figsize=(1.7*(len(CRM_example_trajectories["50"][idx[0]]) + 1), 6))
+                           figsize=(4.2*1.7*(len(CRM_example_trajectories["50"][idx[0]]) + 1), 24))
 
-            for row_pair, (M, idx_M) in enumerate(zip(resource_pool_sizes,
-                                                      idx)):
+    for row_pair, (M, idx_M) in enumerate(zip(resource_pool_sizes,
+                                              idx)):
+        
+        cmap_r = colour_map(int(M))
+        cmap_s = colour_map(int(M))
 
-                resource_axs = axs[2 * row_pair]
-                species_axs = axs[2 * row_pair + 1]
+        resource_axs = axs[2 * row_pair]
+        species_axs = axs[2 * row_pair + 1]
 
-                for ax_r, ax_s, (epsilon, (t, y)) in zip(resource_axs,
-                                                         species_axs,
-                                                         CRM_example_trajectories[M][idx_M].items()):
+        for ax_r, ax_s, (epsilon, (t, y)) in zip(resource_axs,
+                                                 species_axs,
+                                                 reversed(CRM_example_trajectories[M][idx_M].items())):
+            
+            sort_resources, ordered_cmap_r = ordered_arr_cmap(y[int(M):, 10:], 
+                                                              cmap_r)
+            sort_species, ordered_cmap_s = ordered_arr_cmap(y[:int(M), 10:],
+                                                            cmap_s)
 
-                    log_epsilon = np.abs(np.round(np.log10(float(epsilon)), 1))
+            log_epsilon = np.abs(np.round(np.log10(float(epsilon)), 1))
 
-                    ax_r.plot(t, y[int(M):, :].T)
-                    ax_s.plot(t, y[:int(M), :].T)
+            #ax_r.plot(t, y[int(M):, :].T)
+            #ax_s.plot(t, y[:int(M), :].T)
+            ax_r.stackplot(t[10:], sort_resources,
+                           colors=ordered_cmap_r)
+            ax_s.stackplot(t[10:], sort_species,
+                           colors=ordered_cmap_s)
+            ax_r.tick_params(axis="both", which="major", labelsize=7)
+            ax_r.tick_params(axis="both", which="minor", labelsize=7)
+            ax_s.tick_params(axis="both", which="major", labelsize=7)
+            ax_s.tick_params(axis="both", which="minor", labelsize=7)
 
-                    if row_pair == 0:
+            if row_pair == 0:
 
-                        ax_r.set_title(f"$10^{{{log_epsilon}}}$",
-                                     weight="bold",
-                                     fontsize=10)
-
-                resource_axs[0].set_ylabel('resources', fontsize=9)
-                species_axs[0].set_ylabel('consumers', fontsize=9)
-
-            filename = "ts_example_chaos"
-
-        case 'eLV':
-
-            resource_pool_sizes = list(eLV_example_trajectories.keys())
-
-            fig, axs = plt.subplots(1, len(resource_pool_sizes),
-                                   layout="constrained",
-                                   figsize=(3.5 * len(resource_pool_sizes), 3.5))
-
-            for ax, M, idx_M in zip(np.atleast_1d(axs), resource_pool_sizes, idx):
-
-                t, y = eLV_example_trajectories[M][idx_M]
-
-                ax.plot(t, y.T)
-                ax.set_title(f"$M = {{{M}}}$",
+                ax_r.set_title(f"$10^{{{log_epsilon}}}$",
                              weight="bold",
                              fontsize=10)
+            
+        resource_axs[0].set_ylabel('resources', fontsize=7)
+        species_axs[0].set_ylabel('consumers', fontsize=7)
+        
+        for ax, M, idx_M in zip(axs[np.arange(1,
+                                              len(resource_pool_sizes) + 3,
+                                              2),
+                                    -1], resource_pool_sizes, idx):
 
-            filename = "ts_eLV_example_chaos"
+            t, y = eLV_example_trajectories[M][idx_M]
+            
+            sort_y, ordered_cmap = ordered_arr_cmap(y[:, 10:],
+                                                    cmap_s)
 
-    fig.supxlabel('time', weight="bold", fontsize=10)
-    fig.supylabel('abundance', weight="bold", fontsize=10)
+            #ax.plot(t, y.T)
+            ax.stackplot(t[10:], sort_y,
+                         colors=ordered_cmap)
+            ax.set_title("CM",
+                         weight="bold",
+                         fontsize=10)
+            ax.tick_params(axis="both", which="major", labelsize=7)
+            ax.tick_params(axis="both", which="minor", labelsize=7)
 
+    fig.supxlabel('time', weight="bold", fontsize=7)
+    fig.supylabel('abundance', weight="bold", fontsize=7)
+
+    filename = "ts_example" + filename_suffix
     plt.savefig(figure_directory + "/" + filename + ".png",
                 bbox_inches='tight')
     plt.savefig(figure_directory + "/" + filename + ".svg",
                 bbox_inches='tight')
     plt.show()
 
-example_dynamics([8, 8], model = 'CRM')
+example_dynamics([8, 8],
+                 filename_suffix="_chaos")
 
-example_dynamics([8, 8], model = 'eLV')
+example_dynamics([7, 7],
+                 filename_suffix="_stable")
 
 # %%
 

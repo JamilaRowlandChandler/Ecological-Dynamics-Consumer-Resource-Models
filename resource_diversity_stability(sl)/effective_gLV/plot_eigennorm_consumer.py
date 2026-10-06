@@ -50,15 +50,19 @@ def resource_eigenvec_plot(eigennorm_pivot,
     if logged is True: 
         
         plot_eig = np.log10(np.abs(eigennorm_pivot))
+        vmin = -3.5
+        vmax = 0.0
         
     else:
         
         plot_eig = eigennorm_pivot
+        vmin = 0.15
+        vmax = 0.6
 
     sns.heatmap(plot_eig,
                 cmap="Greens_r",
-                #vmin=0, #0.3, #0,
-                #vmax= np.max(eigennorm_pivot),# 1, #0.6, # 1,
+                vmin=vmin,
+                vmax=vmax,
                 cbar_kws={'label' : 'resource contribution to\nleading eigenvector, ' + \
                           r'$\frac{||V_R||}{||V_R|| + ||V_N||}$'},
                 ax=ax2,
@@ -86,7 +90,7 @@ def resource_eigenvec_plot(eigennorm_pivot,
             ax.set_yticks(np.arange(0.5,
                                     len(eigennorm_pivot.index.to_numpy()) + 0.5,
                                     1),
-                                labels = [f"$10^{{{e}}}$" 
+                                labels = [f"$10^{{-{e}}}$" 
                                           for e in 
                                           np.int64(np.round(np.log10(1/eigennorm_pivot.index.to_numpy()),
                                                             1))],
@@ -98,7 +102,7 @@ def resource_eigenvec_plot(eigennorm_pivot,
             ax.set_yticks(np.arange(0.5,
                                     len(eigennorm_pivot.index.to_numpy()) + 0.5,
                                     1),
-                                labels = [f"$1/{{{e}}}$" 
+                                labels = [f"${{{e}}}$" 
                                           for e in 
                                           np.round(eigennorm_pivot.index.to_numpy(),
                                                    1)],
@@ -134,8 +138,6 @@ def load_data_plot(data_directory : str,
     
     df = pd.concat([pd.read_csv(full_data_directory + "/" + filename)
                                for filename in os.listdir(full_data_directory)])
-    
-    breakpoint()
     
     eigennorm_pivot = resource_eigennorm_pivot(df)
     stable_pivot = le_pivot_r(df,

@@ -70,7 +70,7 @@ def separate_parameter_timescales(base_community : Literal["SL_CRM"],
 
 def resimulate_CRM_timescale(parameters : dict,
                              fast_variable : Literal["resources",
-                                                     "consumers"]) -> None:
+                                                     "species"]) -> None:
     
     M = parameters['no_resources']
     
@@ -197,17 +197,6 @@ def CRM_timescale_separation(CRM_directory : str,
 
 # %%
 
-epsilons = 10.0**np.arange(-5.0, 1.0, 1.0)
-
-CRM_timescale_separation(CRM_directory = "M_vs_mu_c",
-                         CRM_ts_directory = "CRM_TS/Fast_Consumer/M_vs_mu_c",
-                         epsilons = epsilons,
-                         resource_pool_sizes = np.arange(50, 150, 25), # np.arange(50, 275, 25),
-                         mu_c = 145,
-                         fast_variable="species")
-
-# %%
-
 epsilons = np.arange(0.3, 1.1, 0.2)
 
 CRM_timescale_separation(CRM_directory = "M_vs_mu_c",
@@ -216,3 +205,16 @@ CRM_timescale_separation(CRM_directory = "M_vs_mu_c",
                          resource_pool_sizes = np.arange(50, 275, 25),
                          mu_c = 145,
                          fast_variable="species")
+
+# %%
+
+epsilons = 10.0**np.array([-1.0, -2.0])#10.0**np.arange(-4.0, 1.0, 1.0)
+
+CRM_timescale_separation(CRM_directory = "M_vs_mu_c",
+                         CRM_ts_directory = "CRM_TS/Fast_Consumer/M_vs_mu_c",
+                         epsilons = epsilons,
+                         resource_pool_sizes = np.arange(150, 275, 25), #np.arange(50, 150, 25), # np.arange(50, 275, 25),
+                         mu_c = 145,
+                         fast_variable="species")
+
+

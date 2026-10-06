@@ -50,15 +50,19 @@ def resource_eigenvec_plot(eigennorm_pivot,
     if logged is True: 
         
         plot_eig = np.log10(np.abs(eigennorm_pivot))
+        vmin = -3.5
+        vmax = 0.0
         
     else:
         
         plot_eig = eigennorm_pivot
+        vmin = 0.15
+        vmax = 0.6
 
     sns.heatmap(plot_eig,
                 cmap="Greens_r",
-                #vmin=0, #0.3, #0,
-                #vmax= np.max(eigennorm_pivot),# 1, #0.6, # 1,
+                vmin=vmin,
+                vmax=vmax,
                 cbar_kws={'label' : 'resource contribution to\nleading eigenvector, ' + \
                           r'$\frac{||V_R||}{||V_R|| + ||V_N||}$'},
                 ax=ax2,

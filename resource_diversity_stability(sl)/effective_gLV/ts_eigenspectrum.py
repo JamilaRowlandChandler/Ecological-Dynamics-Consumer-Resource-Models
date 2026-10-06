@@ -104,11 +104,11 @@ def resimulate_CRM_timescale(parameters : dict,
     
     if fast_variable == "resources":
     
-        community.timescale_separation(epsilon_r = epsilon)
+        community.timescale_separation(epsilon_r = 1)#epsilon)
         
     elif fast_variable == "species":
         
-        community.timescale_separation(epsilon_s = epsilon)
+        community.timescale_separation(epsilon_s = 1)#epsilon)
         
     # run simulations from randomly generated initial abundances
     community.simulate_community(t_end = 7000,

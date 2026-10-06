@@ -553,9 +553,9 @@ def eigenspectrum(community,
             case CRM if CRM in ["SL_CRM", "SL_SI_CRM", "ES_CRM", "Hybrid_CRM"]:
                 
                 pool_sizes = np.concatenate([[0],
-                                             [community.no_species,
-                                              community.no_resources]])
-        
+                                             np.cumsum([community.no_species,
+                                                        community.no_resources])])
+
             case "SL_TL_CRM":
                 
                 pool_sizes = np.concatenate([[0],
@@ -604,94 +604,6 @@ def pool_vec_magnitude(vector,
     
     return mag_ratios_dict
 
-# %%
-
-'''
-
-def eigenspectrum(community, 
-                  abundances):
-    
-    def pool_vec_magnitude(vector,
-                           pool_sizes):
-        
-        def pool_vec(vector,
-                     pool_idx):
-            
-            subvec = np.zeros(len(vector))
-            subvec[pool_idx[0] : pool_idx[1]] = np.abs(vector[pool_idx[0] : pool_idx[1]]) # .real
-            
-            return subvec
-        
-        def mag_ratio(x, y):
-            
-            return x/(x + y + 1e-15)
-        
-        subvectors = np.vstack([pool_vec(vector,
-                                         [pool_sizes[i],
-                                          pool_sizes[i+1]])
-                                for i in range(len(pool_sizes) - 1)])
-        
-        subvector_magnitude = np.linalg.vector_norm(subvectors,
-                                                    axis = 1)
-        
-        sv_mg_x, sv_mg_y = np.meshgrid(subvector_magnitude, 
-                                       subvector_magnitude)
-        
-        mag_ratios = mag_ratio(sv_mg_x,
-                               sv_mg_y)
-        
-        mag_ratios_dict = dict(species = mag_ratios[1, 0],
-                               resources = mag_ratios[0, 1])
-        
-        return mag_ratios_dict
-    
-    community_params = community.collate_parameters()
-    
-    jac_eval = community.jacobian(0, 
-                                  abundances,
-                                  *community_params)
-
-    #survivors = np.where(abundances > 1e-4)[0]
-    #jac_reduced = jac_eval[np.ix_(survivors, survivors)]
-    
-    #T, Z = schur(jac_reduced, output='complex')
-    T, Z = schur(jac_eval, output='complex')
-    eigenvalues = np.diag(T)
-    
-    leading_eig_idx = np.argmax(eigenvalues.real)
-    leading_val = eigenvalues[leading_eig_idx]
-    leading_vec = Z[:, leading_eig_idx]
-    
-    if hasattr(community, "no_resources"):
-        
-        pool_sizes = np.concatenate([[0],
-                                     [community.no_species,
-                                      community.no_resources]])
-        
-    elif hasattr(community, "trophic_levels"):
-        
-        pool_sizes = np.concatenate([[0],
-                                     np.cumsum(community.pool_sizes)])
-        
-    #surviving_sizes = [np.sum((survivors >= original_bounds[k]) & 
-    #                          (survivors < original_bounds[k + 1]))
-    #                   for k in range(len(original_sizes))]
-
-    #pool_sizes = np.concatenate([[0],
-    #                             np.cumsum(surviving_sizes)])
-    
-    #pool_sizes = original_bounds
-    
-    mag_ratios = pool_vec_magnitude(leading_vec,
-                                    pool_sizes)
-    
-    return dict(eigenspectrum = eigenvalues,
-                leading_val = leading_val,
-                leading_vec = leading_vec,
-                magnitude_ratios = mag_ratios)
-
-'''
-    
 # %%
 
 #####################################################################
