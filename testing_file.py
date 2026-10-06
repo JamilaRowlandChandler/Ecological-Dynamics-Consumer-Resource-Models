@@ -227,3 +227,97 @@ print(community.lyapunov_exponent)
 community_df = simulation_df_from_communities([community, community],
                                               "Self-limiting resource supply, multi-trophic level",
                                               "growth function of consumption")
+
+# %% MiCRM - single community
+
+S = 100
+M = 100
+mu = 6
+sigma = 1
+rho = 0.5
+
+community = Consumer_Resource_Model("MiCRM", S, M)
+
+community.growth_consumption_rates('coupled by rho',
+                                   mu_c = mu/M,
+                                   sigma_c = sigma/np.sqrt(M),
+                                   mu_g = mu/M,
+                                   sigma_g = sigma/np.sqrt(M),
+                                   rho = rho)
+community.model_specific_rates(death_method = 'constant',
+                               death_args = {'d' : 1},
+                               influx_method = 'constant',
+                               influx_args = {'b' : 1},
+                               outflux_method = 'constant',
+                               outflux_args = {'o' : 1},
+                               leakage_method = 'constant',
+                               leakage_args = {'l' : 0.8},
+                               energy_method = 'constant',
+                               energy_args = {'w' : 1},
+                               metabolic_method = 'dirichlet',
+                               metabolic_args = {'s' : 0.05})
+
+# metabolic matrix columns should sum to 1 (mass conservation)
+print("MiCRM: D column sums in [", community.D.sum(axis = 0).min(), ",",
+      community.D.sum(axis = 0).max(), "]")
+
+community.simulate_community(2000, 1)
+
+sol = community.ODE_sols[0]
+print("MiCRM: simulation ended at t =", sol.t[-1],
+      "| survivors =", np.sum(sol.y[:S, -1] > 1e-4), "/", S)
+
+fig, axs = plt.subplots(1, 2, figsize = (8, 2.5), layout = "constrained")
+axs[0].plot(sol.t, sol.y[:S, :].T)
+axs[0].set_title("MiCRM consumers")
+axs[1].plot(sol.t, sol.y[S:, :].T)
+axs[1].set_title("MiCRM resources")
+plt.show()
+
+community.lyapunov_exponent = max_le(community, sol.y[:, -1],
+                                     T = 1000, perturbation = 1e-6)
+print("MiCRM: max. Lyapunov exponent =", community.lyapunov_exponent)
+
+# %% LB_CRM - single community
+
+S = 100
+M = 100
+mu = 6
+sigma = 1
+rho = 0.5
+
+community = Consumer_Resource_Model("Leached biomolecules", S, M)
+
+community.growth_consumption_rates('coupled by rho',
+                                   mu_c = mu/M,
+                                   sigma_c = sigma/np.sqrt(M),
+                                   mu_g = mu/M,
+                                   sigma_g = sigma/np.sqrt(M),
+                                   rho = rho)
+community.model_specific_rates(death_method = 'constant',
+                               death_args = {'d' : 1},
+                               leach_method = 'constant',
+                               leach_args = {'l' : 1},
+                               production_method = 'bernoulli',
+                               production_args = {'c' : 10})
+
+# each consumer should produce c = 10 resources on average
+print("LB_CRM: mean no. produced resources per consumer =",
+      community.P.sum(axis = 1).mean())
+
+community.simulate_community(2000, 1)
+
+sol = community.ODE_sols[0]
+print("LB_CRM: simulation ended at t =", sol.t[-1],
+      "| survivors =", np.sum(sol.y[:S, -1] > 1e-4), "/", S)
+
+fig, axs = plt.subplots(1, 2, figsize = (8, 2.5), layout = "constrained")
+axs[0].plot(sol.t, sol.y[:S, :].T)
+axs[0].set_title("LB_CRM consumers")
+axs[1].plot(sol.t, sol.y[S:, :].T)
+axs[1].set_title("LB_CRM resources")
+plt.show()
+
+community.lyapunov_exponent = max_le(community, sol.y[:, -1],
+                                     T = 1000, perturbation = 1e-6)
+print("LB_CRM: max. Lyapunov exponent =", community.lyapunov_exponent)
