@@ -233,6 +233,44 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
                                             outflux_args = {'o' : parm_set['o']})
                                        for parm_set in parameter_sets]
 
+            case "MiCRM":
+
+                # make list of resource and species pool sizes
+                initialisation_list = [dict(model = model,
+                                            no_resources = parm_set['M'],
+                                            no_species = parm_set['S'])
+                                       for parm_set in parameter_sets]
+
+                m_s_rates_args_list = [dict(death_method = 'constant',
+                                            death_args =  {'d' : parm_set['d']},
+                                            influx_method = 'constant',
+                                            influx_args = {'b' : parm_set['b']},
+                                            outflux_method = 'constant',
+                                            outflux_args = {'o' : parm_set['o']},
+                                            leakage_method = 'constant',
+                                            leakage_args = {'l' : parm_set['l']},
+                                            energy_method = 'constant',
+                                            energy_args = {'w' : parm_set['w']},
+                                            metabolic_method = 'dirichlet',
+                                            metabolic_args = {'s' : parm_set['s']})
+                                       for parm_set in parameter_sets]
+
+            case "Leached biomolecules":
+
+                # make list of resource and species pool sizes
+                initialisation_list = [dict(model = model,
+                                            no_resources = parm_set['M'],
+                                            no_species = parm_set['S'])
+                                       for parm_set in parameter_sets]
+
+                m_s_rates_args_list = [dict(death_method = 'constant',
+                                            death_args =  {'d' : parm_set['d']},
+                                            leach_method = 'constant',
+                                            leach_args = {'l' : parm_set['l']},
+                                            production_method = 'bernoulli',
+                                            production_args = {'c' : parm_set['c']})
+                                       for parm_set in parameter_sets]
+
             case "Hybrid resource supply":
 
                 # make list of resource and species pool sizes
@@ -727,6 +765,8 @@ def save_models(communities : list,
                       "SL_TL_CRM" : "Self-limiting resource supply, multi-trophic level",
                       "ES_CRM" : "Externally-supplied resources",
                       "Hybrid_CRM" : "Hybrid resource supply",
+                      "MiCRM" : "MiCRM",
+                      "LB_CRM" : "Leached biomolecules",
                       "eLV_SL" : "eLV (Self-limiting resource supply)",
                       "eLV_ES" : "eLV (Externally-supplied resources)",
                       "gLV" : "gLV"}
@@ -938,6 +978,14 @@ def model_specific_parameters(model):
     elif model.startswith("Hybrid resource supply") is True:
 
         ms_parm_list = ['b_val', 'o_val', 'a_val']
+
+    elif model == "MiCRM":
+
+        ms_parm_list = ['b_val', 'o_val', 'l_val', 'w_val', 's_D']
+
+    elif model == "Leached biomolecules":
+
+        ms_parm_list = ['l_val', 'c_P']
 
     return ms_parm_list
 

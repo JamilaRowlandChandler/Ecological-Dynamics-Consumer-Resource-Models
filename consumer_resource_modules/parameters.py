@@ -380,6 +380,13 @@ class ParametersInterface:
             Options are:
                 'normal' - parameters are normally distributed
                 'constant' - parameters are fixed
+                'bernoulli' - binary parameters, each equal to 1 with
+                probability c/dims[-1], so c is the expected number of 1s
+                per row. Arguments are {'c' : expected number per row}.
+                'dirichlet' - square matrix whose columns are sampled from a
+                symmetric Dirichlet distribution (each column sums to 1), with
+                concentration 1/(s*dims[0]). Arguments are {'s' : sparsity},
+                where s > 0 (large s = sparse, s -> 0 = dense).
         parameter_args : dict
             parameter method arguments.
         p_label : str
@@ -429,6 +436,38 @@ class ParametersInterface:
                     
                     print("You need to supply a value for " + p_label + " in your dictionary argument.")
                     
+            case 'bernoulli':
+                
+                try:
+                    
+                    c = parameter_args['c']
+                    
+                    # assign statistical properties to object
+                    setattr(self, 'c_' + p_label, c)
+                    
+                    # generate binary parameters and assign to object
+                    setattr(self, p_label, self.__bernoulli_parameters(c, dims))
+                    
+                except KeyError as e:
+                    
+                    print("You need to supply a value for 'c' in your dictionary argument.")
+                    
+            case 'dirichlet':
+                
+                try:
+                    
+                    s = parameter_args['s']
+                    
+                    # assign statistical properties to object
+                    setattr(self, 's_' + p_label, s)
+                    
+                    # generate parameters and assign to object
+                    setattr(self, p_label, self.__dirichlet_parameters(s, dims))
+                    
+                except KeyError as e:
+                    
+                    print("You need to supply a value for 's' in your dictionary argument.")
+                    
             case 'user-supplied':
                 
                 try:
@@ -464,3 +503,47 @@ class ParametersInterface:
         '''
         return mu + sigma*np.random.randn(*dims)
     
+
+    def __bernoulli_parameters(self, c, dims):
+        
+        '''
+        
+        Generate binary parameters from a Bernoulli distribution
+
+        Parameters
+        ----------
+        c : float
+            expected number of non-zero parameters per row.
+        dims : tuple
+            dimensions of the parameter set (e.g. no_species x no_resources).
+
+        Returns
+        -------
+        np.ndarray
+            binary parameters.
+
+        '''
+        return (np.random.rand(*dims) < c/dims[-1]).astype(float)
+    
+    def __dirichlet_parameters(self, s, dims):
+        
+        '''
+        
+        Generate a matrix whose columns are Dirichlet-distributed
+
+        Parameters
+        ----------
+        s : float
+            sparsity (> 0). Concentration parameter is 1/(s * number of rows).
+        dims : tuple
+            dimensions of the matrix.
+
+        Returns
+        -------
+        np.ndarray
+            matrix with columns summing to 1.
+
+        '''
+        gamma_samples = np.random.gamma(shape = 1/(s*dims[0]), size = dims)
+        
+        return gamma_samples/np.sum(gamma_samples, axis = 0)
