@@ -1442,6 +1442,20 @@ class LB_CRM(ParametersInterface, DifferentialEquationsInterface,
                                                 TypedDict('constant', {'d' : float}),
                                                 TypedDict('user-supplied', {'d' : npt.NDArray})]
                              = {'d' : 1},
+                             influx_method:
+                                 Literal['normal', 'constant', 'user-supplied']
+                                 = 'constant',
+                             influx_args : Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
+                                                TypedDict('constant', {'b' : float}),
+                                                TypedDict('user-supplied', {'b' : npt.NDArray})]
+                             = {'b' : 0},
+                             outflux_method:
+                                 Literal['normal', 'constant', 'user-supplied']
+                                 = 'constant',
+                             outflux_args : Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
+                                                TypedDict('constant', {'o' : float}),
+                                                TypedDict('user-supplied', {'o' : npt.NDArray})]
+                             = {'o' : 1},
                              leach_method:
                                  Literal['normal', 'constant', 'user-supplied']
                                  = 'constant',
@@ -1494,17 +1508,23 @@ class LB_CRM(ParametersInterface, DifferentialEquationsInterface,
         '''
 
         # labels used to assign parameters as object attributes
-        p_labels = ['d', 'l', 'P']
+        p_labels = ['d', 'b', 'o', 'l', 'P']
 
         # dimensions of each set of parameters
         dims_list = [(self.no_species, ),
+                     (self.no_resources, ),
+                     (self.no_resources, ),
                      (self.no_species, self.no_resources),
                      (self.no_species, self.no_resources)]
 
         # generate parameters used the other_parameter_methods method
         for p_method, p_args, p_label, dims in \
-            zip([death_method, leach_method, production_method],
-                [death_args, leach_args, production_args],
+            zip([death_method,
+                 influx_method, outflux_method,
+                 leach_method, production_method],
+                [death_args,
+                 influx_args, outflux_args,
+                 leach_args, production_args],
                 p_labels, dims_list):
 
                 self.other_parameter_methods(p_method, p_args, p_label, dims)
@@ -1512,7 +1532,7 @@ class LB_CRM(ParametersInterface, DifferentialEquationsInterface,
     def collate_parameters(self):
 
         return (self.no_species, self.growth, self.consumption,
-                self.d, self.l, self.P, getattr(self, "timescalar", 1))
+                self.d, self.b, self.o, self.l, self.P, getattr(self, "timescalar", 1))
 
     #########################################################
 
@@ -1554,7 +1574,7 @@ class LB_CRM(ParametersInterface, DifferentialEquationsInterface,
 
     def model(self,
               t, y,
-              S, G, C, D, L, P,
+              S, G, C, D, B, O, L, P,
               e):
 
         '''
@@ -1595,10 +1615,11 @@ class LB_CRM(ParametersInterface, DifferentialEquationsInterface,
         species, resources = y[:S], y[S:]
 
         # change in consumer abundances over time
-        dNdt = species * (((1 - P) * G) @ resources - D)
+        dNdt = species * (((1 - P) * G) @ resources - D - species)
 
         # change in resource abundances over time
-        dRdt = (1.0/e) * ((L * P).T @ species \
+        dRdt = (1.0/e) * ((B - O * resources) \
+                          + (L * P).T @ species \
                           - resources * (((1 - P) * C.T).T @ species))
 
         if e > 1e-6: immigration = 1e-8
@@ -1608,7 +1629,7 @@ class LB_CRM(ParametersInterface, DifferentialEquationsInterface,
 
     def jacobian(self,
                  t, y,
-                 S, G, C, D, L, P,
+                 S, G, C, D, B, O, L, P,
                  e):
 
         species, resources = y[:S], y[S:]
@@ -1622,6 +1643,6 @@ class LB_CRM(ParametersInterface, DifferentialEquationsInterface,
         J[:S, :S] = np.diag(G_np @ resources - D)
         J[:S, S:] = G_np * species[:, np.newaxis]
         J[S:, :S] = (1.0 / e) * ((L * P).T - C_np.T * resources[:, np.newaxis])
-        J[S:, S:] = (1.0 / e) * np.diag(-(C_np.T @ species))
-
+        J[S:, S:] = (1.0 / e) * np.diag(-O - (C_np.T @ species))
+        
         return J

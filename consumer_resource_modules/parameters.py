@@ -37,7 +37,8 @@ class ParametersInterface:
                                  consumption : Union[npt.NDArray, None] = None,
                                  growth : Union[npt.NDArray, None] = None,
                                  trophic_level : Union[int, None] = None,
-                                 all_positive : bool = False):
+                                 all_positive : bool = False,
+                                 fixed_budget : Union[None, float] = None):
         
         '''
         
@@ -105,13 +106,15 @@ class ParametersInterface:
                 
                 consumption, rue, growth = self.__gc_rue_coupled(X_c, X_g,
                                                                  mu_c, sigma_c,
-                                                                 mu_g, sigma_g)
+                                                                 mu_g, sigma_g, 
+                                                                 all_positive)
             
             case 'consumption function of growth':
             
                 growth, rue, consumption = self.__gc_rue_coupled(X_g, X_c,
                                                                  mu_g, sigma_g,
-                                                                 mu_c, sigma_c)
+                                                                 mu_c, sigma_c,
+                                                                 all_positive)
                 
             case 'user-supplied':
                 
@@ -133,6 +136,12 @@ class ParametersInterface:
                           '"growth function of consumption", ' + \
                               '"consumption function of growth", or ' + \
                                   '"user-supplied".')
+                    
+        if fixed_budget:
+            
+            consumption, growth = self.__fixed_budget(consumption,
+                                                      growth,
+                                                      fixed_budget)
                     
         # assign statistical properties of growth and consumption rates to object
         for name, statistic in zip(['mu_c', 'mu_g', 'sigma_c', 'sigma_g', 'rho',
@@ -186,6 +195,10 @@ class ParametersInterface:
 
             U_c = stats.norm.cdf(Z_c)
             U_g = stats.norm.cdf(Z_g)
+            
+            consumption, growth = self.__gamma_distribution(U_c, U_g,
+                                                            mu_c, sigma_c,
+                                                            mu_g, sigma_g)
 
             shape_c, scale_c = mu_c**2/sigma_c**2, sigma_c**2/mu_c
             shape_g, scale_g = mu_g**2/sigma_g**2, sigma_g**2/mu_g
@@ -195,18 +208,66 @@ class ParametersInterface:
 
         return consumption, growth
     
-    def __gc_rue_coupled(self, X_base, X_rue,
-                                mu_base, sigma_base, mu_rue, sigma_rue):
+    def __gc_rue_coupled(self,
+                         X_base, X_rue,
+                         mu_base, sigma_base,
+                         mu_rue, sigma_rue,
+                         all_positive):
         
         base = mu_base + sigma_base*X_base
         rue = mu_rue + sigma_rue*X_rue
         
         base_coupled = rue * base.T
         
-        return base, rue, base_coupled
+        if all_positive is False:
+            
+            return base, rue, base_coupled
         
+        else:
+            
+            mu_coupled = np.mean(base_coupled)
+            sigma_coupled = np.std(base_coupled)
+            
+            U_base = stats.norm.cdf(X_base)
+            U_coupled = stats.norm.cdf((base_coupled - mu_coupled)/sigma_coupled)
+            
+            base_allpos, coupled_allpos = \
+                self.__gamma_distribution(U_base, U_coupled,
+                                          mu_base, sigma_base,
+                                          mu_coupled, sigma_coupled)
+            
+            return base_allpos, rue, coupled_allpos
+    
+    def __gamma_distribution(self, 
+                             U_1, U_2,
+                             mu_1, sigma_1,
+                             mu_2, sigma_2):
         
-                 
+        shape_1, scale_1 = mu_1**2/sigma_1**2, sigma_1**2/mu_1
+        shape_2, scale_2 = mu_2**2/sigma_2**2, sigma_2**2/mu_2
+
+        variable_1 = stats.gamma.ppf(U_1, a=shape_1, scale=scale_1)
+        variable_2 = stats.gamma.ppf(U_2, a=shape_2, scale=scale_2)
+        
+        return variable_1, variable_2
+    
+    def __fixed_budget(self,
+                       c_uncon,
+                       g_uncon,
+                       target):
+        
+        c_uncon_T = c_uncon.T
+        
+        r = g_uncon / c_uncon_T                                   
+        lam = (target - g_uncon.sum(1,
+                                    keepdims=True)) / (r**2).sum(1,
+                                                                 keepdims=True)
+
+        c_con = c_uncon_T + r * lam
+        g_con = r * c_con                                       
+    
+        return c_con.T, g_con                             
+        
 # %%
             
     def growth_consumption_rates_old(self,
