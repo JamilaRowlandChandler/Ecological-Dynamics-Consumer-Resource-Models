@@ -4,20 +4,12 @@ Created on Tue Aug 18 00:00:00 2026
 
 @author: jamil
 
-Copied from resource_diversity_stability(sl)/complete_simulation_functions.py
-into external_resource_stability/ so it can be used as the simulation-driver
-module for this directory's externally-supplied-resource ("Externally-supplied
-resources"/ES_CRM, and its eLV_ES analogue) work in place of the older
-simulation_functions.py/simulation_functions_new.py here. All model
-dispatch (model_specific_args(), model_specific_parameters(),
-model_specific_emergent_properties(), Effective_LV_Model(), etc.) already
-branches on "Externally-supplied resources" as well as the self-limiting
-variants, and default `model` arguments below are now set to
-"Externally-supplied resources" for convenience in this directory.
-
-Original merge notes (resource_diversity_stability(sl)/simulation_functions.py
-+ external_resource_stability/simulation_functions_new.py, merged and
-corrected), kept for provenance:
+Combines resource_diversity_stability(sl)/simulation_functions.py and
+external_resource_stability/simulation_functions_new.py into a single module,
+using simulation_functions_new.py as the base (it is a strict superset -
+adds "Hybrid resource supply" model support, an explicit rho/all_positive
+passthrough for correlated growth-consumption rates, and a v3-save fix for
+non-trophic models) and correcting several bugs found while merging:
 
 - model_specific_args() in simulation_functions.py (the older file) passed
   M=.../S=... as kwargs to Consumer_Resource_Model, but SL_CRM/ES_CRM.__init__
@@ -55,6 +47,13 @@ CRMs_create_and_save() that builds/simulates eLV_SL, eLV_ES or gLV
 communities (from effective_LV_models.py), either directly from parameter
 distributions or from already-simulated CRM communities, and collects the
 same interaction statistics as read_eLV_data() in eLV_vs_CRM_all.py.
+
+
+Note: this file is kept identical in resource_diversity_stability(sl)/ and
+external_resource_stability/ except for the default `model` argument of
+CRM_across_parameter_space() and generate_simulation_df(), which is
+"Self-limiting resource supply" in the former and "Externally-supplied
+resources" in the latter.
 
 """
 
@@ -132,6 +131,9 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
         resource timescale separation, passed to
         community.timescale_separation()) - if absent, it falls back to
         'epsilon' in simulation_kwargs, then to 1 (no separation).
+        Parameter sets may also include 'all_positive' (bool) and/or
+        'fixed_budget' (float), passed on to growth_consumption_rates() for
+        non-trophic models (not supported for multi-trophic level models).
     subdirectory : str
         Directory to save community data in.
     parms_for_filenames : list[str]
@@ -312,6 +314,14 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
 
     def growth_consumption_rates(parameter_sets, model):
 
+        # optional arguments for growth_consumption_rates(), only passed on
+        # if they're included in the parameter set
+        def optional_gc_args(parm_set):
+
+            return {key : parm_set[key]
+                    for key in ('all_positive', 'fixed_budget')
+                    if key in parm_set}
+
         def rho_coupled(parameter_sets):
 
             return [dict(method = 'coupled by rho',
@@ -320,8 +330,7 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
                          mu_g = parm_set['mu_g'],
                          sigma_g = parm_set['sigma_g'],
                          rho = parm_set['rho'],
-                         **({'all_positive' : parm_set['all_positive']}
-                            if 'all_positive' in parm_set else {}))
+                         **optional_gc_args(parm_set))
                     for parm_set in parameter_sets]
 
         def rue_coupled(parameter_sets):
@@ -330,7 +339,8 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
                          mu_c = parm_set['mu_c'],
                          sigma_c = parm_set['sigma_c'],
                          mu_g = parm_set['mu_y'],
-                         sigma_g = parm_set['sigma_y'])
+                         sigma_g = parm_set['sigma_y'],
+                         **optional_gc_args(parm_set))
                     for parm_set in parameter_sets]
 
         def rho_coupled_tl(parameter_sets, trophic_levels):
@@ -1001,7 +1011,7 @@ def extract_trophic_level_parms(trophic_levels):
                 for i in np.arange(2, trophic_levels + 1)] + \
                 ['d_' + str(i) + "_val"
                  for i in np.arange(2, trophic_levels + 1)] + \
-                ['mu_A', 'sigma_A', 'timescalar']
+                ['mu_A', 'sigma_A', 'timescalar_r', 'timescalar_s']
 
     return poolsize_parms + m_parms
 
@@ -1011,7 +1021,7 @@ def extract_trophic_level_parms(trophic_levels):
 def extract_growth_consumption_parms():
 
     poolsize_parms = ['no_resources', 'no_species']
-    m_parms = ['mu_g', 'sigma_g', 'mu_c', 'sigma_c', 'rho', 'd_val', 'timescalar']
+    m_parms = ['mu_g', 'sigma_g', 'mu_c', 'sigma_c', 'rho', 'd_val', 'timescalar_r', 'timescalar_s']
 
     return poolsize_parms + m_parms
 

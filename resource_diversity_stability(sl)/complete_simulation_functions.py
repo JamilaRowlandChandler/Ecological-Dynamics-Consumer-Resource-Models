@@ -48,6 +48,13 @@ communities (from effective_LV_models.py), either directly from parameter
 distributions or from already-simulated CRM communities, and collects the
 same interaction statistics as read_eLV_data() in eLV_vs_CRM_all.py.
 
+
+Note: this file is kept identical in resource_diversity_stability(sl)/ and
+external_resource_stability/ except for the default `model` argument of
+CRM_across_parameter_space() and generate_simulation_df(), which is
+"Self-limiting resource supply" in the former and "Externally-supplied
+resources" in the latter.
+
 """
 
 import numpy as np
@@ -124,6 +131,9 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
         resource timescale separation, passed to
         community.timescale_separation()) - if absent, it falls back to
         'epsilon' in simulation_kwargs, then to 1 (no separation).
+        Parameter sets may also include 'all_positive' (bool) and/or
+        'fixed_budget' (float), passed on to growth_consumption_rates() for
+        non-trophic models (not supported for multi-trophic level models).
     subdirectory : str
         Directory to save community data in.
     parms_for_filenames : list[str]
@@ -225,6 +235,44 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
                                             outflux_args = {'o' : parm_set['o']})
                                        for parm_set in parameter_sets]
 
+            case "MiCRM":
+
+                # make list of resource and species pool sizes
+                initialisation_list = [dict(model = model,
+                                            no_resources = parm_set['M'],
+                                            no_species = parm_set['S'])
+                                       for parm_set in parameter_sets]
+
+                m_s_rates_args_list = [dict(death_method = 'constant',
+                                            death_args =  {'d' : parm_set['d']},
+                                            influx_method = 'constant',
+                                            influx_args = {'b' : parm_set['b']},
+                                            outflux_method = 'constant',
+                                            outflux_args = {'o' : parm_set['o']},
+                                            leakage_method = 'constant',
+                                            leakage_args = {'l' : parm_set['l']},
+                                            energy_method = 'constant',
+                                            energy_args = {'w' : parm_set['w']},
+                                            metabolic_method = 'dirichlet',
+                                            metabolic_args = {'s' : parm_set['s']})
+                                       for parm_set in parameter_sets]
+
+            case "Leached biomolecules":
+
+                # make list of resource and species pool sizes
+                initialisation_list = [dict(model = model,
+                                            no_resources = parm_set['M'],
+                                            no_species = parm_set['S'])
+                                       for parm_set in parameter_sets]
+
+                m_s_rates_args_list = [dict(death_method = 'constant',
+                                            death_args =  {'d' : parm_set['d']},
+                                            leach_method = 'constant',
+                                            leach_args = {'l' : parm_set['l']},
+                                            production_method = 'bernoulli',
+                                            production_args = {'c' : parm_set['c']})
+                                       for parm_set in parameter_sets]
+
             case "Hybrid resource supply":
 
                 # make list of resource and species pool sizes
@@ -266,6 +314,14 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
 
     def growth_consumption_rates(parameter_sets, model):
 
+        # optional arguments for growth_consumption_rates(), only passed on
+        # if they're included in the parameter set
+        def optional_gc_args(parm_set):
+
+            return {key : parm_set[key]
+                    for key in ('all_positive', 'fixed_budget')
+                    if key in parm_set}
+
         def rho_coupled(parameter_sets):
 
             return [dict(method = 'coupled by rho',
@@ -274,8 +330,7 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
                          mu_g = parm_set['mu_g'],
                          sigma_g = parm_set['sigma_g'],
                          rho = parm_set['rho'],
-                         **({'all_positive' : parm_set['all_positive']}
-                            if 'all_positive' in parm_set else {}))
+                         **optional_gc_args(parm_set))
                     for parm_set in parameter_sets]
 
         def rue_coupled(parameter_sets):
@@ -284,7 +339,8 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
                          mu_c = parm_set['mu_c'],
                          sigma_c = parm_set['sigma_c'],
                          mu_g = parm_set['mu_y'],
-                         sigma_g = parm_set['sigma_y'])
+                         sigma_g = parm_set['sigma_y'],
+                         **optional_gc_args(parm_set))
                     for parm_set in parameter_sets]
 
         def rho_coupled_tl(parameter_sets, trophic_levels):
@@ -719,6 +775,8 @@ def save_models(communities : list,
                       "SL_TL_CRM" : "Self-limiting resource supply, multi-trophic level",
                       "ES_CRM" : "Externally-supplied resources",
                       "Hybrid_CRM" : "Hybrid resource supply",
+                      "MiCRM" : "MiCRM",
+                      "LB_CRM" : "Leached biomolecules",
                       "eLV_SL" : "eLV (Self-limiting resource supply)",
                       "eLV_ES" : "eLV (Externally-supplied resources)",
                       "gLV" : "gLV"}
@@ -930,6 +988,14 @@ def model_specific_parameters(model):
     elif model.startswith("Hybrid resource supply") is True:
 
         ms_parm_list = ['b_val', 'o_val', 'a_val']
+
+    elif model == "MiCRM":
+
+        ms_parm_list = ['b_val', 'o_val', 'l_val', 'w_val', 's_D']
+
+    elif model == "Leached biomolecules":
+
+        ms_parm_list = ['l_val', 'c_P']
 
     return ms_parm_list
 
