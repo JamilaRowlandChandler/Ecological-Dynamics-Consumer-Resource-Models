@@ -1754,7 +1754,7 @@ class SL_GenericResource_CRM(ParametersInterface,
         '''
         
         # labels used to assign parameters as object attributes
-        p_labels = ['d', 'b', 'exp']
+        p_labels = ['d', 'b']
         
         # dimensions for death rates and intrinsic growth rates
         dims_list = [(self.no_species, ),

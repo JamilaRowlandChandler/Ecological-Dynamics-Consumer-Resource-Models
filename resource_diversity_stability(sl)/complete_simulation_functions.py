@@ -83,6 +83,8 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
         Parameter sets may also include 'all_positive' (bool) and/or
         'fixed_budget' (float), passed on to growth_consumption_rates() for
         non-trophic models (not supported for multi-trophic level models).
+        The generic resource model ("Self-limiting resource supply, gemeric resource type")
+        also requires a 'resource_exponent' key (float).
     subdirectory : str
         Directory to save community data in.
     parms_for_filenames : list[str]
@@ -166,6 +168,23 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
                                             resource_growth_args = {'b' : parm_set['b']},
                                             si_method = 'constant',
                                             si_args = {'si' : parm_set['si']})
+                                       for parm_set in parameter_sets]
+
+            case "Self-limiting resource supply, gemeric resource type":
+
+                # make list of resource and species pool sizes
+                initialisation_list = [dict(model = model,
+                                            no_resources = parm_set['M'],
+                                            no_species = parm_set['S'])
+                                       for parm_set in parameter_sets]
+
+                # extract and rename arguments for death rates, instrinsic
+                # resource growth rates, and the resource exponent
+                m_s_rates_args_list = [dict(death_method = 'constant',
+                                            death_args =  {'d' : parm_set['d']},
+                                            resource_growth_method = 'constant',
+                                            resource_growth_args = {'b' : parm_set['b']},
+                                            resource_exponent = parm_set['resource_exponent'])
                                        for parm_set in parameter_sets]
 
             case "Externally-supplied resources":
@@ -722,6 +741,7 @@ def save_models(communities : list,
         all_models = {"SL_CRM" : "Self-limiting resource supply",
                       "SL_SI_CRM" : "Self-limiting resource supply, self-inhibition",
                       "SL_TL_CRM" : "Self-limiting resource supply, multi-trophic level",
+                      "SL_GenericResource_CRM" : "Self-limiting resource supply, gemeric resource type",
                       "ES_CRM" : "Externally-supplied resources",
                       "Hybrid_CRM" : "Hybrid resource supply",
                       "MiCRM" : "MiCRM",
@@ -926,7 +946,13 @@ def simulation_df_from_communities(communities,
 
 def model_specific_parameters(model):
 
-    if model.startswith("Self-limiting resource supply") is True:
+    if model == "Self-limiting resource supply, gemeric resource type":
+
+        # 'exp' is the resource exponent (resource_exponent in
+        # model_specific_rates())
+        ms_parm_list = ['b_val', 'exp']
+
+    elif model.startswith("Self-limiting resource supply") is True:
 
         ms_parm_list = ['b_val']
 
