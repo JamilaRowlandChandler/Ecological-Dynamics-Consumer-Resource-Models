@@ -131,6 +131,9 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
         resource timescale separation, passed to
         community.timescale_separation()) - if absent, it falls back to
         'epsilon' in simulation_kwargs, then to 1 (no separation).
+        Parameter sets may also include 'all_positive' (bool) and/or
+        'fixed_budget' (float), passed on to growth_consumption_rates() for
+        non-trophic models (not supported for multi-trophic level models).
     subdirectory : str
         Directory to save community data in.
     parms_for_filenames : list[str]
@@ -311,6 +314,14 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
 
     def growth_consumption_rates(parameter_sets, model):
 
+        # optional arguments for growth_consumption_rates(), only passed on
+        # if they're included in the parameter set
+        def optional_gc_args(parm_set):
+
+            return {key : parm_set[key]
+                    for key in ('all_positive', 'fixed_budget')
+                    if key in parm_set}
+
         def rho_coupled(parameter_sets):
 
             return [dict(method = 'coupled by rho',
@@ -319,8 +330,7 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
                          mu_g = parm_set['mu_g'],
                          sigma_g = parm_set['sigma_g'],
                          rho = parm_set['rho'],
-                         **({'all_positive' : parm_set['all_positive']}
-                            if 'all_positive' in parm_set else {}))
+                         **optional_gc_args(parm_set))
                     for parm_set in parameter_sets]
 
         def rue_coupled(parameter_sets):
@@ -329,7 +339,8 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
                          mu_c = parm_set['mu_c'],
                          sigma_c = parm_set['sigma_c'],
                          mu_g = parm_set['mu_y'],
-                         sigma_g = parm_set['sigma_y'])
+                         sigma_g = parm_set['sigma_y'],
+                         **optional_gc_args(parm_set))
                     for parm_set in parameter_sets]
 
         def rho_coupled_tl(parameter_sets, trophic_levels):
