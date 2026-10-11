@@ -37,8 +37,9 @@ class ParametersInterface:
                                  consumption : Union[npt.NDArray, None] = None,
                                  growth : Union[npt.NDArray, None] = None,
                                  trophic_level : Union[int, None] = None,
-                                 all_positive : bool = False,
-                                 fixed_budget : Union[None, float] = None):
+                                 fixed_budget : Union[None, float] = None,
+                                 *,
+                                 all_positive : bool = False):
         
         '''
         

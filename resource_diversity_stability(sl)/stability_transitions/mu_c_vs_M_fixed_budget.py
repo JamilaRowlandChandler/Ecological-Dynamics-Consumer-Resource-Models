@@ -32,7 +32,8 @@ def M_effect_fixed_C(M_range,
                                          fixed_parameters)
     
     CRM_across_parameter_space(parameters,
-                               subdirectory,
+                               "resource_diversity_stability/simulations/" + \
+                                   subdirectory,
                                ['M', 'mu_c_tot'],
                                model = 'Self-limiting resource supply',
                                save_method = 'v3',
@@ -85,8 +86,6 @@ def generate_parameters_M_C(M_range,
 # %%
 
 resource_pool_sizes = np.arange(50, 275, 25)
-
-# %%
 
 M_effect_fixed_C(resource_pool_sizes,
                  np.linspace(100, 250, 11),

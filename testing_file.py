@@ -520,7 +520,7 @@ M = 50
 mu_c = 130
 sigma_c = 3
 mu_y = 1
-sigma_y = 0.13
+sigma_y = 0.0
 d = 1
 b = 1
 
@@ -533,8 +533,7 @@ community.growth_consumption_rates('growth function of consumption',
                                    sigma_c = sigma_c/np.sqrt(M),
                                    mu_g = mu_y,
                                    sigma_g = sigma_y,
-                                   all_positive = True,
-                                   fixed_budget = mu_y*mu_c)
+                                   all_positive = True)
 community.model_specific_rates(death_method = "constant",
                                death_args = {'d' : 1},
                                resource_growth_method = "constant",
@@ -545,4 +544,35 @@ community.simulate_community(5000, 1)
 
 plt.plot(community.ODE_sols[0].t,
          community.ODE_sols[0].y[:M, :].T)
+plt.show()
+
+# %%
+
+M = 250
+mu_c = 50
+sigma_c = 1.2
+mu_y = 1
+sigma_y = 0.13
+d = 1
+b = 1
+
+community = Consumer_Resource_Model("Self-limiting resource supply, gemeric resource type",
+                                    M-1,
+                                    M)
+
+community.growth_consumption_rates('growth function of consumption',
+                                   mu_c = mu_c/M,
+                                   sigma_c = sigma_c/np.sqrt(M),
+                                   mu_g = mu_y,
+                                   sigma_g = sigma_y)
+community.model_specific_rates(death_method = "constant",
+                               death_args = {'d' : 1},
+                               resource_growth_method = "constant",
+                               resource_growth_args = {'b' : 1},
+                               resource_exponent = 0.7)
+community.simulate_community(12000, 1)
+
+
+plt.plot(community.ODE_sols[0].t[50:],
+         community.ODE_sols[0].y[:M, 50:].T)
 plt.show()

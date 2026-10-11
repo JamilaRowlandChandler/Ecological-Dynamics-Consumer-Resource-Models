@@ -4,57 +4,6 @@ Created on Tue Aug 18 00:00:00 2026
 
 @author: jamil
 
-Combines resource_diversity_stability(sl)/simulation_functions.py and
-external_resource_stability/simulation_functions_new.py into a single module,
-using simulation_functions_new.py as the base (it is a strict superset -
-adds "Hybrid resource supply" model support, an explicit rho/all_positive
-passthrough for correlated growth-consumption rates, and a v3-save fix for
-non-trophic models) and correcting several bugs found while merging:
-
-- model_specific_args() in simulation_functions.py (the older file) passed
-  M=.../S=... as kwargs to Consumer_Resource_Model, but SL_CRM/ES_CRM.__init__
-  take no_species/no_resources - this would raise a TypeError. Only
-  simulation_functions_new.py's version (no_resources=.../no_species=...) is
-  correct, and is what's used here.
-- extract_trophic_level_parms() in simulation_functions.py duplicated
-  'sigma_g' in its non-trophic branch and never included 'sigma_c' - a typo.
-  simulation_functions_new.py fixes this by splitting the function into
-  extract_trophic_level_parms() (trophic only) and
-  extract_growth_consumption_parms() (non-trophic only); that split is kept
-  here, but its caller in simulation_functions_new.py's
-  simulation_df_from_communities() still called
-  extract_trophic_level_parms(model, communities[0].trophic_levels) - two
-  args into a one-arg function. Fixed below.
-- CRM_df()'s inner load_data_create_df(filepath, method) lost its `method`
-  argument in simulation_functions_new.py's call site (only `filepath` was
-  passed) - fixed below.
-- generate_simulation_df() lost its `method` parameter and hardcoded a
-  parameter list containing 'mu_y'/'sigma_y', which are never raw community
-  attributes (only 'mu_g'/'sigma_g' are; 'mu_y'/'sigma_y' only exist as
-  renamed dataframe columns, computed later). Restored the `method`
-  parameter and reused extract_growth_consumption_parms() +
-  model_specific_parameters() for the parameter list, consistent with
-  simulation_df_from_communities().
-- community_dynamics_df()'s non-trophic branch dropped the 'Species packing'
-  column that simulation_functions.py computed (using raw no_species/
-  no_resources, before parameter_rename_and_calc() renames them to S/M) -
-  restored, since generate_simulation_df()'s pipeline never calls
-  model_specific_emergent_properties() (which computes 'Species packing'
-  from the *renamed* S/M columns) and so would otherwise never get it.
-
-Also adds eLV_gLV_create_and_save() and friends - an eLV/gLV analogue of
-CRMs_create_and_save() that builds/simulates eLV_SL, eLV_ES or gLV
-communities (from effective_LV_models.py), either directly from parameter
-distributions or from already-simulated CRM communities, and collects the
-same interaction statistics as read_eLV_data() in eLV_vs_CRM_all.py.
-
-
-Note: this file is kept identical in resource_diversity_stability(sl)/ and
-external_resource_stability/ except for the default `model` argument of
-CRM_across_parameter_space() and generate_simulation_df(), which is
-"Self-limiting resource supply" in the former and "Externally-supplied
-resources" in the latter.
-
 """
 
 import numpy as np
@@ -1854,7 +1803,7 @@ def generic_heatmaps(df, x, y, xlabel, ylabel, variables, cmaps, titles,
 
         v_min_max = start_v_min_max
 
-    sns.set_style('white')
+    sns.set_style('ticks')
 
     if mosaic:
 
