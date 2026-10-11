@@ -861,7 +861,9 @@ class ES_CRM(ParametersInterface, DifferentialEquationsInterface,
     def collate_parameters(self):
         
         return (self.no_species, self.growth, self.consumption,
-                self.d, self.b, self.o, getattr(self, "timescalar", 1))
+                self.d, self.b, self.o,
+                getattr(self, "timescalar_r", 1),
+                getattr(self, "timescalar_s", 1))
         
     #########################################################
                 
@@ -894,7 +896,8 @@ class ES_CRM(ParametersInterface, DifferentialEquationsInterface,
         return solve_ivp(self.model, [0, t_end], initial_abundance,
                          args = (self.no_species, self.growth, self.consumption,
                                  self.d, self.b, self.o,
-                                 getattr(self, "timescalar", 1)),
+                                 getattr(self, "timescalar_r", 1),
+                                 getattr(self, "timescalar_s", 1)),
                          method = 'LSODA',
                          rtol = 1e-7,
                          atol = np.concatenate([np.full(self.no_species, 10.0**-15),
@@ -906,7 +909,7 @@ class ES_CRM(ParametersInterface, DifferentialEquationsInterface,
     def model(self,
               t, y,
               S, G, C, D, B, O,
-              e):
+              e_r, e_s):
         
         '''
         
@@ -945,13 +948,13 @@ class ES_CRM(ParametersInterface, DifferentialEquationsInterface,
         species, resources = y[:S], y[S:]
         
         # change in consumer abundances over time
-        dNdt = species * (np.sum(G * resources, axis = 1) - D)
+        dNdt = (1.0/e_s) * (species * (np.sum(G * resources, axis = 1) - D))
         
         # change in resource abundances over time
-        dRdt = (1.0/e) * ((B - O * resources) - \
+        dRdt = (1.0/e_r) * ((B - O * resources) - \
                           (resources * np.sum(C * species, axis=1)))
             
-        if e > 1e-6: immigration = 1e-8 
+        if min(e_r, e_s) > 1e-6: immigration = 1e-8 
         else: immigration = 1e-12
             
         return np.concatenate((dNdt, dRdt)) + immigration
@@ -959,7 +962,7 @@ class ES_CRM(ParametersInterface, DifferentialEquationsInterface,
     def jacobian(self,
                  t, y,
                  S, G, C, D, B, O,
-                 e):
+                 e_r, e_s):
         
         species, resources = y[:S], y[S:]
 
@@ -968,10 +971,10 @@ class ES_CRM(ParametersInterface, DifferentialEquationsInterface,
 
         J = np.zeros((y.size, y.size))
 
-        J[:S, :S] = np.diag(growth_term)
-        J[:S, S:] = G * species[:, np.newaxis]
-        J[S:, :S] = (1.0 / e) * (-C * resources[:, np.newaxis])
-        J[S:, S:] = (1.0 / e) * (np.diag(-O - consumption_term))
+        J[:S, :S] = (1.0 / e_s) * np.diag(growth_term)
+        J[:S, S:] = (1.0 / e_s) * (G * species[:, np.newaxis])
+        J[S:, :S] = (1.0 / e_r) * (-C * resources[:, np.newaxis])
+        J[S:, S:] = (1.0 / e_r) * (np.diag(-O - consumption_term))
 
         return J
 
@@ -1288,7 +1291,8 @@ class MiCRM(ParametersInterface, DifferentialEquationsInterface,
 
         return (self.no_species, self.growth, self.consumption,
                 self.d, self.b, self.o, self.l, self.w, self.D,
-                getattr(self, "timescalar", 1))
+                getattr(self, "timescalar_r", 1),
+                getattr(self, "timescalar_s", 1))
 
     #########################################################
 
@@ -1331,7 +1335,7 @@ class MiCRM(ParametersInterface, DifferentialEquationsInterface,
     def model(self,
               t, y,
               S, G, C, D, B, O, L, W, DM,
-              e):
+              e_r, e_s):
 
         '''
 
@@ -1362,8 +1366,10 @@ class MiCRM(ParametersInterface, DifferentialEquationsInterface,
             resource energy contents
         DM : np.ndarray
             metabolic matrix (resources x resources)
-        e : float
-            timescale of the resource dynamics relative to consumers
+        e_r : float
+            timescale of the resource dynamics
+        e_s : float
+            timescale of the consumer dynamics
 
         Returns
         -------
@@ -1377,16 +1383,16 @@ class MiCRM(ParametersInterface, DifferentialEquationsInterface,
         species, resources = y[:S], y[S:]
 
         # change in consumer abundances over time
-        dNdt = species * (G @ ((1 - L) * W * resources) - D)
+        dNdt = (1.0/e_s) * (species * (G @ ((1 - L) * W * resources) - D))
 
         # consumption flux of each resource
         consumption_flux = resources * (C @ species)
 
         # change in resource abundances over time
-        dRdt = (1.0/e) * ((B - O * resources) - consumption_flux \
+        dRdt = (1.0/e_r) * ((B - O * resources) - consumption_flux \
                           + (DM @ (W * L * consumption_flux))/W)
 
-        if e > 1e-6: immigration = 1e-8
+        if min(e_r, e_s) > 1e-6: immigration = 1e-8
         else: immigration = 1e-12
 
         return np.concatenate((dNdt, dRdt)) + immigration
@@ -1394,7 +1400,7 @@ class MiCRM(ParametersInterface, DifferentialEquationsInterface,
     def jacobian(self,
                  t, y,
                  S, G, C, D, B, O, L, W, DM,
-                 e):
+                 e_r, e_s):
 
         species, resources = y[:S], y[S:]
 
@@ -1406,10 +1412,10 @@ class MiCRM(ParametersInterface, DifferentialEquationsInterface,
 
         J = np.zeros((y.size, y.size))
 
-        J[:S, :S] = np.diag(G @ ((1 - L) * W * resources) - D)
-        J[:S, S:] = (G * ((1 - L) * W)[np.newaxis, :]) * species[:, np.newaxis]
-        J[S:, :S] = (1.0 / e) * (flux_operator @ (C * resources[:, np.newaxis]))
-        J[S:, S:] = (1.0 / e) * (flux_operator * consumption_term[np.newaxis, :]
+        J[:S, :S] = (1.0 / e_s) * np.diag(G @ ((1 - L) * W * resources) - D)
+        J[:S, S:] = (1.0 / e_s) * ((G * ((1 - L) * W)[np.newaxis, :]) * species[:, np.newaxis])
+        J[S:, :S] = (1.0 / e_r) * (flux_operator @ (C * resources[:, np.newaxis]))
+        J[S:, S:] = (1.0 / e_r) * (flux_operator * consumption_term[np.newaxis, :]
                                  - np.diag(O))
 
         return J
@@ -1532,7 +1538,9 @@ class LB_CRM(ParametersInterface, DifferentialEquationsInterface,
     def collate_parameters(self):
 
         return (self.no_species, self.growth, self.consumption,
-                self.d, self.b, self.o, self.l, self.P, getattr(self, "timescalar", 1))
+                self.d, self.b, self.o, self.l, self.P,
+                getattr(self, "timescalar_r", 1),
+                getattr(self, "timescalar_s", 1))
 
     #########################################################
 
@@ -1575,7 +1583,7 @@ class LB_CRM(ParametersInterface, DifferentialEquationsInterface,
     def model(self,
               t, y,
               S, G, C, D, B, O, L, P,
-              e):
+              e_r, e_s):
 
         '''
 
@@ -1600,8 +1608,10 @@ class LB_CRM(ParametersInterface, DifferentialEquationsInterface,
             matrix of leach rates (species x resources)
         P : np.ndarray
             binary production matrix (species x resources)
-        e : float
-            timescale of the resource dynamics relative to consumers
+        e_r : float
+            timescale of the resource dynamics
+        e_s : float
+            timescale of the consumer dynamics
 
         Returns
         -------
@@ -1615,14 +1625,14 @@ class LB_CRM(ParametersInterface, DifferentialEquationsInterface,
         species, resources = y[:S], y[S:]
 
         # change in consumer abundances over time
-        dNdt = species * (((1 - P) * G) @ resources - D - species)
+        dNdt = (1.0/e_s) * (species * (((1 - P) * G) @ resources - D - species))
 
         # change in resource abundances over time
-        dRdt = (1.0/e) * ((B - O * resources) \
+        dRdt = (1.0/e_r) * ((B - O * resources) \
                           + (L * P).T @ species \
                           - resources * (((1 - P) * C.T).T @ species))
 
-        if e > 1e-6: immigration = 1e-8
+        if min(e_r, e_s) > 1e-6: immigration = 1e-8
         else: immigration = 1e-12
 
         return np.concatenate((dNdt, dRdt)) + immigration
@@ -1630,7 +1640,7 @@ class LB_CRM(ParametersInterface, DifferentialEquationsInterface,
     def jacobian(self,
                  t, y,
                  S, G, C, D, B, O, L, P,
-                 e):
+                 e_r, e_s):
 
         species, resources = y[:S], y[S:]
 
@@ -1640,9 +1650,9 @@ class LB_CRM(ParametersInterface, DifferentialEquationsInterface,
 
         J = np.zeros((y.size, y.size))
 
-        J[:S, :S] = np.diag(G_np @ resources - D)
-        J[:S, S:] = G_np * species[:, np.newaxis]
-        J[S:, :S] = (1.0 / e) * ((L * P).T - C_np.T * resources[:, np.newaxis])
-        J[S:, S:] = (1.0 / e) * np.diag(-O - (C_np.T @ species))
+        J[:S, :S] = (1.0 / e_s) * np.diag(G_np @ resources - D - 2*species)
+        J[:S, S:] = (1.0 / e_s) * (G_np * species[:, np.newaxis])
+        J[S:, :S] = (1.0 / e_r) * ((L * P).T - C_np.T * resources[:, np.newaxis])
+        J[S:, S:] = (1.0 / e_r) * np.diag(-O - (C_np.T @ species))
         
         return J
