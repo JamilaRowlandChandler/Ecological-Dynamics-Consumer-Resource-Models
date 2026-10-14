@@ -82,67 +82,61 @@ class ParametersInterface:
         None.
 
         '''
-
-        # generate random variables for growth and consumption rates
-        X_c, X_g = self.__random_variable_component(trophic_level) 
         
-        match method:
+        if consumption is not None and growth is not None:
             
-            case 'coupled by rho':
-                
-                if rho:
-                    
-                    consumption, growth = self.__gc_rho_coupled(X_c, X_g,
-                                                                mu_c, sigma_c,
-                                                                mu_g, sigma_g,
-                                                                rho,
-                                                                all_positive)
-                
-                else:
-                    
-                    raise Exception('Please supply a value for rho.\n' + \
-                                    '(In growth_consumption_method(), add a rho = x argument.)')
-                
-            case 'growth function of consumption':
-                
-                consumption, rue, growth = self.__gc_rue_coupled(X_c, X_g,
-                                                                 mu_c, sigma_c,
-                                                                 mu_g, sigma_g, 
-                                                                 all_positive)
+            consumption = consumption
+            growth = growth 
             
-            case 'consumption function of growth':
+        else: 
+                
+            # generate random variables for growth and consumption rates
+            X_c, X_g = self.__random_variable_component(trophic_level) 
             
-                growth, rue, consumption = self.__gc_rue_coupled(X_g, X_c,
-                                                                 mu_g, sigma_g,
-                                                                 mu_c, sigma_c,
-                                                                 all_positive)
+            match method:
                 
-            case 'user-supplied':
-                
-                if consumption is not None and growth is not None:
+                case 'coupled by rho':
                     
-                    consumption = consumption
-                    growth = growth 
-                    
-                else: 
+                    if rho:
                         
-                    raise Exception('Please supply your growth or consumption rates.\n'
-                                    '(In growth_consumption_method(), add the arguments ' 
-                                    'consumption = <some np.array>, growth = <some np.array>')
+                        consumption, growth = self.__gc_rho_coupled(X_c, X_g,
+                                                                    mu_c, sigma_c,
+                                                                    mu_g, sigma_g,
+                                                                    rho,
+                                                                    all_positive)
                     
-            case _:
+                    else:
+                        
+                        raise Exception('Please supply a value for rho.\n' + \
+                                        '(In growth_consumption_method(), add a rho = x argument.)')
+                    
+                case 'growth function of consumption':
+                    
+                    consumption, rue, growth = self.__gc_rue_coupled(X_c, X_g,
+                                                                     mu_c, sigma_c,
+                                                                     mu_g, sigma_g, 
+                                                                     all_positive)
                 
-                raise Exception('You have not selected an exisiting method.\n' + \
-                      'Please chose from either "coupled by rho", ' + \
-                          '"growth function of consumption", ' + \
-                              '"consumption function of growth", or ' + \
-                                  '"user-supplied".')
+                case 'consumption function of growth':
+                
+                    growth, rue, consumption = self.__gc_rue_coupled(X_g, X_c,
+                                                                     mu_g, sigma_g,
+                                                                     mu_c, sigma_c,
+                                                                     all_positive)
                     
-        if fixed_budget:
-            
-            consumption, growth = self.__fixed_budget(consumption,
-                                                      growth,
-                                                      fixed_budget)
+                case _:
+                    
+                    raise Exception('You have not selected an exisiting method.\n' + \
+                          'Please chose from either "coupled by rho", ' + \
+                              '"growth function of consumption", ' + \
+                                  '"consumption function of growth", or ' + \
+                                      '"user-supplied".')
+                        
+            if fixed_budget:
+                
+                consumption, growth = self.__fixed_budget(consumption,
+                                                          growth,
+                                                          fixed_budget)
                     
         # assign statistical properties of growth and consumption rates to object
         for name, statistic in zip(['mu_c', 'mu_g', 'sigma_c', 'sigma_g', 'rho',

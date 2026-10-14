@@ -8,6 +8,10 @@ Created on Mon May  5 18:08:45 2025
 
 import os
 import sys
+from matplotlib import pyplot as plt
+import numpy as np
+from copy import deepcopy
+from scipy.stats import pearsonr, norm
 
 os.chdir("C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/consumer_resource_modules")
 
@@ -17,9 +21,6 @@ from community_level_properties import max_le, eigenspectrum
 
 sys.path.insert(0, 'C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/resource_diversity_stability(sl)')
 #from simulation_functions import simulation_df_from_communities
-from matplotlib import pyplot as plt
-import numpy as np
-from copy import deepcopy
 
 # %%
 
@@ -548,7 +549,7 @@ plt.show()
 
 # %%
 
-M = 250
+M = 350
 mu_c = 50
 sigma_c = 1.2
 mu_y = 1
@@ -556,7 +557,7 @@ sigma_y = 0.13
 d = 1
 b = 1
 
-community = Consumer_Resource_Model("Self-limiting resource supply, gemeric resource type",
+community = Consumer_Resource_Model("Self-limiting resource supply, generic resource type",
                                     M-1,
                                     M)
 
@@ -570,9 +571,171 @@ community.model_specific_rates(death_method = "constant",
                                resource_growth_method = "constant",
                                resource_growth_args = {'b' : 1},
                                resource_exponent = 0.7)
-community.simulate_community(12000, 1)
+community.simulate_community(7000, 1)
 
+community.lyapunov_exponent = max_le(community,
+                                     community.ODE_sols[0].y[:, -1],
+                                     T = 1000,
+                                     perturbation = 1e-6)
 
 plt.plot(community.ODE_sols[0].t[50:],
          community.ODE_sols[0].y[:M, 50:].T)
+plt.show()
+
+# %%
+
+M = 10
+mu_c = 20
+sigma_c = 5
+mu_y = 0.8
+sigma_y = 0.2
+d = 1
+b = 1
+
+consumption = np.random.uniform((mu_c/M) - np.sqrt(3)*(sigma_c/np.sqrt(M)),
+                                (mu_c/M) + np.sqrt(3)*(sigma_c/np.sqrt(M)),
+                                (M, M))
+consumption[consumption < 0] = 0
+
+yield_conversion = np.random.uniform(mu_y - np.sqrt(3)*sigma_y,
+                                     mu_y + np.sqrt(3)*sigma_y,
+                                     (M, M))
+
+growth = yield_conversion * consumption.T
+
+print(pearsonr(growth.flatten(), consumption.T.flatten()))
+
+community = Consumer_Resource_Model("Self-limiting resource supply",
+                                    M,
+                                    M)
+
+community.growth_consumption_rates('growth function of consumption',
+                                   mu_c = mu_c/M,
+                                   sigma_c = sigma_c/np.sqrt(M),
+                                   mu_g = mu_y,
+                                   sigma_g = sigma_y,
+                                   consumption = consumption,
+                                   growth = growth)
+community.model_specific_rates(death_method = "constant",
+                               death_args = {'d' : 1},
+                               resource_growth_method = "constant",
+                               resource_growth_args = {'b' : 1})
+
+community.simulate_community(10000, 1)
+
+
+plt.plot(community.ODE_sols[0].t,
+         community.ODE_sols[0].y[:M, :].T)
+plt.show()
+
+# %%
+
+def uniform_from_unit(u, mean, sd):
+    
+    half_width = np.sqrt(3.0) * sd
+    
+    dist = mean + half_width * (2.0 * u - 1.0)
+    dist[dist < 0.0] = 0.0
+    
+    return dist
+ 
+ 
+def correlated_uniform_rates(S, M, mu_c, sigma_c, mu_g, sigma_g, rho,
+                             rng=None, require_positive=True):
+    """
+    Return (c, g), each an S x M array, with uniform marginals and
+    corr(c_ia, g_ia) = rho for every (i, a). Different (i, a) pairs
+    are independent.
+    """
+    if not -1.0 <= rho <= 1.0:
+        raise ValueError("rho must lie in [-1, 1]")
+    rng = np.random.default_rng(rng)
+ 
+    # Gaussian correlation that yields Pearson correlation rho for the uniforms
+    r = 2.0 * np.sin(np.pi * rho / 6.0)
+ 
+    z1 = rng.standard_normal((S, M))
+    z2 = r * z1 + np.sqrt(1.0 - r**2) * rng.standard_normal((S, M))
+    u1, u2 = norm.cdf(z1), norm.cdf(z2)
+ 
+    c = uniform_from_unit(u1, mu_c / M, sigma_c / np.sqrt(M))
+    g = uniform_from_unit(u2, mu_g / M, sigma_g / np.sqrt(M))
+    
+    return c.T, g
+
+M = 150
+mu = 20
+sigma = 5
+rho = 0.7
+d = 1
+b = 1
+
+consumption, growth = correlated_uniform_rates(M, M,
+                                               mu,
+                                               sigma,
+                                               mu,
+                                               sigma,
+                                               rho)
+
+print(pearsonr(growth.flatten(), consumption.T.flatten()))
+
+community = Consumer_Resource_Model("Self-limiting resource supply",
+                                    M,
+                                    M)
+
+community.growth_consumption_rates('coupled by rho',
+                                   mu_c = mu/M,
+                                   sigma_c = sigma/np.sqrt(M),
+                                   mu_g = mu/M,
+                                   sigma_g = sigma/np.sqrt(M),
+                                   consumption = consumption,
+                                   growth = growth)
+community.model_specific_rates(death_method = "constant",
+                               death_args = {'d' : 1},
+                               resource_growth_method = "constant",
+                               resource_growth_args = {'b' : 1})
+
+community.simulate_community(5000, 1)
+
+
+plt.plot(community.ODE_sols[0].t,
+         community.ODE_sols[0].y[:M, :].T)
+plt.show()
+
+# %%
+
+M = 100
+mu_c = 450
+sigma_c = 5
+mu_y = 1
+sigma_y = 0.13
+d = 0.1
+b = 1e-5
+
+community = Consumer_Resource_Model("Externally-supplied resources",
+                                    M,
+                                    M)
+
+community.growth_consumption_rates('growth function of consumption',
+                                   mu_c = mu_c/M,
+                                   sigma_c = sigma_c/np.sqrt(M),
+                                   mu_g = mu_y,
+                                   sigma_g = sigma_y)
+
+rho = pearsonr(community.growth.flatten(),
+               community.consumption.T.flatten())[0]
+
+community.model_specific_rates(death_args = {'d' : d},
+                               influx_args = {'b' : b},
+                               outflux_args = {'o' : b})
+
+community.simulate_community(7000, 1)
+community.calculate_community_properties()
+
+packing_ratio = community.species_survival_fraction[0]/community.resource_survival_fraction[0]
+print(rho**2 - packing_ratio)
+print(packing_ratio)
+
+plt.plot(community.ODE_sols[0].t,
+         community.ODE_sols[0].y[:M, :].T)
 plt.show()

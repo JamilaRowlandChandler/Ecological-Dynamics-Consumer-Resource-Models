@@ -71,7 +71,7 @@ def Consumer_Resource_Model(model : Literal["Self-limiting resource supply",
             
             instance = SL_SI_CRM(no_species, no_resources)
             
-        case "Self-limiting resource supply, gemeric resource type":
+        case "Self-limiting resource supply, generic resource type":
             
             instance = SL_GenericResource_CRM(no_species, no_resources)
             

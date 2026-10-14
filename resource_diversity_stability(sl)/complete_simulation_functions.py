@@ -83,7 +83,7 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
         Parameter sets may also include 'all_positive' (bool) and/or
         'fixed_budget' (float), passed on to growth_consumption_rates() for
         non-trophic models (not supported for multi-trophic level models).
-        The generic resource model ("Self-limiting resource supply, gemeric resource type")
+        The generic resource model ("Self-limiting resource supply, generic resource type")
         also requires a 'resource_exponent' key (float).
     subdirectory : str
         Directory to save community data in.
@@ -170,7 +170,7 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
                                             si_args = {'si' : parm_set['si']})
                                        for parm_set in parameter_sets]
 
-            case "Self-limiting resource supply, gemeric resource type":
+            case "Self-limiting resource supply, generic resource type":
 
                 # make list of resource and species pool sizes
                 initialisation_list = [dict(model = model,
@@ -287,7 +287,8 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
         def optional_gc_args(parm_set):
 
             return {key : parm_set[key]
-                    for key in ('all_positive', 'fixed_budget')
+                    for key in ('all_positive', 'fixed_budget',
+                                'consumption', 'growth')
                     if key in parm_set}
 
         def rho_coupled(parameter_sets):
@@ -347,7 +348,7 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
                                                      parameter_sets[0]['trophic_levels'])
 
         else:
-
+            
             if 'mu_y' in parameter_sets[0].keys():
 
                 g_c_rates_args_list = rue_coupled(parameter_sets)
@@ -355,7 +356,7 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
             else:
 
                 g_c_rates_args_list = rho_coupled(parameter_sets)
-
+                
         return g_c_rates_args_list
 
     # make list of filenames
@@ -578,7 +579,7 @@ def consumer_resource_model_dynamics(init_class,
         create and simulate community dynamics
 
         '''
-
+        
         # initialise consumer-resource model class
         community = Consumer_Resource_Model(**init_class)
 
@@ -741,7 +742,7 @@ def save_models(communities : list,
         all_models = {"SL_CRM" : "Self-limiting resource supply",
                       "SL_SI_CRM" : "Self-limiting resource supply, self-inhibition",
                       "SL_TL_CRM" : "Self-limiting resource supply, multi-trophic level",
-                      "SL_GenericResource_CRM" : "Self-limiting resource supply, gemeric resource type",
+                      "SL_GenericResource_CRM" : "Self-limiting resource supply, generic resource type",
                       "ES_CRM" : "Externally-supplied resources",
                       "Hybrid_CRM" : "Hybrid resource supply",
                       "MiCRM" : "MiCRM",
@@ -946,7 +947,7 @@ def simulation_df_from_communities(communities,
 
 def model_specific_parameters(model):
 
-    if model == "Self-limiting resource supply, gemeric resource type":
+    if model == "Self-limiting resource supply, generic resource type":
 
         # 'exp' is the resource exponent (resource_exponent in
         # model_specific_rates())
