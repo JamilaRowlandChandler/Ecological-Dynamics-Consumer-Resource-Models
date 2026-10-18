@@ -131,10 +131,10 @@ def plots(data,
                      stat='density',
                      ax=ax,
                      legend=False)
-        plt.xlim(-1000, 1000)
-        plt.legend(title='timescale difference',
-                   loc='upper left',
-                   labels=[label_1, label_001])
+        plt.xlim(-400, 400)
+        #plt.legend(title='timescale separation',
+        #           loc='outside upper right',
+        #           labels=[label_1, label_001])
         
         ax.set_xlabel("effective consumer interactions, " + \
                       r'$A_{ij}$')
@@ -148,7 +148,7 @@ def plots(data,
         
         fig, axs = plt.subplots(2, int(np.ceil(len(indexes)/2)),
                                 layout="constrained",
-                                figsize=(2.5*len(indexes),6),
+                                figsize=(3*len(indexes), 6.5),
                                 sharex=True,
                                 sharey=True)
         
@@ -175,9 +175,9 @@ def plots(data,
                       r'$A_{ij}$')
         fig.supylabel("density")
         
-        plt.legend(title='timescale difference',
-                   loc='upper left',
-                   labels=[label_1, label_001])
+        #plt.legend(title='timescale separation',
+        #           loc='outside upper right',
+        #           labels=[label_1, label_001])
         
         plt.savefig(figure_directory + "/A_over_time_" + filename + ".png",
                     bbox_inches='tight')
@@ -200,7 +200,7 @@ def plots(data,
     #                                              A_data_001)]
     
     #cv_plot()
-    interactions_all_time_plot()
+    #interactions_all_time_plot()
     interactions_per_time_plot(np.arange(-5, 0, 1))
 
 # %%
@@ -214,6 +214,8 @@ figure_directory = "C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stab
                     
 plots(M_stab_stats['50']['unstable'],
       "M_50_unstable")
+
+# %%
 
 plots(M_stab_stats['250']['stable'],
       "M_250_stable")
