@@ -65,7 +65,7 @@ class CommunityPropertiesInterface:
                                                  [0, self.no_species])
             
             self.assign_abundance_distribution("resource",
-                                                 [self.no_species, -1])
+                                                 [self.no_species, None])  # None, not -1 or -0: slice runs to the last resource
             
             if sensitivity_distribution == True:
             
