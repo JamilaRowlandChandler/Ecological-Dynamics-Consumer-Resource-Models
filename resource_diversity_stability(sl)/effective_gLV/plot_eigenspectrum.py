@@ -325,15 +325,7 @@ def example_dynamics(idx : Union[list[int], npt.NDArray],
 
     '''
 
-    Plot example trajectories for one of the saved communities (idx) - only
-    available for community indices that were passed to
-    save_example_trajectories() when ts_eigenspectrum.py (model = 'CRM') or
-    ts_eigenspectrum_eLV.py (model = 'eLV') was run.
-
-    For the CRM, resource dynamics are plotted above consumer dynamics (two
-    stacked rows per M, one column per epsilon), since the CRM's state
-    includes both. eLV_SL has no separate resource dynamics to split out, so
-    each M's full dynamics are instead plotted together in a single panel.
+    Plot example trajectories for one of the saved communities
 
     '''
     

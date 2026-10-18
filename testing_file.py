@@ -9,9 +9,11 @@ Created on Mon May  5 18:08:45 2025
 import os
 import sys
 from matplotlib import pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap
 import numpy as np
 from copy import deepcopy
 from scipy.stats import pearsonr, norm
+import seaborn as sns
 
 os.chdir("C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/consumer_resource_modules")
 
@@ -410,31 +412,43 @@ plt.show()
 
 # %%
 
-M = 50
-mu_a = 2.0
-sigma_a = np.sqrt(50.0) + 7.0
+M = 150
+mu_a = 0.4
+sigma_a = 0.1
 
 gLV_community = gLV(M)
 gLV_community.model_specific_rates(growth_method='constant',
                                    growth_args=dict(r=1.0),
                                    interaction_method='normal',
-                                   interaction_args=dict(mu=mu_a/M, sigma=sigma_a/M),
+                                   interaction_args=dict(mu=mu_a,
+                                                         sigma=sigma_a),
                                    self_inhibition_method='constant',
                                    self_inhibition_args=dict(Aii=1.0))
 
 gLV_community.calculate_interaction_stats()
 
 # run simulations from randomly generated initial abundances
-gLV_community.simulate_community(t_end = 2000,
-                                 no_init_cond = 2)
+gLV_community.simulate_community(t_end = 7000,
+                                 no_init_cond = 1)
 
-fig, (ax1, ax2) = plt.subplots(1, 2)
+fig, ax = plt.subplots(1, 1)
 
-ax1.plot(gLV_community.ODE_sols[0].t,
-         gLV_community.ODE_sols[0].y.T)
+t = gLV_community.ODE_sols[0].t
+y = gLV_community.ODE_sols[0].y
+        
+ax.stackplot(t[10:], y[:, 10:])
 
-ax2.plot(gLV_community.ODE_sols[1].t,
-         gLV_community.ODE_sols[1].y.T)
+ax.tick_params(axis="both", which="major", labelsize=7)
+ax.tick_params(axis="both", which="minor", labelsize=7)
+
+fig.supxlabel('time', weight="bold", fontsize=7)
+fig.supylabel('abundance', weight="bold", fontsize=7)
+
+#ax.plot(gLV_community.ODE_sols[0].t,
+#         gLV_community.ODE_sols[0].y.T)
+
+plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/gLV_edge_of_chaos.png",
+            bbox_inches='tight')
 plt.show()
 
 # %%
@@ -704,13 +718,11 @@ plt.show()
 
 # %%
 
-M = 100
-mu_c = 450
-sigma_c = 5
-mu_y = 1
-sigma_y = 0.13
-d = 0.1
-b = 1e-5
+M = 50
+mu_c = 7.575
+sigma_c = 0.5788
+mu_y = 0.8132
+sigma_y = 1.317
 
 community = Consumer_Resource_Model("Externally-supplied resources",
                                     M,
@@ -724,18 +736,38 @@ community.growth_consumption_rates('growth function of consumption',
 
 rho = pearsonr(community.growth.flatten(),
                community.consumption.T.flatten())[0]
+print(rho**2, "\n",
+      (1/np.sqrt(1 + ((sigma_y/mu_y)**2 * (1 + (mu_c**2 / (sigma_c**2 * M))))))**2)
 
-community.model_specific_rates(death_args = {'d' : d},
-                               influx_args = {'b' : b},
-                               outflux_args = {'o' : b})
+community.model_specific_rates()
 
 community.simulate_community(7000, 1)
 community.calculate_community_properties()
+surviving_consumers, _ = np.histogram(community.ODE_sols[0].y[:M, -1],
+                                      M)
+print(rho**2 - (M - surviving_consumers[0])/M)
 
-packing_ratio = community.species_survival_fraction[0]/community.resource_survival_fraction[0]
-print(rho**2 - packing_ratio)
-print(packing_ratio)
+lyapunov_exponent = max_le(community,
+                           community.ODE_sols[0].y[:, -1],
+                           T = 1000,
+                           perturbation = 1e-6)
+
+fig, ax = plt.subplots(1, 1)
 
 plt.plot(community.ODE_sols[0].t,
          community.ODE_sols[0].y[:M, :].T)
 plt.show()
+    
+
+# %%
+
+community.simulate_community(100000, 1)
+plt.plot(community.ODE_sols[0].t,
+         community.ODE_sols[0].y[:M, :].T)
+plt.show()
+
+recalc_lyapunov_exponent = max_le(community,
+                                  community.ODE_sols[0].y[:, -1],
+                                  T = 1000,
+                                  perturbation = 1e-6)
+print(recalc_lyapunov_exponent)
