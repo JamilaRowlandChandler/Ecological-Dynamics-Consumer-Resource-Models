@@ -12,7 +12,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 from copy import deepcopy
 from scipy.stats import pearsonr, norm
-from scipy.optimize import differential_evolution, dual_annealing
+from scipy.optimize import direct, minimize
 
 os.chdir("C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/consumer_resource_modules")
 
@@ -139,9 +139,9 @@ def instability_distance_M(mu_c, sigma_c,
 
     return min_is_M, min_sc_M
 
-#%% Genetic algorithm (differential evolution)
+#%% Objective and constraint
 
-# Parameter order in the DE vector: [mu_c, sigma_c, mu_y, sigma_y].
+# Parameter order: [mu_c, sigma_c, mu_y, sigma_y].
 # All four must be > 0, enforced through strictly positive lower bounds.
 # The upper bounds are placeholders - adjust to the range you want to explore.
 PARAM_NAMES = ["mu_c", "sigma_c", "mu_y", "sigma_y"]
@@ -157,18 +157,18 @@ INFEASIBLE_BASE = 10.0        # added to infeasible candidates so that they alwa
                               # score worse than any feasible one (|instability
                               # distance| is O(1), so any value >> 1 works)
 
-def ga_objective(params,
-                 Ms = np.arange(50, 275, 25),
-                 no_communities = 5,
-                 timeout = SIMULATION_TIMEOUT,
-                 eval_timeout = EVALUATION_TIMEOUT):
+def constrained_objective(params,
+                          Ms = np.arange(50, 275, 25),
+                          no_communities = 5,
+                          timeout = SIMULATION_TIMEOUT,
+                          eval_timeout = EVALUATION_TIMEOUT):
     """
-    Objective for differential_evolution: min_is_M, subject to min_sc_M > 4.
+    Objective to minimise: min_is_M, subject to min_sc_M > 4.
 
     The constraint is handled with a penalty rather than scipy's
     NonlinearConstraint, because a NonlinearConstraint evaluates the (expensive)
     simulation a second time per candidate. Here each candidate is simulated once.
-    Infeasible candidates get INFEASIBLE_BASE + shortfall, so the population is
+    Infeasible candidates get INFEASIBLE_BASE + shortfall, so the search is
     still pushed towards the feasible region (larger min_sc_M) rather than
     seeing a flat plateau.
     """
@@ -195,94 +195,102 @@ def ga_objective(params,
 
     return min_is_M
 
-def run_ga(bounds = BOUNDS,
-           popsize = 10,          # population = popsize * 4 parameters
-           maxiter = 50,
-           seed = None,
-           workers = 1,           # >1 parallelises candidates (needs the __main__ guard below)
-           polish = False):       # L-BFGS-B polish is pointless on a noisy stochastic objective
+#%% DIRECT, then Nelder-Mead (best protocol in trial runs)
 
-    history = []   # best objective value per generation
+# Search in log10(parameters): the bounds span 1e-3 .. 400, so equal steps in log
+# space are far more sensible than equal steps in linear space.
+LOG_BOUNDS = [(np.log10(lo), np.log10(hi)) for lo, hi in BOUNDS]
+CRN_SEED = 12345   # common random numbers: same seed for every evaluation
 
-    def callback(intermediate_result):
-        history.append(intermediate_result.fun)
-        print(f"gen {len(history):3d} | best objective = {intermediate_result.fun:.5f} | "
-              + ", ".join(f"{n} = {v:.4f}"
-                          for n, v in zip(PARAM_NAMES, intermediate_result.x)))
-
-    result = differential_evolution(ga_objective,
-                                    bounds,
-                                    strategy = "best1bin",
-                                    popsize = popsize,
-                                    maxiter = maxiter,
-                                    mutation = (0.5, 1.0),
-                                    recombination = 0.7,
-                                    seed = seed,
-                                    init = "sobol",
-                                    polish = polish,
-                                    workers = workers,
-                                    updating = "deferred" if workers != 1 else "immediate",
-                                    callback = callback)
-
-    return result, history
-
-#%% Simulated annealing (dual_annealing)
-
-def run_sa(seed = None,
-           maxfun = 60,      # budget of objective evaluations for this chain
-           bounds = BOUNDS):
+def crn_objective(log_params, seed = CRN_SEED):
     """
-    One simulated-annealing chain (scipy's generalised SA, dual_annealing).
+    constrained_objective in log10 space with a fixed random seed (common random numbers).
     
-    no_local_search = True: dual_annealing normally finishes with L-BFGS-B local
-    searches, which use finite-difference gradients and are meaningless on a noisy,
-    discontinuous objective (and would burn evaluations).
-    
-    dual_annealing has no `workers` option, so run several independent chains in
-    parallel with run_sa_chains().
+    Fixing the seed makes the objective deterministic in the parameters, so DIRECT and
+    Nelder-Mead see a consistent landscape instead of fresh noise at every call. The
+    result is optimised for this one seed, so check it with validate_candidate().
     """
     
-    history = []   # best objective value found so far, at each improvement
+    log_params = np.clip(log_params, *np.array(LOG_BOUNDS).T)
     
-    def callback(x, f, context):
-        history.append(f)
-        print(f"[seed {seed}] new best {f:.5f} | "
-              + ", ".join(f"{n} = {v:.4f}" for n, v in zip(PARAM_NAMES, x)),
+    state = np.random.get_state()
+    np.random.seed(seed)
+    try:
+        return constrained_objective(10**log_params)
+    finally:
+        np.random.set_state(state)
+
+def run_direct_nelder_mead(direct_maxfun = 50,
+                           nm_maxfev = 50,
+                           nm_step = 0.2,     # initial simplex size, in log10 units
+                           seed = CRN_SEED):
+    """
+    Stage 1 protocol: DIRECT (deterministic global search) over the whole log10 box,
+    then a bounded Nelder-Mead refinement starting from the best DIRECT point.
+    Both stages use the same CRN seed. Runs serially (each stage is sequential).
+    
+    Returns (best parameters in linear space, best objective, history), where history
+    lists (stage, objective, parameters) for every evaluation.
+    """
+    
+    history = []
+    
+    def f(log_params, stage):
+        value = crn_objective(log_params, seed = seed)
+        history.append((stage, value, 10**np.clip(log_params, *np.array(LOG_BOUNDS).T)))
+        print(f"{stage} eval {len(history):3d} | objective = {value:.5f} | "
+              + ", ".join(f"{n} = {v:.4f}" for n, v in zip(PARAM_NAMES, history[-1][2])),
               flush = True)
+        return value
     
-    result = dual_annealing(ga_objective,
-                            bounds,
-                            maxfun = maxfun,
-                            seed = seed,
-                            no_local_search = True,
-                            callback = callback)
+    direct_result = direct(f, LOG_BOUNDS, args = ("DIRECT",),
+                           maxfun = direct_maxfun, locally_biased = True)
     
-    return result, history
+    x0 = direct_result.x
+    lo, hi = np.array(LOG_BOUNDS).T
+    # step each parameter towards the interior so the simplex isn't flattened against a bound
+    steps = np.where(x0 + nm_step <= hi, nm_step, -nm_step)
+    simplex = np.vstack([x0] + [x0 + steps[i] * np.eye(len(x0))[i] for i in range(len(x0))])
+    
+    minimize(f, x0, args = ("Nelder-Mead",), method = "Nelder-Mead",
+             bounds = LOG_BOUNDS,
+             options = dict(initial_simplex = simplex, maxfev = nm_maxfev,
+                            xatol = 1e-3, fatol = 1e-5))
+    
+    best = min(history, key = lambda h: h[1])
+    
+    return best[2], best[1], history
 
-def run_sa_chains(seeds = range(8),
-                  maxfun = 60):
-    """Independent SA chains in parallel; returns the results sorted best-first."""
+def validate_candidate(params, seeds = (1, 2, 3, 4, 5)):
+    """
+    Re-evaluate a candidate with fresh random seeds (not the CRN seed it was optimised on).
+    Returns a list of (min_is_M, min_sc_M) per seed, or the exception name if it failed.
+    """
     
-    from concurrent.futures import ProcessPoolExecutor
+    results = []
+    for seed in seeds:
+        np.random.seed(seed)
+        try:
+            results.append(instability_distance_M(*params,
+                                                  timeout = SIMULATION_TIMEOUT,
+                                                  eval_timeout = EVALUATION_TIMEOUT))
+        except Exception as e:
+            results.append(type(e).__name__)
     
-    with ProcessPoolExecutor(max_workers = len(seeds)) as pool:
-        futures = [pool.submit(run_sa, seed, maxfun) for seed in seeds]
-        results = [future.result()[0] for future in futures]
-    
-    return sorted(results, key = lambda r: r.fun)
+    return results
 
 if __name__ == "__main__":
-    # guard is required on Windows when workers != 1 (multiprocessing re-imports this file)
-    result, history = run_ga(seed = 0, workers = 1)
+    best_params, best_f, history = run_direct_nelder_mead()
 
-    best = dict(zip(PARAM_NAMES, result.x))
-    print("\nBest parameters:", best)
+    print("\nBest parameters:", dict(zip(PARAM_NAMES, best_params)))
+    print(f"Best objective (CRN seed {CRN_SEED}): {best_f:.5f}")
 
-    # re-evaluate the best candidate to report both outputs (stochastic, so values will differ slightly)
-    min_is_M, min_sc_M = instability_distance_M(*result.x)
-    print(f"Re-evaluated: min_is_M = {min_is_M:.5f}, min_sc_M = {min_sc_M:.2f}")
+    # the optimum is tuned to one seed, so re-score it with fresh seeds
+    for seed, result in zip((1, 2, 3, 4, 5), validate_candidate(best_params)):
+        print(f"fresh seed {seed}: (min_is_M, min_sc_M) = {result}")
 
-    plt.plot(history)
-    plt.xlabel("generation")
-    plt.ylabel("best min_is_M")
+    plt.plot([h[1] for h in history], ".")
+    plt.yscale("log")
+    plt.xlabel("evaluation")
+    plt.ylabel("objective (penalised if infeasible)")
     plt.show()
