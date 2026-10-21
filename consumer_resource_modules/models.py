@@ -1183,6 +1183,47 @@ class MiCRM(ParametersInterface, DifferentialEquationsInterface,
 
         self.no_species = no_species
         self.no_resources = no_resources
+        
+        
+    def metabolic_rates(self,
+                        energy_method:
+                        Literal['normal', 'constant', 'user-supplied']
+                        = 'constant',
+                        energy_args : Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
+                                            TypedDict('constant', {'w' : float}),
+                                            TypedDict('user-supplied', {'w' : npt.NDArray})]
+                        = {'w' : 1},
+                        metabolic_method:
+                            Literal['dirichlet', 'user-supplied']
+                            = 'dirichlet',
+                            metabolic_args : Union[TypedDict('dirichlet', {'s' : float}),
+                                                   TypedDict('user-supplied', {'D' : npt.NDArray})]
+                            = {'s' : 0.05},
+                        leakage_method:
+                            Literal['normal', 'constant', 'user-supplied']
+                            = 'constant',
+                        leakage_args : Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
+                                             TypedDict('constant', {'l' : float}),
+                                             TypedDict('user-supplied', {'l' : npt.NDArray})]
+                        = {'l' : 0.5}):
+        
+        # labels used to assign parameters as object attributes
+        p_labels = ['w', 'D', 'l']
+
+        # dimensions of each set of parameters
+        dims_list = [(self.no_resources, ),
+                     (self.no_resources, self.no_resources),
+                     (self.no_resources, )]
+
+        # generate parameters used the other_parameter_methods method
+        for p_method, p_args, p_label, dims in \
+            zip([energy_method, metabolic_method, leakage_method],
+                [energy_args, metabolic_args, leakage_args],
+                p_labels, dims_list):
+
+                self.other_parameter_methods(p_method, p_args, p_label, dims)
+        
+        pass
 
     def model_specific_rates(self,
                              death_method :
@@ -1193,11 +1234,12 @@ class MiCRM(ParametersInterface, DifferentialEquationsInterface,
                                                 TypedDict('user-supplied', {'d' : npt.NDArray})]
                              = {'d' : 1},
                              influx_method:
-                                 Literal['normal', 'constant', 'user-supplied']
+                                 Literal['normal', 'constant', 'one-in', 'user-supplied']
                                  = 'constant',
                              influx_args : Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
-                                                TypedDict('constant', {'b' : float}),
-                                                TypedDict('user-supplied', {'b' : npt.NDArray})]
+                                                 TypedDict('constant', {'b' : float}),
+                                                 TypedDict('one-in', {'b' : float}),
+                                                 TypedDict('user-supplied', {'b' : npt.NDArray})]
                              = {'b' : 1},
                              outflux_method:
                                  Literal['normal', 'constant', 'user-supplied']
@@ -1205,27 +1247,7 @@ class MiCRM(ParametersInterface, DifferentialEquationsInterface,
                              outflux_args : Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
                                                 TypedDict('constant', {'o' : float}),
                                                 TypedDict('user-supplied', {'o' : npt.NDArray})]
-                             = {'o' : 1},
-                             leakage_method:
-                                 Literal['normal', 'constant', 'user-supplied']
-                                 = 'constant',
-                             leakage_args : Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
-                                                  TypedDict('constant', {'l' : float}),
-                                                  TypedDict('user-supplied', {'l' : npt.NDArray})]
-                             = {'l' : 0.8},
-                             energy_method:
-                                 Literal['normal', 'constant', 'user-supplied']
-                                 = 'constant',
-                             energy_args : Union[TypedDict('normal', {'mu' : float, 'sigma' : float}),
-                                                 TypedDict('constant', {'w' : float}),
-                                                 TypedDict('user-supplied', {'w' : npt.NDArray})]
-                             = {'w' : 1},
-                             metabolic_method:
-                                 Literal['dirichlet', 'user-supplied']
-                                 = 'dirichlet',
-                             metabolic_args : Union[TypedDict('dirichlet', {'s' : float}),
-                                                    TypedDict('user-supplied', {'D' : npt.NDArray})]
-                             = {'s' : 0.05}):
+                             = {'o' : 1}):
 
         '''
 
@@ -1253,38 +1275,54 @@ class MiCRM(ParametersInterface, DifferentialEquationsInterface,
         influx_args, outflux_args, leakage_args, energy_args : dict
             Arguments for the respective methods. Options are the same as
             death_args.
-        metabolic_method : str
-            Method used to generate the metabolic matrix D, where D[a, b] is
-            the fraction of leaked resource b converted into resource a.
-            Options are:
-                'dirichlet' : columns are sampled from a Dirichlet
-                distribution with sparsity s, {'s' : sparsity}
-                'user-supplied' : {'D' : matrix}
-            Columns of D should sum to 1 (mass conservation).
-        metabolic_args : dict
-            Arguments for metabolic_method.
 
         Returns
         -------
         None.
 
         '''
+        
+        self.other_parameter_methods(death_method,
+                                     death_args,
+                                     'd',
+                                     (self.no_species, ))
+        
+        self.other_parameter_methods(outflux_method,
+                                     outflux_args,
+                                     'o',
+                                     (self.no_resources, ))
+        
+        if influx_method == 'one-in':
+            
+            self.other_parameter_methods('constant',
+                                         {'b' : 0},
+                                         'b',
+                                         (self.no_resources, ))
+            
+            one_influx = list(influx_args.values())[0]
+            self.b[np.argmax(self.w)] = one_influx
+            self.b_val = "one_in_" + str(one_influx) 
+            
+        
+        else:
+            
+            self.other_parameter_methods(influx_method,
+                                         influx_args,
+                                         'b',
+                                         (self.no_resources, ))
+        
 
         # labels used to assign parameters as object attributes
-        p_labels = ['d', 'b', 'o', 'l', 'w', 'D']
+        p_labels = ['d', 'b', 'o']
 
         # dimensions of each set of parameters
         dims_list = [(self.no_species, ), (self.no_resources, ),
-                     (self.no_resources, ), (self.no_resources, ),
-                     (self.no_resources, ),
-                     (self.no_resources, self.no_resources)]
+                     (self.no_resources, )]
 
         # generate parameters used the other_parameter_methods method
         for p_method, p_args, p_label, dims in \
-            zip([death_method, influx_method, outflux_method,
-                 leakage_method, energy_method, metabolic_method],
-                [death_args, influx_args, outflux_args,
-                 leakage_args, energy_args, metabolic_args],
+            zip([death_method, influx_method, outflux_method],
+                [death_args, influx_args, outflux_args],
                 p_labels, dims_list):
 
                 self.other_parameter_methods(p_method, p_args, p_label, dims)
