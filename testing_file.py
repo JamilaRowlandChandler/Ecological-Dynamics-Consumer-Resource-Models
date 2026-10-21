@@ -239,7 +239,62 @@ S = 100
 M = 100
 mu = 50
 sigma = 3
-rho = 1.0
+rho = 0.01
+d = 1
+b = 1
+o = 0.01
+
+def correlated_uniforms(S, M,
+                        rho,
+                        mu,
+                        sigma):
+
+    # Spearman rho -> underlying Gaussian correlation
+    r = 2 * np.sin(np.pi * rho / 6)
+
+    # Correlated standard normals
+    z1 = np.random.randn(S, M)
+    z2 = r * z1 + np.sqrt(1 - r**2) * np.random.randn(S, M)
+
+    # Normal CDF gives Uniform(0, 1)
+    u1, u2 = norm.cdf(z1), norm.cdf(z2)
+
+    # Rescale to the requested mean and variance
+    width = np.sqrt(12 * (sigma**2)/M)
+    low = np.max([0, mu/M - width / 2])
+    
+    return low + width * u1, (low + width * u2).T
+
+def correlated_lognormals(S, M,
+                          rho,
+                          mu,
+                          sigma):
+
+    m = mu / M
+    v = sigma**2 / M
+
+    # Underlying normal parameters
+    s2 = np.log(1 + v / m**2)
+    mu_ln = np.log(m) - s2 / 2
+
+    arg = 1 + rho * (np.exp(s2) - 1)
+    r = np.log(arg) / s2
+
+    # Correlated standard normals
+    z1 = np.random.randn(S, M)
+    z2 = r * z1 + np.sqrt(1 - r**2) * np.random.randn(S, M)
+
+    # Exponentiate to get lognormals
+    s = np.sqrt(s2)
+    
+    return np.exp(mu_ln + s * z1), np.exp(mu_ln + s * z2)
+    
+
+# Example
+growth, consumption = correlated_uniforms(S, M,
+                                          rho,
+                                          mu,
+                                          sigma)
 
 community = Consumer_Resource_Model("MiCRM", S, M)
 
@@ -248,25 +303,35 @@ community.growth_consumption_rates('coupled by rho',
                                    sigma_c = sigma/np.sqrt(M),
                                    mu_g = mu/M,
                                    sigma_g = sigma/np.sqrt(M),
-                                   rho = rho)
+                                   rho = rho,
+                                   all_positive = True)
+                                   #consumption = consumption,
+                                   #growth = growth)
+
+community.metabolic_rates(energy_method = 'user-supplied',
+                          energy_args = {'w' : np.random.uniform(0.1, 1, 
+                                                                 (M, ))},
+                          metabolic_method = 'dirichlet',
+                          metabolic_args = {'s' : 0.05},
+                          leakage_method = 'constant',
+                          leakage_args = {'l' : 0.7})
+
 community.model_specific_rates(death_method = 'constant',
-                               death_args = {'d' : 1},
-                               influx_method = 'constant',
-                               influx_args = {'b' : 1},
+                               death_args = {'d' : d},
+                               influx_method = 'one-in',
+                               influx_args = {'b' : b},
                                outflux_method = 'constant',
-                               outflux_args = {'o' : 1},
-                               leakage_method = 'constant',
-                               leakage_args = {'l' : 0.5},
-                               energy_method = 'constant',
-                               energy_args = {'w' : 1},
-                               metabolic_method = 'dirichlet',
-                               metabolic_args = {'s' : 0.05})
+                               outflux_args = {'o' : o})
+
+#community.b[np.random.randint(0,
+#                              M,
+#                              int(0.1*M))] = b
 
 # metabolic matrix columns should sum to 1 (mass conservation)
 print("MiCRM: D column sums in [", community.D.sum(axis = 0).min(), ",",
       community.D.sum(axis = 0).max(), "]")
 
-community.simulate_community(200, 1)
+community.simulate_community(1000, 1)
 
 sol = community.ODE_sols[0]
 print("MiCRM: simulation ended at t =", sol.t[-1],
@@ -718,11 +783,18 @@ plt.show()
 
 # %%
 
+#M = 250
+#mu_c = 6.575
+#sigma_c = 0.5788
+#mu_y = 0.8132
+#sigma_y = 1.317
 M = 50
-mu_c = 7.575
-sigma_c = 0.5788
-mu_y = 0.8132
-sigma_y = 1.317
+mu_c = 50
+sigma_c = 30
+mu_y = 1
+sigma_y = 0.6
+#mu_y = 1
+#sigma_y = 0.3
 
 community = Consumer_Resource_Model("Externally-supplied resources",
                                     M,
@@ -739,23 +811,29 @@ rho = pearsonr(community.growth.flatten(),
 print(rho**2, "\n",
       (1/np.sqrt(1 + ((sigma_y/mu_y)**2 * (1 + (mu_c**2 / (sigma_c**2 * M))))))**2)
 
-community.model_specific_rates()
+community.model_specific_rates(influx_method = "constant",
+                               influx_args = {'b' : 10**(-3.5)},
+                               outflux_method = "constant",
+                               outflux_args = {'o' : 10**(-3.5)})
 
 community.simulate_community(7000, 1)
 community.calculate_community_properties()
 surviving_consumers, _ = np.histogram(community.ODE_sols[0].y[:M, -1],
                                       M)
 print(rho**2 - (M - surviving_consumers[0])/M)
+print(rho**2 - community.species_survival_fraction[0]/community.resource_survival_fraction[0])
 
 lyapunov_exponent = max_le(community,
                            community.ODE_sols[0].y[:, -1],
                            T = 1000,
                            perturbation = 1e-6)
 
+# %%
 fig, ax = plt.subplots(1, 1)
 
 plt.plot(community.ODE_sols[0].t,
          community.ODE_sols[0].y[:M, :].T)
+#plt.ylim([0, 0.04])
 plt.show()
     
 

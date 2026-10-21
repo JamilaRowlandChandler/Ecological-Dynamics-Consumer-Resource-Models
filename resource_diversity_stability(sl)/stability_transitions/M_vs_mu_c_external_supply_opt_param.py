@@ -30,7 +30,20 @@ class SimulationTimeout(Exception):
 class SimulationFailed(Exception):
     pass
 
-EXTINCTION_THRESHOLD = 1e-4   # used only to detect communities where all consumers are extinct
+class CommunityInfeasible(Exception):
+    pass
+
+EXTINCTION_THRESHOLD = 1e-4
+MIN_SURVIVING_CONSUMERS = 5      # a community is infeasible if surviving consumers <= 5
+MAX_SIGN_MISMATCH_PERCENT = 10   # ... or if >= 10% of growth/consumption pairs have opposite signs
+
+def pos_neg_growth_consumption(consumption,
+                               growth):
+
+    tot_sign_mismatch = np.sum((growth.flatten() < 0) & (consumption.T.flatten() > 0)) + \
+                        np.sum((growth.flatten() > 0) & (consumption.T.flatten() < 0))
+
+    return tot_sign_mismatch
 
 def instability_distance(M,
                          mu_c, sigma_c,
@@ -39,6 +52,8 @@ def instability_distance(M,
     """
     timeout : wall-clock limit in seconds for the ODE integration of this one
     community (None = no limit). Raises SimulationTimeout if exceeded.
+
+    Raises SimulationFailed / CommunityInfeasible if the community is infeasible.
     """
     
     community = Consumer_Resource_Model("Externally-supplied resources",
@@ -51,8 +66,15 @@ def instability_distance(M,
                                        mu_g = mu_y,
                                        sigma_g = sigma_y)
     
+    # checked before simulating, since it only depends on the sampled rates
+    sign_mismatch_percent = 100 * pos_neg_growth_consumption(community.consumption,
+                                                             community.growth) / M**2
+    if sign_mismatch_percent >= MAX_SIGN_MISMATCH_PERCENT:
+
+        raise CommunityInfeasible(f"{sign_mismatch_percent:.1f}% sign mismatches")
+
     community.model_specific_rates()
-    
+
     if timeout is not None:
         # solve_ivp calls self.model at every step, so shadowing it with a wrapper
         # that checks the clock lets us abort a stalled (e.g. stiff) integration.
@@ -65,16 +87,13 @@ def instability_distance(M,
         community.model = model_with_deadline
     
     community.simulate_community(2000, 1)
-    # status != 0 means solve_ivp stopped early (e.g. the unbounded-growth event).
-    # With t_eval only t = 0 is stored in that case, so the community would look like
-    # every species/resource survived and the metrics would be meaningless.
+
     if community.ODE_sols[0].status != 0:
+        
         raise SimulationFailed(f"solver stopped early: {community.ODE_sols[0].message}")
     
-    # discard communities where every consumer has gone extinct: rho**2 and the packing
-    # ratio are then both ~0, and a survivor count that is relative to the abundance
-    # range (e.g. a histogram of final abundances) would wrongly report ~M survivors
     if np.all(community.ODE_sols[0].y[:M, -1] < EXTINCTION_THRESHOLD):
+        
         raise SimulationFailed("all consumers extinct")
     
     community.calculate_community_properties()
@@ -86,23 +105,12 @@ def instability_distance(M,
     final_consumer_distribution, _ = np.histogram(community.ODE_sols[0].y[:M, -1],
                                                   bins=M)
     surviving_consumers = M - final_consumer_distribution[0]
-    #t_end_act = community.ODE_sols[0].t[-1]
-    
-    return instability_distance, surviving_consumers #, t_end_act
 
-def unpack_is_sc(is_sc_M):
-    
-    # mean of |instability distance| over communities, so that positive and negative
-    # values from different communities cannot cancel each other out
-    is_M = [np.mean([np.abs(is_sc_comm[0])
-                     for is_sc_comm in is_cs])
-            for is_cs in is_sc_M]
-    
-    sc_M = [np.mean([is_sc_comm[1]
-                     for is_sc_comm in is_cs])
-            for is_cs in is_sc_M]
-    
-    return is_M, sc_M
+    if surviving_consumers <= MIN_SURVIVING_CONSUMERS:
+
+        raise CommunityInfeasible(f"{surviving_consumers} surviving consumers")
+
+    return instability_distance, surviving_consumers
 
 def instability_distance_M(mu_c, sigma_c,
                            mu_y, sigma_y,
@@ -111,49 +119,75 @@ def instability_distance_M(mu_c, sigma_c,
                            timeout = None,
                            eval_timeout = None):
     """
+    An M is feasible only if all of its communities are feasible. At an M where a
+    community is infeasible, the remaining communities aren't simulated, and
+    min_is_M / min_sc_M are taken over the feasible Ms only.
+
     timeout : wall-clock limit (s) for each single community simulation.
     eval_timeout : wall-clock limit (s) for this whole call (all Ms x communities);
-    each simulation gets whatever is left of it, so a call can't run for hours
-    when many simulations each take just under `timeout`.
-    """
-    
-    deadline = None if eval_timeout is None else time.time() + eval_timeout
-    
-    def sim_timeout():
-        if deadline is None:
-            return timeout
-        remaining = deadline - time.time()
-        if remaining <= 0:
-            raise SimulationTimeout(f"evaluation exceeded {eval_timeout} s")
-        return remaining if timeout is None else min(timeout, remaining)
-    
-    is_sc_M = [[instability_distance(M, mu_c, sigma_c, mu_y, sigma_y,
-                                     timeout = sim_timeout())
-                for _ in range(no_communities)]
-               for M in Ms]
-    
-    is_M, sc_M = unpack_is_sc(is_sc_M)
-    
-    min_is_M = np.min(is_M)
-    min_sc_M = np.min(sc_M)
+    once it runs out, the remaining Ms count as infeasible.
 
-    return min_is_M, min_sc_M
+    Returns a dict with
+        min_is_M : min over feasible Ms of mean |instability distance| (nan if none)
+        min_sc_M : min over feasible Ms of mean surviving consumers (nan if none)
+        feasible_Ms : list of feasible Ms
+        max_feasible_fraction : largest fraction of communities feasible at any M
+            (used to grade candidates with no feasible M)
+    """
+
+    deadline = None if eval_timeout is None else time.time() + eval_timeout
+
+    is_M, sc_M, feasible_Ms, feasible_fractions = [], [], [], []
+
+    for M in Ms:
+
+        is_sc = []
+
+        for _ in range(no_communities):
+
+            if deadline is None:
+                sim_timeout = timeout
+            else:
+                remaining = deadline - time.time()
+                if remaining <= 0:
+                    break
+                sim_timeout = remaining if timeout is None else min(timeout, remaining)
+
+            try:
+                is_sc.append(instability_distance(M, mu_c, sigma_c, mu_y, sigma_y,
+                                                  timeout = sim_timeout))
+            except Exception:
+                # timeout, failed solve or infeasible community -> this M is infeasible
+                break
+
+        feasible_fractions.append(len(is_sc) / no_communities)
+
+        if len(is_sc) == no_communities:
+
+            feasible_Ms.append(M)
+            # mean of |instability distance|, so signs from different communities can't cancel
+            is_M.append(np.mean([np.abs(i) for i, _ in is_sc]))
+            sc_M.append(np.mean([sc for _, sc in is_sc]))
+
+        if deadline is not None and time.time() >= deadline:
+            break
+
+    return dict(min_is_M = np.min(is_M) if is_M else np.nan,
+                min_sc_M = np.min(sc_M) if sc_M else np.nan,
+                feasible_Ms = feasible_Ms,
+                max_feasible_fraction = max(feasible_fractions, default = 0.0))
 
 #%% Objective and constraint
 
-# Parameter order: [mu_c, sigma_c, mu_y, sigma_y].
-# All four must be > 0, enforced through strictly positive lower bounds.
-# The upper bounds are placeholders - adjust to the range you want to explore.
 PARAM_NAMES = ["mu_c", "sigma_c", "mu_y", "sigma_y"]
 BOUNDS = [(1e-3, 400.0),  # mu_c
           (1e-3, 400.0),  # sigma_c
           (1e-3, 5.0),    # mu_y
           (1e-3, 3.0)]    # sigma_y
 
-MIN_SURVIVING_CONSUMERS = 4   # constraint: min_sc_M > 4
-SIMULATION_TIMEOUT = 60       # seconds allowed per single community simulation
+SIMULATION_TIMEOUT= 60       # seconds allowed per single community simulation
 EVALUATION_TIMEOUT = 600      # seconds allowed per objective evaluation (all Ms x communities)
-INFEASIBLE_BASE = 10.0        # added to infeasible candidates so that they always
+INFEASIBLE_BASE = 10.0        # score for candidates with no feasible M, so they always
                               # score worse than any feasible one (|instability
                               # distance| is O(1), so any value >> 1 works)
 
@@ -163,37 +197,29 @@ def constrained_objective(params,
                           timeout = SIMULATION_TIMEOUT,
                           eval_timeout = EVALUATION_TIMEOUT):
     """
-    Objective to minimise: min_is_M, subject to min_sc_M > 4.
+    Objective to minimise: min_is_M over the feasible Ms.
 
-    The constraint is handled with a penalty rather than scipy's
-    NonlinearConstraint, because a NonlinearConstraint evaluates the (expensive)
-    simulation a second time per candidate. Here each candidate is simulated once.
-    Infeasible candidates get INFEASIBLE_BASE + shortfall, so the search is
-    still pushed towards the feasible region (larger min_sc_M) rather than
-    seeing a flat plateau.
+    A community is infeasible if its simulation fails or times out, all consumers go
+    extinct, <= MIN_SURVIVING_CONSUMERS consumers survive, or >= MAX_SIGN_MISMATCH_PERCENT
+    of its growth/consumption pairs have opposite signs. An M is feasible if all its
+    communities are. A candidate is only rejected if no M is feasible: it then scores
+    INFEASIBLE_BASE + (1 - max_feasible_fraction), so the search is still pushed
+    towards candidates where more communities are feasible.
     """
 
     mu_c, sigma_c, mu_y, sigma_y = params
 
-    try:
-        min_is_M, min_sc_M = instability_distance_M(mu_c, sigma_c,
-                                                    mu_y, sigma_y,
-                                                    Ms = Ms,
-                                                    no_communities = no_communities,
-                                                    timeout = timeout,
-                                                    eval_timeout = eval_timeout)
-    except Exception:
-        # timed-out simulation (SimulationTimeout), failed ODE solve or other
-        # numerical problem -> treat as worst-case candidate
-        return INFEASIBLE_BASE + MIN_SURVIVING_CONSUMERS
+    result = instability_distance_M(mu_c, sigma_c,
+                                    mu_y, sigma_y,
+                                    Ms = Ms,
+                                    no_communities = no_communities,
+                                    timeout = timeout,
+                                    eval_timeout = eval_timeout)
 
-    if not np.isfinite(min_is_M) or not np.isfinite(min_sc_M):
-        return INFEASIBLE_BASE + MIN_SURVIVING_CONSUMERS
+    if not result["feasible_Ms"] or not np.isfinite(result["min_is_M"]):
+        return INFEASIBLE_BASE + (1 - result["max_feasible_fraction"])
 
-    if min_sc_M <= MIN_SURVIVING_CONSUMERS:
-        return INFEASIBLE_BASE + (MIN_SURVIVING_CONSUMERS - min_sc_M)
-
-    return min_is_M
+    return result["min_is_M"]
 
 #%% DIRECT, then Nelder-Mead (best protocol in trial runs)
 
@@ -225,9 +251,8 @@ def run_direct_nelder_mead(direct_maxfun = 50,
                            nm_step = 0.2,     # initial simplex size, in log10 units
                            seed = CRN_SEED):
     """
-    Stage 1 protocol: DIRECT (deterministic global search) over the whole log10 box,
+    DIRECT (deterministic global search) over the whole log10 box,
     then a bounded Nelder-Mead refinement starting from the best DIRECT point.
-    Both stages use the same CRN seed. Runs serially (each stage is sequential).
     
     Returns (best parameters in linear space, best objective, history), where history
     lists (stage, objective, parameters) for every evaluation.
@@ -264,18 +289,15 @@ def run_direct_nelder_mead(direct_maxfun = 50,
 def validate_candidate(params, seeds = (1, 2, 3, 4, 5)):
     """
     Re-evaluate a candidate with fresh random seeds (not the CRN seed it was optimised on).
-    Returns a list of (min_is_M, min_sc_M) per seed, or the exception name if it failed.
+    Returns the instability_distance_M result dict for each seed.
     """
     
     results = []
     for seed in seeds:
         np.random.seed(seed)
-        try:
-            results.append(instability_distance_M(*params,
-                                                  timeout = SIMULATION_TIMEOUT,
-                                                  eval_timeout = EVALUATION_TIMEOUT))
-        except Exception as e:
-            results.append(type(e).__name__)
+        results.append(instability_distance_M(*params,
+                                              timeout = SIMULATION_TIMEOUT,
+                                              eval_timeout = EVALUATION_TIMEOUT))
     
     return results
 
@@ -287,7 +309,8 @@ if __name__ == "__main__":
 
     # the optimum is tuned to one seed, so re-score it with fresh seeds
     for seed, result in zip((1, 2, 3, 4, 5), validate_candidate(best_params)):
-        print(f"fresh seed {seed}: (min_is_M, min_sc_M) = {result}")
+        print(f"fresh seed {seed}: min_is_M = {result['min_is_M']:.5f}, "
+              f"min_sc_M = {result['min_sc_M']:.1f}, feasible Ms = {result['feasible_Ms']}")
 
     plt.plot([h[1] for h in history], ".")
     plt.yscale("log")
