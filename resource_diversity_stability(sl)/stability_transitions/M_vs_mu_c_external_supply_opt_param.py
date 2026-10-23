@@ -8,13 +8,19 @@ Created on Wed Oct 14 13:06:42 2026
 import os
 import sys
 import time
+import pickle
 from matplotlib import pyplot as plt
 import numpy as np
 from copy import deepcopy
 from scipy.stats import pearsonr, norm
 from scipy.optimize import direct, minimize
 
-os.chdir("C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/consumer_resource_modules")
+# find consumer_resource_modules relative to this file, so it also runs on the cluster
+try:
+    _repo_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+except NameError:   # __file__ isn't defined, e.g. code pasted into a console
+    _repo_dir = "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models"
+sys.path.insert(0, os.path.join(_repo_dir, "consumer_resource_modules"))
 
 from models import Consumer_Resource_Model
 
@@ -35,8 +41,8 @@ class SolverTerminatedEarly(Exception):
 
 EXTINCTION_THRESHOLD = 1e-4
 MIN_SURVIVING_CONSUMERS = 5      # constraint: min_sc_M > 5
-MAX_SIGN_MISMATCH_PERCENT = 10   # constraint: every community has < 10% of growth/consumption
-                                 # pairs with opposite signs
+MAX_SIGN_MISMATCH_PERCENT = 10   # constraint: expected % of growth/consumption pairs with
+                                 # opposite signs < 10
 
 def pos_neg_growth_consumption(consumption,
                                growth):
@@ -45,6 +51,12 @@ def pos_neg_growth_consumption(consumption,
                         np.sum((growth.flatten() > 0) & (consumption.T.flatten() < 0))
 
     return tot_sign_mismatch
+
+def expected_sign_mismatch_percent(mu_y, sigma_y):
+
+    # growth = yield * consumption, so a growth rate has the opposite sign to its
+    # consumption rate exactly when the yield is negative: P(yield < 0) = Phi(-mu_y/sigma_y)
+    return 100 * norm.cdf(-mu_y / sigma_y)
 
 def instability_distance(M,
                          mu_c, sigma_c,
@@ -56,8 +68,8 @@ def instability_distance(M,
 
     Raises SolverTerminatedEarly if solve_ivp stops before t_end (e.g. the
     unbounded-growth event): the community's results are then meaningless and are
-    dropped by instability_distance_M. Raises SimulationFailed if the sign-mismatch
-    constraint fails or all consumers go extinct, which rejects the whole candidate.
+    dropped by instability_distance_M. Raises SimulationFailed if all consumers go
+    extinct, which rejects the whole candidate.
     """
     
     community = Consumer_Resource_Model("Externally-supplied resources",
@@ -70,13 +82,6 @@ def instability_distance(M,
                                        mu_g = mu_y,
                                        sigma_g = sigma_y)
     
-    # checked before simulating, since it only depends on the sampled rates
-    sign_mismatch_percent = 100 * pos_neg_growth_consumption(community.consumption,
-                                                             community.growth) / M**2
-    if sign_mismatch_percent >= MAX_SIGN_MISMATCH_PERCENT:
-
-        raise SimulationFailed(f"{sign_mismatch_percent:.1f}% sign mismatches")
-
     community.model_specific_rates()
 
     if timeout is not None:
@@ -120,8 +125,8 @@ def instability_distance_M(mu_c, sigma_c,
     Communities where the solver terminates early are dropped: their instability
     distance and surviving consumers aren't used anywhere. Each M is summarised over
     its remaining (completed) communities; Ms where every community terminated early
-    are left out. Any other failure (timeout, sign-mismatch constraint, all consumers
-    extinct) propagates and rejects the whole candidate.
+    are left out. Any other failure (timeout, all consumers extinct) propagates and
+    rejects the whole candidate.
 
     timeout : wall-clock limit (s) for each single community simulation.
     eval_timeout : wall-clock limit (s) for this whole call (all Ms x communities);
@@ -202,8 +207,9 @@ def constrained_objective(params,
 
     Communities where the solver terminates early are ignored. A candidate is rejected
     (scored >= INFEASIBLE_BASE, so it is always worse than an accepted one) if:
-        - a simulation times out, a community has >= MAX_SIGN_MISMATCH_PERCENT sign
-          mismatches, or all consumers in a community go extinct;
+        - the expected sign mismatch is >= MAX_SIGN_MISMATCH_PERCENT (checked first,
+          without simulating);
+        - a simulation times out, or all consumers in a community go extinct;
         - no M has all of its communities completing;
         - min_sc_M <= MIN_SURVIVING_CONSUMERS.
     The rejection scores are graded (by the completed fraction / survivor shortfall),
@@ -211,6 +217,9 @@ def constrained_objective(params,
     """
 
     mu_c, sigma_c, mu_y, sigma_y = params
+
+    if expected_sign_mismatch_percent(mu_y, sigma_y) >= MAX_SIGN_MISMATCH_PERCENT:
+        return INFEASIBLE_BASE + MIN_SURVIVING_CONSUMERS
 
     try:
         result = instability_distance_M(mu_c, sigma_c,
@@ -220,8 +229,8 @@ def constrained_objective(params,
                                         timeout = timeout,
                                         eval_timeout = eval_timeout)
     except Exception:
-        # timeout, sign-mismatch constraint, all consumers extinct, or another
-        # numerical problem -> treat as worst-case candidate
+        # timeout, all consumers extinct, or another numerical problem
+        # -> treat as worst-case candidate
         return INFEASIBLE_BASE + MIN_SURVIVING_CONSUMERS
 
     if not result["complete_Ms"]:
@@ -247,8 +256,7 @@ def crn_objective(log_params, seed = CRN_SEED):
     constrained_objective in log10 space with a fixed random seed (common random numbers).
     
     Fixing the seed makes the objective deterministic in the parameters, so DIRECT and
-    Nelder-Mead see a consistent landscape instead of fresh noise at every call. The
-    result is optimised for this one seed, so check it with validate_candidate().
+    Nelder-Mead see a consistent landscape instead of fresh noise at every call.
     """
     
     log_params = np.clip(log_params, *np.array(LOG_BOUNDS).T)
@@ -300,42 +308,14 @@ def run_direct_nelder_mead(direct_maxfun = 50,
     
     return best[2], best[1], history
 
-def validate_candidate(params, seeds = (1, 2, 3, 4, 5)):
-    """
-    Re-evaluate a candidate with fresh random seeds (not the CRN seed it was optimised on).
-    Returns the instability_distance_M result dict for each seed, or the exception
-    name if the candidate was rejected outright (timeout, sign mismatches, extinction).
-    """
-    
-    results = []
-    for seed in seeds:
-        np.random.seed(seed)
-        try:
-            results.append(instability_distance_M(*params,
-                                                  timeout = SIMULATION_TIMEOUT,
-                                                  eval_timeout = EVALUATION_TIMEOUT))
-        except Exception as e:
-            results.append(type(e).__name__)
-    
-    return results
-
 if __name__ == "__main__":
+
     best_params, best_f, history = run_direct_nelder_mead()
 
     print("\nBest parameters:", dict(zip(PARAM_NAMES, best_params)))
-    print(f"Best objective (CRN seed {CRN_SEED}): {best_f:.5f}")
+    print(f"Best objective: {best_f:.5f}")
 
-    # the optimum is tuned to one seed, so re-score it with fresh seeds
-    for seed, result in zip((1, 2, 3, 4, 5), validate_candidate(best_params)):
-        if isinstance(result, str):
-            print(f"fresh seed {seed}: rejected ({result})")
-        else:
-            print(f"fresh seed {seed}: min_is_M = {result['min_is_M']:.5f}, "
-                  f"min_sc_M = {result['min_sc_M']:.1f}, complete Ms = {result['complete_Ms']}, "
-                  f"used Ms = {result['used_Ms']}")
-
-    plt.plot([h[1] for h in history], ".")
-    plt.yscale("log")
-    plt.xlabel("evaluation")
-    plt.ylabel("objective (penalised if infeasible)")
-    plt.show()
+    # every evaluation: (stage, objective, [mu_c, sigma_c, mu_y, sigma_y])
+    with open("opt_param_results.pkl", "wb") as fh:
+        pickle.dump(dict(best_params = best_params, best_objective = best_f,
+                         history = history), fh)
