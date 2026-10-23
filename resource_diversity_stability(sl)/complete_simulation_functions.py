@@ -22,10 +22,19 @@ from ast import literal_eval
 import re
 from json import dumps, loads
 
-sys.path.insert(0, 'C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/consumer_resource_modules')
+# find consumer_resource_modules relative to this file, so it also runs on the cluster
+try:
+    _repo_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+except NameError:   # __file__ isn't defined, e.g. code pasted into a console
+    _repo_dir = 'C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models'
+sys.path.insert(0, os.path.join(_repo_dir, 'consumer_resource_modules'))
 from models import Consumer_Resource_Model
 from effective_LV_models import eLV_SL, eLV_ES, gLV, Effective_LV_Model
 from community_level_properties import max_le, eigenspectrum
+
+# where CRM_across_parameter_space() saves simulations; set the DATA_DIRECTORY
+# environment variable to save somewhere else (e.g. on the cluster)
+DATA_DIRECTORY = os.environ.get("DATA_DIRECTORY", "C:/Users/jamil/Documents/PhD/Data/")
 
 # %%
 
@@ -102,8 +111,7 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
 
     # create the directory where the communities should be saved (if the directory
     #   doesn't already exist)
-    full_directory = "C:/Users/jamil/Documents/PhD/Data/" \
-                        + subdirectory
+    full_directory = os.path.join(DATA_DIRECTORY, subdirectory)
 
     if not os.path.exists(full_directory):
 
@@ -407,6 +415,61 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
 
 #%%
 
+def CRM_across_parameter_space_array(parameter_sets : list[dict],
+                                     subdirectory : str,
+                                     parms_for_filenames : list[str],
+                                     task_id : Union[int, None] = None,
+                                     no_tasks : Union[int, None] = None,
+                                     **kwargs):
+
+    '''
+
+    Run CRM_across_parameter_space() as one task of an array job: this task only
+    simulates parameter_sets[task_id::no_tasks], so tasks 0, ..., no_tasks - 1
+    split the parameter sets between them (interleaved, so slow and fast
+    parameter sets are spread across tasks).
+
+    Parameters
+    ----------
+    parameter_sets, subdirectory, parms_for_filenames, **kwargs
+        As for CRM_across_parameter_space().
+    task_id : int or None, optional
+        This task's index. The default is None: read SLURM_ARRAY_TASK_ID, or, if
+        that isn't set (e.g. running locally), simulate every parameter set.
+    no_tasks : int or None, optional
+        Number of tasks. The default is None: read SLURM_ARRAY_TASK_COUNT, or 1.
+
+    Returns
+    -------
+    None
+
+    '''
+
+    if task_id is None:
+
+        task_id = int(os.environ.get("SLURM_ARRAY_TASK_ID", 0))
+
+    if no_tasks is None:
+
+        no_tasks = int(os.environ.get("SLURM_ARRAY_TASK_COUNT", 1))
+
+    task_parameter_sets = parameter_sets[task_id::no_tasks]
+
+    if len(task_parameter_sets) == 0:
+
+        print(f"task {task_id}: no parameter sets to simulate")
+        return
+
+    # create the directory first (exist_ok, since several tasks may do this at once)
+    os.makedirs(os.path.join(DATA_DIRECTORY, subdirectory), exist_ok = True)
+
+    CRM_across_parameter_space(task_parameter_sets,
+                               subdirectory,
+                               parms_for_filenames,
+                               **kwargs)
+
+#%%
+
 def CRMs_create_and_save(subdirectory : str,
                          filename : str,
                          init_class : list[dict[str : int]],
@@ -474,14 +537,13 @@ def CRMs_create_and_save(subdirectory : str,
 
         case 'v1':
 
-            pickle_dump("C:/Users/jamil/Documents/PhD/Data/" + \
-                         subdirectory + "/" + filename + ".pkl",
+            pickle_dump(os.path.join(DATA_DIRECTORY, subdirectory, filename + ".pkl"),
                          communities)
 
         case 'v2':
 
             save_models(communities,
-                        "C:/Users/jamil/Documents/PhD/Data/" + subdirectory,
+                        os.path.join(DATA_DIRECTORY, subdirectory),
                         filename)
 
         case 'v3':
@@ -498,8 +560,7 @@ def CRMs_create_and_save(subdirectory : str,
                                                     init_class['model'],
                                                     growth_consumption_rates_args['method'])
 
-            df.to_csv("C:/Users/jamil/Documents/PhD/Data/" + \
-                         subdirectory + "/" + filename + ".csv")
+            df.to_csv(os.path.join(DATA_DIRECTORY, subdirectory, filename + ".csv"))
 
     del communities
 

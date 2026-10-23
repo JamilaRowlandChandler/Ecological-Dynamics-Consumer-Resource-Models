@@ -12,14 +12,16 @@ from typing import Literal, Union
 import numpy.typing as npt
 from copy import deepcopy
 
-os.chdir("C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/" + \
-         "resource_diversity_stability(sl)/stability_transitions")
-    
-sys.path.insert(0, "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/" + \
-                    "resource_diversity_stability(sl)")
-from complete_simulation_functions import CRM_across_parameter_space
+# find the other code directories relative to this file, so it also runs on the cluster
+try:
+    _repo_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+except NameError:   # __file__ isn't defined, e.g. code pasted into a console
+    _repo_dir = "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models"
 
-sys.path.insert(0, 'C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/cavity_method_functions')
+sys.path.insert(0, os.path.join(_repo_dir, "resource_diversity_stability(sl)"))
+from complete_simulation_functions import CRM_across_parameter_space_array
+
+sys.path.insert(0, os.path.join(_repo_dir, "cavity_method_functions"))
 import self_consistency_equation_functions as sce
 
 # %%
@@ -34,13 +36,15 @@ def M_effect_fixed_C(M_range : Union[npt.NDArray, list],
                                          mu_c_range,
                                          fixed_parameters)
             
-    CRM_across_parameter_space(parameters,
-                               "resource_diversity_stability/simulations/" + \
-                                   subdirectory,
-                               ['M', 'mu_c_tot'],
-                               model = 'Externally-supplied resources',
-                               save_method = 'v3',
-                               **kwargs)
+    # as a SLURM array job, each task simulates its share of the parameter sets;
+    #   run locally, every parameter set is simulated
+    CRM_across_parameter_space_array(parameters,
+                                     "resource_diversity_stability/simulations/" + \
+                                         subdirectory,
+                                     ['M', 'mu_c_tot'],
+                                     model = 'Externally-supplied resources',
+                                     save_method = 'v3',
+                                     **kwargs)
                     
 # %%
 
