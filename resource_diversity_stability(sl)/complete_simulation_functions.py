@@ -415,6 +415,34 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
 
 #%%
 
+def array_task_from_environment():
+
+    '''
+
+    Work out which task of a Grid Engine (SGE) array job this is, from the
+    environment variables SGE sets for each task. Returns (task_id, no_tasks),
+    with task_id counting from 0.
+
+    SGE numbers tasks SGE_TASK_FIRST, ..., SGE_TASK_LAST in steps of
+    SGE_TASK_STEPSIZE (e.g. 1, ..., 10 for "#$ -t 1-10"), so they're converted
+    to 0, ..., no_tasks - 1. SGE sets SGE_TASK_ID to "undefined" for jobs that
+    aren't arrays; if it's that or not set at all (e.g. running locally), this
+    returns (0, 1), i.e. one task that does everything.
+
+    '''
+
+    sge_task_id = os.environ.get("SGE_TASK_ID", "undefined")
+
+    if sge_task_id == "undefined":
+
+        return 0, 1
+
+    first = int(os.environ.get("SGE_TASK_FIRST", 1))
+    last = int(os.environ.get("SGE_TASK_LAST", sge_task_id))
+    step = int(os.environ.get("SGE_TASK_STEPSIZE", 1))
+
+    return (int(sge_task_id) - first) // step, (last - first) // step + 1
+
 def CRM_across_parameter_space_array(parameter_sets : list[dict],
                                      subdirectory : str,
                                      parms_for_filenames : list[str],
@@ -434,10 +462,11 @@ def CRM_across_parameter_space_array(parameter_sets : list[dict],
     parameter_sets, subdirectory, parms_for_filenames, **kwargs
         As for CRM_across_parameter_space().
     task_id : int or None, optional
-        This task's index. The default is None: read SLURM_ARRAY_TASK_ID, or, if
-        that isn't set (e.g. running locally), simulate every parameter set.
+        This task's index, counting from 0. The default is None: work it out from
+        Grid Engine (see array_task_from_environment()), or, if not running as an
+        array job (e.g. locally), simulate every parameter set.
     no_tasks : int or None, optional
-        Number of tasks. The default is None: read SLURM_ARRAY_TASK_COUNT, or 1.
+        Number of tasks. The default is None: work it out from Grid Engine, or 1.
 
     Returns
     -------
@@ -445,19 +474,23 @@ def CRM_across_parameter_space_array(parameter_sets : list[dict],
 
     '''
 
+    env_task_id, env_no_tasks = array_task_from_environment()
+
     if task_id is None:
 
-        task_id = int(os.environ.get("SLURM_ARRAY_TASK_ID", 0))
+        task_id = env_task_id
 
     if no_tasks is None:
 
-        no_tasks = int(os.environ.get("SLURM_ARRAY_TASK_COUNT", 1))
+        no_tasks = env_no_tasks
+
+    print(f"array task {task_id + 1} of {no_tasks}", flush = True)
 
     task_parameter_sets = parameter_sets[task_id::no_tasks]
 
     if len(task_parameter_sets) == 0:
 
-        print(f"task {task_id}: no parameter sets to simulate")
+        print(f"array task {task_id + 1} of {no_tasks}: no parameter sets to simulate")
         return
 
     # create the directory first (exist_ok, since several tasks may do this at once)
