@@ -40,7 +40,7 @@ class SolverTerminatedEarly(Exception):
     pass
 
 EXTINCTION_THRESHOLD = 1e-4
-MIN_SURVIVING_CONSUMERS = 5      # constraint: min_sc_M > 5
+MIN_SURVIVING_CONSUMERS = 4      # constraint: min_sc_M > 4
 MAX_SIGN_MISMATCH_PERCENT = 10   # constraint: expected % of growth/consumption pairs with
                                  # opposite signs < 10
 
@@ -61,8 +61,10 @@ def expected_sign_mismatch_percent(mu_y, sigma_y):
 def instability_distance(M,
                          mu_c, sigma_c,
                          mu_y, sigma_y,
+                         influx = 1.0, outflux = 1.0,
                          timeout = None):
     """
+    influx, outflux : resource influx (b) and outflux (o) rates.
     timeout : wall-clock limit in seconds for the ODE integration of this one
     community (None = no limit). Raises SimulationTimeout if exceeded.
 
@@ -82,7 +84,8 @@ def instability_distance(M,
                                        mu_g = mu_y,
                                        sigma_g = sigma_y)
     
-    community.model_specific_rates()
+    community.model_specific_rates(influx_args = {'b' : influx},
+                                   outflux_args = {'o' : outflux})
 
     if timeout is not None:
         # solve_ivp calls self.model at every step, so shadowing it with a wrapper
@@ -117,6 +120,7 @@ def instability_distance(M,
 
 def instability_distance_M(mu_c, sigma_c,
                            mu_y, sigma_y,
+                           influx = 1.0, outflux = 1.0,
                            Ms = np.arange(50, 275, 25),
                            no_communities = 5,
                            timeout = None,
@@ -160,6 +164,7 @@ def instability_distance_M(mu_c, sigma_c,
 
             try:
                 is_sc.append(instability_distance(M, mu_c, sigma_c, mu_y, sigma_y,
+                                                  influx = influx, outflux = outflux,
                                                   timeout = sim_timeout()))
             except SolverTerminatedEarly:
                 continue
@@ -185,11 +190,20 @@ def instability_distance_M(mu_c, sigma_c,
 
 #%% Objective and constraint
 
-PARAM_NAMES = ["mu_c", "sigma_c", "mu_y", "sigma_y"]
-BOUNDS = [(1e-3, 400.0),  # mu_c
-          (1e-3, 400.0),  # sigma_c
-          (1e-3, 5.0),    # mu_y
-          (1e-3, 3.0)]    # sigma_y
+# fixed parameters
+MU_C = 50.0
+MU_Y = 1.0
+
+# largest sigma_y allowed by the sign-mismatch constraint:
+#   100*Phi(-mu_y/sigma_y) < MAX_SIGN_MISMATCH_PERCENT  <=>  sigma_y < mu_y/Phi^-1(1 - MAX/100)
+SIGMA_Y_MAX = MU_Y / norm.ppf(1 - MAX_SIGN_MISMATCH_PERCENT/100)   # ~0.78 for mu_y = 1
+
+# fitted parameters (all > 0, enforced by the strictly positive lower bounds)
+PARAM_NAMES = ["sigma_c", "sigma_y", "influx", "outflux"]
+BOUNDS = [(1e-3, 400.0),          # sigma_c
+          (1e-3, SIGMA_Y_MAX),    # sigma_y
+          (1e-3, 400.0),  # influx (b)
+          (1e-3, 400.0)]  # outflux (o)
 
 SIMULATION_TIMEOUT= 60       # seconds allowed per single community simulation
 EVALUATION_TIMEOUT = 600      # seconds allowed per objective evaluation (all Ms x communities)
@@ -204,6 +218,7 @@ def constrained_objective(params,
                           eval_timeout = EVALUATION_TIMEOUT):
     """
     Objective to minimise: min_is_M, over the Ms with completed communities.
+    params = [sigma_c, sigma_y, influx, outflux]; mu_c = MU_C and mu_y = MU_Y are fixed.
 
     Communities where the solver terminates early are ignored. A candidate is rejected
     (scored >= INFEASIBLE_BASE, so it is always worse than an accepted one) if:
@@ -216,7 +231,8 @@ def constrained_objective(params,
     so the search is still pushed towards acceptable candidates.
     """
 
-    mu_c, sigma_c, mu_y, sigma_y = params
+    sigma_c, sigma_y, influx, outflux = params
+    mu_c, mu_y = MU_C, MU_Y
 
     if expected_sign_mismatch_percent(mu_y, sigma_y) >= MAX_SIGN_MISMATCH_PERCENT:
         return INFEASIBLE_BASE + MIN_SURVIVING_CONSUMERS
@@ -224,6 +240,7 @@ def constrained_objective(params,
     try:
         result = instability_distance_M(mu_c, sigma_c,
                                         mu_y, sigma_y,
+                                        influx = influx, outflux = outflux,
                                         Ms = Ms,
                                         no_communities = no_communities,
                                         timeout = timeout,
@@ -312,10 +329,12 @@ if __name__ == "__main__":
 
     best_params, best_f, history = run_direct_nelder_mead()
 
-    print("\nBest parameters:", dict(zip(PARAM_NAMES, best_params)))
+    print(f"\nFixed: mu_c = {MU_C}, mu_y = {MU_Y}")
+    print("Best parameters:", dict(zip(PARAM_NAMES, best_params)))
     print(f"Best objective: {best_f:.5f}")
 
     # every evaluation: (stage, objective, [mu_c, sigma_c, mu_y, sigma_y])
     with open("opt_param_results.pkl", "wb") as fh:
-        pickle.dump(dict(best_params = best_params, best_objective = best_f,
-                         history = history), fh)
+        pickle.dump(dict(best_params = dict(zip(PARAM_NAMES, best_params)),
+                         fixed_params = dict(mu_c = MU_C, mu_y = MU_Y),
+                         best_objective = best_f, history = history), fh)
