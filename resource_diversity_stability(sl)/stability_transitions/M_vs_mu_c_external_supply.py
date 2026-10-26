@@ -36,7 +36,7 @@ def M_effect_fixed_C(M_range : Union[npt.NDArray, list],
                                          mu_c_range,
                                          fixed_parameters)
             
-    # as a SLURM array job, each task simulates its share of the parameter sets;
+    # as a cluster array job, each task simulates its share of the parameter sets;
     #   run locally, every parameter set is simulated
     CRM_across_parameter_space_array(parameters,
                                      "resource_diversity_stability/simulations/" + \
