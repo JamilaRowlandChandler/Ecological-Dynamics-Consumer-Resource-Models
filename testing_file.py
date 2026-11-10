@@ -235,15 +235,6 @@ community_df = simulation_df_from_communities([community, community],
 
 # %% MiCRM - single community
 
-S = 100
-M = 100
-mu = 50
-sigma = 3
-rho = 0.01
-d = 1
-b = 1
-o = 0.01
-
 def correlated_uniforms(S, M,
                         rho,
                         mu,
@@ -291,10 +282,19 @@ def correlated_lognormals(S, M,
     
 
 # Example
-growth, consumption = correlated_uniforms(S, M,
-                                          rho,
-                                          mu,
-                                          sigma)
+#growth, consumption = correlated_uniforms(S, M,
+#                                          rho,
+#                                          mu,
+#                                          sigma)
+
+S = 150
+M = 150
+mu = 50
+sigma = 13.0
+rho = 0.6
+d = 1
+b = 1
+o = 0.05
 
 community = Consumer_Resource_Model("MiCRM", S, M)
 
@@ -308,18 +308,18 @@ community.growth_consumption_rates('coupled by rho',
                                    #consumption = consumption,
                                    #growth = growth)
 
-community.metabolic_rates(energy_method = 'user-supplied',
-                          energy_args = {'w' : np.random.uniform(0.1, 1, 
-                                                                 (M, ))},
+community.metabolic_rates(#energy_method = 'user-supplied',
+                          #energy_args = {'w' : np.random.uniform(0.1, 1, 
+                          #                                       (M, ))},
                           metabolic_method = 'dirichlet',
                           metabolic_args = {'s' : 0.05},
                           leakage_method = 'constant',
                           leakage_args = {'l' : 0.7})
 
 community.model_specific_rates(death_method = 'constant',
-                               death_args = {'d' : d},
+                               death_args = {'d' : 1.0},
                                influx_method = 'one-in',
-                               influx_args = {'b' : b},
+                               influx_args = {'b' : 3},
                                outflux_method = 'constant',
                                outflux_args = {'o' : o})
 
@@ -328,8 +328,8 @@ community.model_specific_rates(death_method = 'constant',
 #                              int(0.1*M))] = b
 
 # metabolic matrix columns should sum to 1 (mass conservation)
-print("MiCRM: D column sums in [", community.D.sum(axis = 0).min(), ",",
-      community.D.sum(axis = 0).max(), "]")
+#print("MiCRM: D column sums in [", community.D.sum(axis = 0).min(), ",",
+ #     community.D.sum(axis = 0).max(), "]")
 
 community.simulate_community(1000, 1)
 
@@ -344,9 +344,27 @@ axs[1].plot(sol.t, sol.y[S:, :].T)
 axs[1].set_title("MiCRM resources")
 plt.show()
 
-#community.lyapunov_exponent = max_le(community, sol.y[:, -1],
-#                                     T = 1000, perturbation = 1e-6)
-#print("MiCRM: max. Lyapunov exponent =", community.lyapunov_exponent)
+community = Consumer_Resource_Model("Externally-supplied resources",
+                                    S,
+                                    M)
+
+community.growth_consumption_rates('coupled by rho',
+                                   mu_c = mu/M,
+                                   sigma_c = sigma/np.sqrt(M),
+                                   mu_g = mu/M,
+                                   sigma_g = sigma/np.sqrt(M),
+                                   rho = rho)
+
+community.model_specific_rates(influx_method = "constant",
+                               influx_args = {'b' : b},
+                               outflux_method = "constant",
+                               outflux_args = {'o' : o})
+
+community.simulate_community(1000, 1)
+
+print("External supply: simulation ended at t =", community.ODE_sols[0].t[-1],
+      "| survivors =", np.sum(community.ODE_sols[0].y[:S, -1] > 1e-4), "/", S)
+
 
 # %% LB_CRM - single community
 
@@ -477,43 +495,62 @@ plt.show()
 
 # %%
 
-M = 150
-mu_a = 0.4
+Ms = np.arange(50, 450, 50)
+mu_a = 0
 sigma_a = 0.1
 
-gLV_community = gLV(M)
-gLV_community.model_specific_rates(growth_method='constant',
-                                   growth_args=dict(r=1.0),
-                                   interaction_method='normal',
-                                   interaction_args=dict(mu=mu_a,
-                                                         sigma=sigma_a),
-                                   self_inhibition_method='constant',
-                                   self_inhibition_args=dict(Aii=1.0))
+les_Ms = []
 
-gLV_community.calculate_interaction_stats()
+for M in Ms:
+    
+    le_list = []
+    
+    for _ in range(10):
 
-# run simulations from randomly generated initial abundances
-gLV_community.simulate_community(t_end = 7000,
-                                 no_init_cond = 1)
-
-fig, ax = plt.subplots(1, 1)
-
-t = gLV_community.ODE_sols[0].t
-y = gLV_community.ODE_sols[0].y
+        gLV_community = gLV(M)
+        gLV_community.model_specific_rates(growth_method='constant',
+                                           growth_args=dict(r=1.0),
+                                           interaction_method='normal',
+                                           interaction_args=dict(mu=mu_a,
+                                                                 sigma=sigma_a),
+                                           self_inhibition_method='constant',
+                                           self_inhibition_args=dict(Aii=1.0))
         
-ax.stackplot(t[10:], y[:, 10:])
+        gLV_community.calculate_interaction_stats()
+        
+        # run simulations from randomly generated initial abundances
+        gLV_community.simulate_community(t_end = 7000,
+                                         no_init_cond = 1)
+        
+        lyapunov_exponent = max_le(gLV_community,
+                                   gLV_community.ODE_sols[0].y[:, -1],
+                                   T = 1000,
+                                   perturbation = 1e-6)
+        
+        le_list.append(lyapunov_exponent)
+        
+    print(dict(M = M,
+              le = le_list))
 
-ax.tick_params(axis="both", which="major", labelsize=7)
-ax.tick_params(axis="both", which="minor", labelsize=7)
+#fig, ax = plt.subplots(1, 1)
 
-fig.supxlabel('time', weight="bold", fontsize=7)
-fig.supylabel('abundance', weight="bold", fontsize=7)
+#t = gLV_community.ODE_sols[0].t
+#y = gLV_community.ODE_sols[0].y
+        
+#ax.stackplot(t[10:], y[:, 10:])
 
 #ax.plot(gLV_community.ODE_sols[0].t,
 #         gLV_community.ODE_sols[0].y.T)
 
-plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/gLV_edge_of_chaos.png",
-            bbox_inches='tight')
+#ax.tick_params(axis="both", which="major", labelsize=7)
+#ax.tick_params(axis="both", which="minor", labelsize=7)
+
+#fig.supxlabel('time', weight="bold", fontsize=7)
+#fig.supylabel('abundance', weight="bold", fontsize=7)
+
+#ax.plot(gLV_community.ODE_sols[0].t,
+#         gLV_community.ODE_sols[0].y.T)
+
 plt.show()
 
 # %%

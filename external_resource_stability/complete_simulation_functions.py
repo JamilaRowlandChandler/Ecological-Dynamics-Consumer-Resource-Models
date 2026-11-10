@@ -213,7 +213,7 @@ def CRM_across_parameter_space(parameter_sets : list[dict],
 
                 m_s_rates_args_list = [dict(death_method = 'constant',
                                             death_args =  {'d' : parm_set['d']},
-                                            influx_method = 'constant',
+                                            influx_method = 'one-in',
                                             influx_args = {'b' : parm_set['b']},
                                             outflux_method = 'constant',
                                             outflux_args = {'o' : parm_set['o']},

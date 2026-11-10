@@ -68,14 +68,24 @@ def generate_parameters(rho_range, sigma_range, fixed_parameters):
 
 # %%
 
-rhos = np.arange(0.1, 1.1, 0.1)
+rhos = np.arange(1.1, 0.1, -0.1)
 sigmas = np.arange(2, 13, 1)
 
-# %%
+fixed_parameters = dict(mu_c = 50,
+                        mu_g = 50,
+                        d = 1,
+                        b = 3.0,
+                        o = 0.05,
+                        l = 0.7,
+                        w = 1,
+                        s = 1,
+                        M = 150,
+                        S = 150)
 
-fixed_parameters = dict(mu_c = 3, mu_g = 3, d = 1, b = 1, o = 1,
-                        l = 0.8, w = 1, s = 0.05, M = 100, S = 300)
-
-rho_sigma(rhos, sigmas,
+rho_sigma(rhos,
+          sigmas,
           fixed_parameters,
-          "MiCRM_rho_vs_sigma")
+          "MiCRM_rho_vs_sigma",
+          no_communities = 20,
+          t_end = 1000,
+          no_init_conds = 1)
