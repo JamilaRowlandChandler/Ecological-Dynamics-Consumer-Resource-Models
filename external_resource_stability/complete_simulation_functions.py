@@ -14,6 +14,8 @@ import pickle
 import seaborn as sns
 from matplotlib import pyplot as plt
 import os
+import warnings
+from contextlib import contextmanager
 from tqdm import tqdm
 from scipy.stats import pearsonr
 import numpy.typing as npt
@@ -52,6 +54,96 @@ def pickle_dump(filename : str, data : any):
     with open(filename, 'wb') as fp:
 
         pickle.dump(data, fp)
+
+# %%
+###############################################################################
+# Handling failed simulations
+###############################################################################
+
+class SimulationError(Exception):
+
+    '''
+
+    Raised when a community's ODE solver fails (e.g., lsoda: Repeated
+    convergence failures), so the community can be skipped.
+
+    '''
+
+@contextmanager
+def lsoda_errors():
+
+    '''
+
+    Turn the UserWarnings LSODA raises when it struggles to integrate (e.g.,
+    "lsoda: Repeated convergence failures (perhaps bad Jacobian or
+    tolerances)", "lsoda: Excess work done on this call") into a SimulationError.
+
+    '''
+
+    with warnings.catch_warnings():
+
+        warnings.filterwarnings("error", message = "lsoda", category = UserWarning)
+
+        try:
+
+            yield
+
+        except UserWarning as warning:
+
+            raise SimulationError(str(warning)) from warning
+
+def simulate_or_raise(community, t_end, no_init_conds):
+
+    '''
+
+    Run community.simulate_community(), raising a SimulationError if LSODA warns
+    that it's struggling, or if the solver fails for any initial condition.
+
+    '''
+
+    with lsoda_errors():
+
+        community.simulate_community(t_end, no_init_conds)
+
+    failed_solutions = [sol.message for sol in community.ODE_sols if sol.status < 0]
+
+    if failed_solutions:
+
+        raise SimulationError(failed_solutions[0])
+
+def simulate_communities(community_dynamics, no_communities, *args, **kwargs):
+
+    '''
+
+    Call community_dynamics(*args, **kwargs) no_communities times. If a simulation fails
+    (SimulationError), that community is skipped and the next one is simulated.
+
+    Returns
+    -------
+    communities : list
+        The communities that were simulated successfully.
+
+    '''
+
+    communities = []
+    no_failed = 0
+
+    for i in range(no_communities):
+
+        try:
+
+            communities.append(deepcopy(community_dynamics(*args, **kwargs)))
+
+        except SimulationError as error:
+
+            no_failed += 1
+            print(f"Community {i + 1} of {no_communities} skipped, " +                   f"simulation failed: {error}", flush = True)
+
+    if no_failed:
+
+        print(f"{no_failed} of {no_communities} communities skipped.", flush = True)
+
+    return communities
 
 # %%
 ###############################################################################
@@ -469,6 +561,11 @@ def CRMs_create_and_save(subdirectory : str,
                                                        model_specific_rates_args,
                                                        **kwargs)
 
+    if len(communities) == 0:
+
+        print(f"No communities were simulated successfully, so {filename} " +               "was not saved.", flush = True)
+
+        return
 
     match save_method:
 
@@ -596,14 +693,17 @@ def consumer_resource_model_dynamics(init_class,
         community.timescale_separation(epsilon)
 
         # simulate commmunity dynamics
-        community.simulate_community(t_end, no_init_conds)
+        simulate_or_raise(community, t_end, no_init_conds)
 
         # estimate community properties, including the max. lyapunov exponent
         community.calculate_community_properties()
-        community.lyapunov_exponent = max_le(community,
-                                             community.ODE_sols[0].y[:, -1],
-                                             T = 1000,
-                                             perturbation = 1e-6)
+
+        with lsoda_errors():
+
+            community.lyapunov_exponent = max_le(community,
+                                                 community.ODE_sols[0].y[:, -1],
+                                                 T = 1000,
+                                                 perturbation = 1e-6)
 
         eigenspec_stats = [eigenspectrum(community,
                                          ode_sol.y[:, -1])
@@ -629,25 +729,28 @@ def consumer_resource_model_dynamics(init_class,
         metabolic_rates_args = filterByKey(metabolic_keys)
         new_model_specific_rates_args = filterByKey(other_keys)
         
-        communities = [deepcopy(community_dynamics(init_class,
-                                                   growth_consumption_rates_args,
-                                                   new_model_specific_rates_args,
-                                                   no_init_conds,
-                                                   t_end,
-                                                   epsilon,
-                                                   metabolic_rates_args = metabolic_rates_args))
-                                      for _ in range(no_communities)]
+        communities = simulate_communities(community_dynamics,
+                                           no_communities,
+                                           init_class,
+                                           growth_consumption_rates_args,
+                                           new_model_specific_rates_args,
+                                           no_init_conds,
+                                           t_end,
+                                           epsilon,
+                                           metabolic_rates_args = metabolic_rates_args)
     
     else:
 
-        # generate n communities, where n = no_communities
-        communities = [deepcopy(community_dynamics(init_class,
-                                                   growth_consumption_rates_args,
-                                                   model_specific_rates_args,
-                                                   no_init_conds,
-                                                   t_end,
-                                                   epsilon))
-                                      for _ in range(no_communities)]
+        # generate n communities, where n = no_communities (skipping any whose
+        # simulations fail)
+        communities = simulate_communities(community_dynamics,
+                                           no_communities,
+                                           init_class,
+                                           growth_consumption_rates_args,
+                                           model_specific_rates_args,
+                                           no_init_conds,
+                                           t_end,
+                                           epsilon)
 
     return communities
 
@@ -727,12 +830,16 @@ def complex_ecosystem_model_dynamics(init_class,
         community.timescale_separation(epsilon)
 
         # simulate commmunity dynamics
-        community.simulate_community(t_end, no_init_conds)
+        simulate_or_raise(community, t_end, no_init_conds)
 
         # estimate community properties, including the max. lyapunov exponent
         community.calculate_community_properties()
-        community.lyapunov_exponent = max_le(community, community.ODE_sols[0].y[:, -1],
-                                             T = 1000, perturbation = 1e-6)
+
+        with lsoda_errors():
+
+            community.lyapunov_exponent = max_le(community,
+                                                 community.ODE_sols[0].y[:, -1],
+                                                 T = 1000, perturbation = 1e-6)
 
         eigenspec_stats = [eigenspectrum(community,
                                          ode_sol.y[:, -1])
@@ -743,14 +850,16 @@ def complex_ecosystem_model_dynamics(init_class,
 
         return community
 
-    # generate n communities, where n = no_communities
-    communities = [deepcopy(community_dynamics(init_class,
-                                               growth_consumption_rates_args,
-                                               model_specific_rates_args,
-                                               no_init_conds,
-                                               t_end,
-                                               epsilon))
-                                  for _ in range(no_communities)]
+    # generate n communities, where n = no_communities (skipping any whose
+    # simulations fail)
+    communities = simulate_communities(community_dynamics,
+                                       no_communities,
+                                       init_class,
+                                       growth_consumption_rates_args,
+                                       model_specific_rates_args,
+                                       no_init_conds,
+                                       t_end,
+                                       epsilon)
 
     return communities
 

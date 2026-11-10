@@ -33,8 +33,6 @@ def rho_sigma(rho_range,
     
     parameters = generate_parameters(rho_range, sigma_range, fixed_parameters)
     
-    breakpoint()
-    
     CRM_across_parameter_space(parameters,
                                subdirectory,
                                ['rho', 'sigma_M'],
