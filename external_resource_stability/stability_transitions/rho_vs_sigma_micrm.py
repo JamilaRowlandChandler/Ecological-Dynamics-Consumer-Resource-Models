@@ -33,6 +33,8 @@ def rho_sigma(rho_range,
     
     parameters = generate_parameters(rho_range, sigma_range, fixed_parameters)
     
+    breakpoint()
+    
     CRM_across_parameter_space(parameters,
                                subdirectory,
                                ['rho', 'sigma_M'],
@@ -68,7 +70,7 @@ def generate_parameters(rho_range, sigma_range, fixed_parameters):
 
 # %%
 
-rhos = np.arange(1.1, 0.1, -0.1)
+rhos = np.arange(0.1, 1.1, 0.1)
 sigmas = np.arange(2, 13, 1)
 
 fixed_parameters = dict(mu_c = 50,
@@ -78,7 +80,7 @@ fixed_parameters = dict(mu_c = 50,
                         o = 0.05,
                         l = 0.7,
                         w = 1,
-                        s = 1,
+                        s = 0.05,
                         M = 150,
                         S = 150)
 

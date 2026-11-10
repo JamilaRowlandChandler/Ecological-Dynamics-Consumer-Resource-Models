@@ -417,7 +417,7 @@ def CRMs_create_and_save(subdirectory : str,
                                                                     'sigma_c' : float,
                                                                     'mu_g' : float,
                                                                     'sigma_g' : float,
-                                                                    'conserve_mass' : NotRequired[bool],
+                                                                    'all_positive' : NotRequired[bool],
                                                                     'kwargs' : NotRequired[any]})],
                          model_specific_rates_args : dict[str, any],
                          save_method : Literal['v1', 'v2', 'v3'],
@@ -441,7 +441,7 @@ def CRMs_create_and_save(subdirectory : str,
                                                           'sigma_c' : float,
                                                           'mu_g' : float,
                                                           'sigma_g' : float,
-                                                          'conserve_mass' : NotRequired[bool],
+                                                          'all_positive' : NotRequired[bool],
                                                           'kwargs' : NotRequired[any]})
         Arguments used to generate growth and consumption rates.
     model_specific_rates_args : Dict(str, any)
@@ -513,7 +513,7 @@ def consumer_resource_model_dynamics(init_class,
                                                                                 'sigma_c' : float,
                                                                                 'mu_g' : float,
                                                                                 'sigma_g' : float,
-                                                                                'conserve_mass' : NotRequired[bool],
+                                                                                'all_positive' : NotRequired[bool],
                                                                                 'kwargs' : NotRequired[any]}),
                                      model_specific_rates_args : dict[str, any],
                                      no_communities : int = 5,
@@ -536,7 +536,7 @@ def consumer_resource_model_dynamics(init_class,
                                                           'sigma_c' : float,
                                                           'mu_g' : float,
                                                           'sigma_g' : float,
-                                                          'conserve_mass' : NotRequired[bool],
+                                                          'all_positive' : NotRequired[bool],
                                                           'kwargs' : NotRequired[any]})
         Arguments used to generate growth and consumption rates.
     model_specific_rates_args : Dict(str, any)
@@ -567,24 +567,30 @@ def consumer_resource_model_dynamics(init_class,
                                                                       'sigma_c' : float,
                                                                       'mu_g' : float,
                                                                       'sigma_g' : float,
-                                                                      'conserve_mass' : NotRequired[bool],
+                                                                      'all_positive' : NotRequired[bool],
                                                                       'kwargs' : NotRequired[any]}),
                            model_specific_rates_args : dict[str, any],
                            no_init_conds : int,
                            t_end : float,
-                           epsilon : float):
+                           epsilon : float,
+                           metabolic_rates_args : Union[dict, None] = None):
 
         '''
 
         create and simulate community dynamics
 
         '''
-
+    
         # initialise consumer-resource model class
         community = Consumer_Resource_Model(**init_class)
 
         # generate model parameters
         community.growth_consumption_rates(**growth_consumption_rates_args)
+        
+        if metabolic_rates_args is not None:
+            
+            community.metabolic_rates(**metabolic_rates_args)
+        
         community.model_specific_rates(**model_specific_rates_args)
 
         community.timescale_separation(epsilon)
@@ -594,8 +600,10 @@ def consumer_resource_model_dynamics(init_class,
 
         # estimate community properties, including the max. lyapunov exponent
         community.calculate_community_properties()
-        community.lyapunov_exponent = max_le(community, community.ODE_sols[0].y[:, -1],
-                                             T = 1000, perturbation = 1e-6)
+        community.lyapunov_exponent = max_le(community,
+                                             community.ODE_sols[0].y[:, -1],
+                                             T = 1000,
+                                             perturbation = 1e-6)
 
         eigenspec_stats = [eigenspectrum(community,
                                          ode_sol.y[:, -1])
@@ -605,15 +613,41 @@ def consumer_resource_model_dynamics(init_class,
                                            for eig_stat in eigenspec_stats]
 
         return community
+    
+    if init_class['model'] == 'MiCRM':
+        
+        filterByKey = lambda keys: {x: model_specific_rates_args[x] for x in keys}
+        
+        metabolic_keys = ["leakage_method", "leakage_args",
+                          "energy_method", "energy_args",
+                          "metabolic_method", "metabolic_args"]
+        
+        other_keys = ["death_method", "death_args",
+                      "influx_method", "influx_args",
+                      "outflux_method", "outflux_args"]
+        
+        metabolic_rates_args = filterByKey(metabolic_keys)
+        new_model_specific_rates_args = filterByKey(other_keys)
+        
+        communities = [deepcopy(community_dynamics(init_class,
+                                                   growth_consumption_rates_args,
+                                                   new_model_specific_rates_args,
+                                                   no_init_conds,
+                                                   t_end,
+                                                   epsilon,
+                                                   metabolic_rates_args = metabolic_rates_args))
+                                      for _ in range(no_communities)]
+    
+    else:
 
-    # generate n communities, where n = no_communities
-    communities = [deepcopy(community_dynamics(init_class,
-                                               growth_consumption_rates_args,
-                                               model_specific_rates_args,
-                                               no_init_conds,
-                                               t_end,
-                                               epsilon))
-                                  for _ in range(no_communities)]
+        # generate n communities, where n = no_communities
+        communities = [deepcopy(community_dynamics(init_class,
+                                                   growth_consumption_rates_args,
+                                                   model_specific_rates_args,
+                                                   no_init_conds,
+                                                   t_end,
+                                                   epsilon))
+                                      for _ in range(no_communities)]
 
     return communities
 
@@ -642,7 +676,7 @@ def complex_ecosystem_model_dynamics(init_class,
                                                           'sigma_c' : float,
                                                           'mu_g' : float,
                                                           'sigma_g' : float,
-                                                          'conserve_mass' : NotRequired[bool],
+                                                          'all_positive' : NotRequired[bool],
                                                           'kwargs' : NotRequired[any]})
         Arguments used to generate growth and consumption rates.
     model_specific_rates_args : Dict(str, any)
