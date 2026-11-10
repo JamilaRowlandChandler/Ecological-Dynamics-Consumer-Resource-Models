@@ -22,6 +22,7 @@ import numpy.typing as npt
 from scipy.spatial.distance import cdist
 import seaborn as sns
 from matplotlib import pyplot as plt
+from matplotlib.patches import Rectangle
 
 os.chdir('C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/resource_diversity_stability(sl)/effective_gLV')
     
@@ -152,6 +153,120 @@ df = encroachment_M(CRM_directory = "M_vs_mu_c")
 
 # %%
 
+globally_solved_sces = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/" \
+                                      + "resource_diversity_stability/self_consistency_equations/M_vs_mu_c.pkl") 
+    #pd.read_pickle("self_consistency_equations/M_vs_mu_c.pkl")
+solved_boundary = pd.read_pickle("C:/Users/jamil/Documents/PhD/Data/" \
+                                 + "resource_diversity_stability/self_consistency_equations/stability_bound/M_vs_mu_c.pkl")
+
+# %%
+
+def Stability_Plot(encroach_df,
+                   globally_solved_sces,
+                   solved_boundary):
+    
+    def stability_threshold(ax,
+                            data,
+                            variables : list):
+        
+        example_mu_c = 145
+
+        df_plot = data.loc[data['mu_c'] == example_mu_c, :]
+        
+        dfl = pd.melt(df_plot[['M'] + variables],
+                      ['M'])
+        
+        M_stability_threshold = smoothed_x[np.abs(smoother(smoothed_x) - example_mu_c).argmin()]
+        
+        ax.add_patch(Rectangle((np.min(resource_pool_sizes) - 20, np.min(dfl['value']) - 0.1),
+                               M_stability_threshold - np.min(resource_pool_sizes) + 20,
+                               np.max(dfl['value']) + 0.5 - np.min(dfl['value']),
+                               fill = True, color = '#8f8cc0ff', zorder = 0))
+        
+        ax.vlines(M_stability_threshold, np.min(dfl['value']) - 0.1,
+                   np.max(dfl['value']) + 0.1,
+                   color = 'black', linewidth = 2.5, zorder = 1)
+        
+        sns.lineplot(dfl,
+                     x = 'M', y = 'value', hue = 'variable',
+                     ax = ax,
+                     linewidth = 3,
+                     palette = sns.color_palette(['black', 'black'], 2),
+                     zorder = 10,
+                     err_style = "bars")
+        
+        sns.lineplot(dfl,
+                     x = 'M', y = 'value', hue = 'variable',
+                     ax = ax,
+                     linewidth = 2.5,
+                     marker = 'o',
+                     markersize = 8,
+                     palette = sns.color_palette(['#00557aff', '#3dc27aff'], 2),
+                     zorder = 10,
+                     markeredgewidth = 0.4,
+                     markeredgecolor = 'black',
+                     err_style = "bars")
+        
+        ax.set_xlim([np.min(resource_pool_sizes) - 10, np.max(resource_pool_sizes) + 10])
+        ax.set_ylim([0.49, 0.81])
+
+        ax.set_xlabel('resource pool size, ' + r'$M$', fontsize = 10,
+                              weight = 'bold')
+        ax.set_ylabel('')
+        ax.tick_params(axis='both', which='major', labelsize=10)
+        ax.set_xticks(resource_pool_sizes[::2], labels = resource_pool_sizes[::2])
+
+        ax.legend_.remove()
+    
+    df_simulation = encroach_df.loc[encroach_df['mu_c'] < 220, :]
+    
+    resource_pool_sizes = np.unique(df_simulation['M'])
+
+    sns.set_style('ticks')
+    
+    
+    fig, (ax1, ax2) = plt.subplots(1, 2,
+                                   layout="constrained",
+                                   figsize=(4.5, 2.5))
+    
+    
+    # Analytically-derived stability boundary
+    
+    good_solves = solved_boundary.loc[(solved_boundary['loss'] <= -28) & 
+                                      (np.abs(solved_boundary['Instability distance']) <= 1e-5),
+                                      :]
+    
+    smoother = np.poly1d(np.polyfit(good_solves['M'], good_solves['mu_c'], 2))
+    
+    smoothed_x = np.arange(np.min(resource_pool_sizes) - 25,
+                           np.max(resource_pool_sizes) + 25,
+                           1)
+    
+    #################### Instability condition vs M #####################
+    
+    globally_solved_sces['Packing ratio sqrt'] = \
+        np.sqrt(globally_solved_sces['Species packing'])
+        
+    stability_threshold(ax1,
+                        globally_solved_sces,
+                        ['rho', 'Packing ratio sqrt'])
+    
+    stability_threshold(ax2,
+                        df_simulation,
+                        ['E_ii', 'E_ij_tot'])
+
+Stability_Plot(df,
+               globally_solved_sces,
+               solved_boundary)
+
+
+
+
+
+
+
+# %%
+
 pivot_table = pd.pivot_table(df[df['mu_c'] <= 210.0],
                              index="mu_c",
                              columns="M",
@@ -234,7 +349,8 @@ sns.lineplot(dfl,
              ax = ax,
              linewidth = 3,
              palette = sns.color_palette(['black', 'black'], 2),
-             zorder = 10)
+             zorder = 10,
+             err_style="bars")
 
 sns.lineplot(dfl,
              x = 'M',
@@ -247,4 +363,5 @@ sns.lineplot(dfl,
              palette = sns.color_palette(['#00557aff', '#3dc27aff'], 2),
              zorder = 10,
              markeredgewidth = 0.4,
-             markeredgecolor = 'black')
+             markeredgecolor = 'black',
+             err_style="bars")
