@@ -68,8 +68,12 @@ def generate_parameters(rho_range, sigma_range, fixed_parameters):
 
 # %%
 
-rhos = np.arange(0.1, 1.1, 0.1)
-sigmas = np.arange(2, 13, 1)
+#rhos = np.arange(0.1, 1.1, 0.1)
+#rhos = np.arange(0.3, 1.1, 0.1)
+#rhos = np.array([1.0])
+#sigmas = np.arange(2, 13, 1)
+rhos = np.array([0.2])
+sigmas = np.arange(3, 13, 1)
 
 fixed_parameters = dict(mu_c = 50,
                         mu_g = 50,

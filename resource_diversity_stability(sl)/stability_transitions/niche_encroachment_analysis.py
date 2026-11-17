@@ -61,20 +61,21 @@ def encroachment(CRM_community : Literal["SL_CRM"]):
         M = 1 - cdist(G,
                       C,
                       metric="cosine")   # M[i, j] = cos(G_i, C_j)
-
+        
         E_ii = np.diag(M).copy()
         off = M.copy()
         np.fill_diagonal(off,
                          0)
         
         E_ij = np.sqrt((off**2).sum(axis=1))
+        
         E = np.mean(E_ij / E_ii) # E_ij.mean() / own.mean()  
         
         E_ii_nonorm = np.diag(1 - cdist(CRM_community.growth - mean_g,
                                         CRM_community.consumption.T - mean_c,
                                         metric="cosine"))
         
-        return np.mean(E_ij), np.mean(E_ii), E, np.mean(E_ii_nonorm)
+        return np.mean(E_ij), np.mean(E_ii), E, np.mean(E_ii_nonorm), np.mean(np.abs(off))
     
 
     M = CRM_community.no_resources
@@ -99,18 +100,18 @@ def encroachment(CRM_community : Literal["SL_CRM"]):
     
     encroachment1_val = encroachment1(),
     encroachment2_val = encroachment2(),
-    E_ij_tot, E_ii, encroachment3_val, E_ii_nonorm = encroachment3()
+    E_ij_tot, E_ii, encroachment3_val, E_ii_nonorm, E_ij = encroachment3()
 
     return dict(M = CRM_community.no_resources,
                 mu_c = np.round(CRM_community.mu_c * CRM_community.no_resources, 4),
                 encroachment1 = encroachment1_val,
                 encroachment2 = encroachment2_val,
                 encroachment3 = encroachment3_val,
+                E_ij = E_ij,
                 E_ij_tot = E_ij_tot,
                 E_ii = E_ii,
                 E_ii_nonorn = E_ii_nonorm)
-    
-    
+     
 # %%
 
 def encroachment_M(CRM_directory : str):
@@ -169,7 +170,7 @@ def Stability_Plot(encroach_df,
                             data,
                             variables : list):
         
-        example_mu_c = 145
+        example_mu_c = 190
 
         df_plot = data.loc[data['mu_c'] == example_mu_c, :]
         
@@ -254,16 +255,15 @@ def Stability_Plot(encroach_df,
     stability_threshold(ax2,
                         df_simulation,
                         ['E_ii', 'E_ij_tot'])
+    
+    #plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/self_limit_M_vs_encroachment_metric.png",
+    #            bbox_inches='tight')
+    #plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/self_limit_M_vs_encroachment_metric.svg",
+    #            bbox_inches='tight')
 
 Stability_Plot(df,
                globally_solved_sces,
                solved_boundary)
-
-
-
-
-
-
 
 # %%
 
@@ -289,13 +289,13 @@ ax.invert_yaxis()
 pivot_table1 = pd.pivot_table(df[df['mu_c'] <= 210.0],
                              index="mu_c",
                              columns="M",
-                             values="E_ij_tot",
+                             values="E_ij",
                              aggfunc="mean")
 
 pivot_table2 = pd.pivot_table(df[df['mu_c'] <= 210.0],
                              index="mu_c",
                              columns="M",
-                             values="E_ii_nonorn",
+                             values="E_ii",
                              aggfunc="mean")
 
 
@@ -308,21 +308,22 @@ vmax = np.max(np.concat([pivot_table1.to_numpy(),
 
 sns.heatmap(pivot_table1,
             ax = ax1,
-            vmin=vmin,
-            vmax=vmax,
-            square=True,
-            cbar = False,
-            cmap = 'Greens')
-
-sns.heatmap(pivot_table2,
-            ax = ax2,
-            vmin=vmin,
-            vmax=vmax,
+            #vmin=vmin,
+            #vmax=vmax,
             square=True,
             cbar = True,
             cmap = 'Greens')
 
-ax.invert_yaxis()
+sns.heatmap(pivot_table2,
+            ax = ax2,
+           # vmin=vmin,
+           # vmax=vmax,
+            square=True,
+            cbar = True,
+            cmap = 'Greens')
+
+ax1.invert_yaxis()
+ax2.invert_yaxis()
 
 # %%
 

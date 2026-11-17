@@ -287,14 +287,15 @@ def correlated_lognormals(S, M,
 #                                          mu,
 #                                          sigma)
 
-S = 150
+S = 149
 M = 150
 mu = 50
-sigma = 13.0
-rho = 0.6
+sigma = 12.0
+rho = 1.0
 d = 1
-b = 1
+b = 3.0
 o = 0.05
+p=0.6
 
 community = Consumer_Resource_Model("MiCRM", S, M)
 
@@ -303,11 +304,14 @@ community.growth_consumption_rates('coupled by rho',
                                    sigma_c = sigma/np.sqrt(M),
                                    mu_g = mu/M,
                                    sigma_g = sigma/np.sqrt(M),
-                                   rho = rho,
-                                   all_positive = True)
+                                   rho = rho)
                                    #consumption = consumption,
                                    #growth = growth)
-
+                                   
+consumption_preferences = np.random.binomial(1, p, size=(M,S))
+community.consumption = community.consumption * consumption_preferences
+community.growth = community.growth * consumption_preferences.T            
+                                   
 community.metabolic_rates(#energy_method = 'user-supplied',
                           #energy_args = {'w' : np.random.uniform(0.1, 1, 
                           #                                       (M, ))},
@@ -316,10 +320,12 @@ community.metabolic_rates(#energy_method = 'user-supplied',
                           leakage_method = 'constant',
                           leakage_args = {'l' : 0.7})
 
+community.D = np.round(community.D, 7)
+
 community.model_specific_rates(death_method = 'constant',
                                death_args = {'d' : 1.0},
                                influx_method = 'one-in',
-                               influx_args = {'b' : 3},
+                               influx_args = {'b' : b},
                                outflux_method = 'constant',
                                outflux_args = {'o' : o})
 
@@ -331,11 +337,9 @@ community.model_specific_rates(death_method = 'constant',
 #print("MiCRM: D column sums in [", community.D.sum(axis = 0).min(), ",",
  #     community.D.sum(axis = 0).max(), "]")
 
-community.simulate_community(1000, 1)
+community.simulate_community(200, 1)
 
 sol = community.ODE_sols[0]
-print("MiCRM: simulation ended at t =", sol.t[-1],
-      "| survivors =", np.sum(sol.y[:S, -1] > 1e-4), "/", S)
 
 fig, axs = plt.subplots(1, 2, figsize = (8, 2.5), layout = "constrained")
 axs[0].plot(sol.t, sol.y[:S, :].T)
@@ -343,6 +347,14 @@ axs[0].set_title("MiCRM consumers")
 axs[1].plot(sol.t, sol.y[S:, :].T)
 axs[1].set_title("MiCRM resources")
 plt.show()
+
+community.calculate_community_properties()
+print("MiCRM: simulation ended at t =", sol.t[-1],
+      "| surviving consumers =", community.species_survival_fraction[0]*S, "/", S,
+      "\n",
+      "| surviving resources =", community.resource_survival_fraction[0]*M, "/", M)
+
+# %%
 
 community = Consumer_Resource_Model("Externally-supplied resources",
                                     S,

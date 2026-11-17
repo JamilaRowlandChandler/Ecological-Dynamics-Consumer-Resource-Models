@@ -306,14 +306,16 @@ def Stability_Plot(df_simulation_c, globally_solved_sces_c, solved_boundary_c,
                        stability_pivot_c,
                        sigma_cs,
                        mu_c,
-                       'std. deviation in total\nconsumption rate, ' + r'$\sigma_c$')
+                       'std. deviation in total\nconsumption rate, ' + r'$\sigma_c$',
+                       example_M=150)
     
     sigma_vs_stability(axs["P_y"],
                        'sigma_y',
                        stability_pivot_y,
                        sigma_ys,
                        mu_y,
-                       'std. deviation in yield\nconversion, ' + r'$\sigma_y$')
+                       'std. deviation in yield\nconversion, ' + r'$\sigma_y$',
+                       example_M=150)
     
     #axs["P_c"].set_title("Different sources of interaction heterogeneity" + \
     #                      "\ninduce opposing stability transitions",
@@ -330,7 +332,8 @@ def Stability_Plot(df_simulation_c, globally_solved_sces_c, solved_boundary_c,
                         globally_solved_sces_c,
                         solved_boundary_c,
                         "hyperbolic",
-                        'std. deviation in total\nconsumption rate, ' + r'$\sigma_c$')
+                        'std. deviation in total\nconsumption rate, ' + r'$\sigma_c$',
+                        example_M=150)
     
     stability_condition(axs["I_C_y"],
                         'sigma_y',
@@ -339,7 +342,8 @@ def Stability_Plot(df_simulation_c, globally_solved_sces_c, solved_boundary_c,
                         globally_solved_sces_y,
                         solved_boundary_y,
                         "quadratic",
-                        'std. deviation in yield\nconversion, ' + r'$\sigma_y$')
+                        'std. deviation in yield\nconversion, ' + r'$\sigma_y$',
+                        example_M=150)
     
     #axs["I_C_c"].set_title("by having opposing " + \
     #                       "effects on\nreciprocity and the packing ratio",
@@ -347,10 +351,10 @@ def Stability_Plot(df_simulation_c, globally_solved_sces_c, solved_boundary_c,
     
     ###############################################
     
-    plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/self_limit_M_vs_sigmas_digram_condition.png",
-                bbox_inches='tight')
-    plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/self_limit_M_vs_sigmas_digram_condition.svg",
-                bbox_inches='tight')
+    #plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/self_limit_M_vs_sigmas_digram_condition.png",
+    #            bbox_inches='tight')
+    #plt.savefig("C:/Users/jamil/Documents/PhD/Figures/resource_diversity_stability/self_limit_M_vs_sigmas_digram_condition.svg",
+    #            bbox_inches='tight')
     
     plt.show()
 
