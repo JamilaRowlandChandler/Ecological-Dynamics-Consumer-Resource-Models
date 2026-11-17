@@ -1310,22 +1310,6 @@ class MiCRM(ParametersInterface, DifferentialEquationsInterface,
                                          influx_args,
                                          'b',
                                          (self.no_resources, ))
-        
-
-        # labels used to assign parameters as object attributes
-        p_labels = ['d', 'b', 'o']
-
-        # dimensions of each set of parameters
-        dims_list = [(self.no_species, ), (self.no_resources, ),
-                     (self.no_resources, )]
-
-        # generate parameters used the other_parameter_methods method
-        for p_method, p_args, p_label, dims in \
-            zip([death_method, influx_method, outflux_method],
-                [death_args, influx_args, outflux_args],
-                p_labels, dims_list):
-
-                self.other_parameter_methods(p_method, p_args, p_label, dims)
 
     def collate_parameters(self):
 

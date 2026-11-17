@@ -97,7 +97,7 @@ class ParametersInterface:
                 
                 case 'coupled by rho':
                     
-                    if rho:
+                    if rho is not None:
                         
                         consumption, growth = self.__gc_rho_coupled(X_c, X_g,
                                                                     mu_c, sigma_c,
@@ -194,12 +194,6 @@ class ParametersInterface:
             consumption, growth = self.__gamma_distribution(U_c, U_g,
                                                             mu_c, sigma_c,
                                                             mu_g, sigma_g)
-
-            shape_c, scale_c = mu_c**2/sigma_c**2, sigma_c**2/mu_c
-            shape_g, scale_g = mu_g**2/sigma_g**2, sigma_g**2/mu_g
-
-            consumption = stats.gamma.ppf(U_c, a=shape_c, scale=scale_c)
-            growth = stats.gamma.ppf(U_g, a=shape_g, scale=scale_g)
 
         return consumption, growth
     
@@ -423,9 +417,7 @@ class ParametersInterface:
             binary parameters.
 
         '''
-        return np.random.binomial(1,
-                                  c/self.no_resources,
-                                  dims[0]*dims[1]).reshape(dims)
+        return np.random.binomial(1, c/dims[-1], size = dims)
     
     def __dirichlet_parameters(self, s, dims):
         
