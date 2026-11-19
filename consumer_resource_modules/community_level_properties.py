@@ -14,13 +14,15 @@ from copy import deepcopy
 import sys
 from scipy.stats import binned_statistic
 from scipy.linalg import eig, schur
+from pathlib import Path
 
 ########## type checking ########
 
 if TYPE_CHECKING:
     
-    sys.path.insert(0, "C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models" + \
-                        "/consumer_resource_modules")
+    here = Path(__file__).resolve()
+    
+    sys.path.insert(0, str(here.parents[0]))
     from models import SL_CRM, SL_SI_CRM, SL_TL_CRM, ES_CRM, Hybrid_CRM
     from effective_LV_models import eLV_SL, eLV_ES, gLV
     

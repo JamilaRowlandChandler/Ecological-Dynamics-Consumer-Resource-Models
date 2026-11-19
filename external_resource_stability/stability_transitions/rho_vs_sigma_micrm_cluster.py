@@ -27,7 +27,7 @@ external_dir = here.parents[1]            # external_resource_stability
 repo_root = here.parents[2]            # repo root
 
 sys.path.insert(0, str(external_dir))
-from complete_simulation_functions import CRM_across_parameter_space
+from complete_simulation_functions_cluster import CRM_across_parameter_space
 
 sys.path.insert(0, str(repo_root / "cavity_method_functions"))
 import self_consistency_equation_functions as sce

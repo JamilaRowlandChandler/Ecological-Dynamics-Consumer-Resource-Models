@@ -22,14 +22,14 @@ from typing import TYPE_CHECKING, Union, TypedDict, NotRequired, Literal
 from pathlib import Path
 
 here = Path(__file__).resolve()
-repo_root = here.parents[2]
+repo_root = here.parents[1]
 
 sys.path.insert(0, str(repo_root / "consumer_resource_modules"))
 from models import Consumer_Resource_Model
 from effective_LV_models import gLV, Effective_LV_Model
 from community_level_properties import max_le, eigenspectrum
 
-repo_and_data_root = here.parents[3]
+repo_and_data_root = here.parents[2]
 data_dir = str(repo_and_data_root / "data")
 
 # %%
@@ -1563,22 +1563,22 @@ def eLV_gLV_create_and_save(subdirectory : str,
 
         case 'v1':
 
-            pickle_dump(data_dir + "/" +  +  \
-                         subdirectory + "/" +  + filename + ".pkl",
+            pickle_dump(data_dir + "/" +  \
+                         subdirectory + "/" + filename + ".pkl",
                          communities)
 
         case 'v2':
 
             save_models(communities,
-                        data_dir + "/" +  +  subdirectory,
+                        data_dir + "/" + subdirectory,
                         filename)
 
         case 'v3':
 
             df = eLV_gLV_df_from_communities(communities)
 
-            df.to_csv(data_dir + "/" +  +  \
-                         subdirectory + "/" +  + filename + ".csv")
+            df.to_csv(data_dir + "/" + \
+                         subdirectory + "/" + filename + ".csv")
 
     del communities
 
@@ -1871,7 +1871,7 @@ def generate_eLV_gLV_df(subdirectory : str):
 
     '''
 
-    directory = data_dir + "/" +  +  subdirectory
+    directory = data_dir + "/" + subdirectory
 
     dfs = [eLV_gLV_df_from_communities(pd.read_pickle(os.path.join(directory, file)))
           for file in os.listdir(directory)]

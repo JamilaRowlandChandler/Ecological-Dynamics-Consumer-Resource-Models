@@ -21,7 +21,7 @@ from scipy.optimize import least_squares
 from scipy.optimize import basinhopping
 from scipy.optimize import dual_annealing
 
-os.chdir('C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/cavity_method_functions')
+#os.chdir('C:/Users/jamil/Documents/PhD/Code Repositories/Ecological-Dynamics-Consumer-Resource-Models/cavity_method_functions')
 
 #"C:\Users\jamil\Documents\PhD\Code Repositories\Ecological-Dynamics-Consumer-Resource-Models\Consumer-Resource Models\cavity_method_functions"
 
