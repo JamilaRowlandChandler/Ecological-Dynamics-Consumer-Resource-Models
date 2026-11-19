@@ -291,11 +291,11 @@ S = 149
 M = 150
 mu = 50
 sigma = 12.0
-rho = 1.0
+rho = 0.6
 d = 1
 b = 3.0
 o = 0.05
-p=0.6
+p=0.7
 
 community = Consumer_Resource_Model("MiCRM", S, M)
 
@@ -304,9 +304,17 @@ community.growth_consumption_rates('coupled by rho',
                                    sigma_c = sigma/np.sqrt(M),
                                    mu_g = mu/M,
                                    sigma_g = sigma/np.sqrt(M),
-                                   rho = rho)
+                                   rho = rho,
+                                   all_positive = True)
                                    #consumption = consumption,
                                    #growth = growth)
+                                   
+print("rho = ",
+      rho,
+      "\n",
+      "actual corr. = ",
+      pearsonr(community.consumption.T.flatten(), 
+               community.growth.flatten())[0])
                                    
 consumption_preferences = np.random.binomial(1, p, size=(M,S))
 community.consumption = community.consumption * consumption_preferences
@@ -337,7 +345,7 @@ community.model_specific_rates(death_method = 'constant',
 #print("MiCRM: D column sums in [", community.D.sum(axis = 0).min(), ",",
  #     community.D.sum(axis = 0).max(), "]")
 
-community.simulate_community(200, 1)
+community.simulate_community(1000, 1)
 
 sol = community.ODE_sols[0]
 
